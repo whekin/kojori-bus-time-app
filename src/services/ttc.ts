@@ -194,6 +194,7 @@ export function computeUpcomingDepartures(
 ): Departure[] {
   const now = new Date();
   const nowMins = now.getHours() * 60 + now.getMinutes();
+  const midnightWrapThresholdMins = 12 * 60;
   const result: Departure[] = [];
 
   const entries: [BusLine, SchedulePeriod[] | undefined][] = [
@@ -209,11 +210,11 @@ export function computeUpcomingDepartures(
 
     for (const t of times) {
       const mins = parseTimeToMins(t);
-      // minsUntil can go negative for past times; handle midnight wrap
+      // Wrap only clearly next-day trips; slightly past departures should disappear.
       let minsUntil = mins - nowMins;
-      if (minsUntil < -5) minsUntil += 24 * 60; // next day
-      if (minsUntil < -5 || minsUntil > horizonMins) continue;
-      result.push({ bus, time: formatTime(mins), minsUntil: Math.max(0, minsUntil) });
+      if (minsUntil < -midnightWrapThresholdMins) minsUntil += 24 * 60;
+      if (minsUntil < 0 || minsUntil > horizonMins) continue;
+      result.push({ bus, time: formatTime(mins), minsUntil });
     }
   }
 

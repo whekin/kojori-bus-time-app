@@ -126,16 +126,37 @@ function NextCard({
   const minsLabel = dep.minsUntil < 1 ? 'now' : `in ${dep.minsUntil} min`;
   return (
     <View style={styles.nextCard}>
-      <BusTag bus={dep.bus} />
-      <Text style={[styles.nextTime, { fontFamily: MONO }]}>{dep.time}</Text>
-      {dep.live && (
-        <View style={styles.liveBadge}>
-          <LiveDot />
-          <Text style={styles.liveBadgeText}>LIVE</Text>
+      <View style={styles.nextMain}>
+        <Text
+          style={[styles.nextTime, { fontFamily: MONO }]}
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          minimumFontScale={0.72}>
+          {dep.time}
+        </Text>
+      </View>
+
+      <View style={styles.nextMetaColumn}>
+        <View
+          style={[
+            styles.nextRouteBadge,
+            { backgroundColor: BUS_COLORS[dep.bus] + '18', borderColor: BUS_COLORS[dep.bus] + '55' },
+          ]}>
+          <Text style={[styles.nextRouteBadgeText, { color: BUS_COLORS[dep.bus], fontFamily: MONO }]}>
+            {dep.bus}
+          </Text>
         </View>
-      )}
-      <View style={[styles.badge, { backgroundColor: BUS_COLORS[dep.bus] + '1A', borderColor: BUS_COLORS[dep.bus] + '50' }]}>
-        <Text style={[styles.badgeText, { color: BUS_COLORS[dep.bus] }]}>{minsLabel}</Text>
+
+        {dep.live && (
+          <View style={styles.liveBadge}>
+            <LiveDot />
+            <Text style={styles.liveBadgeText}>LIVE</Text>
+          </View>
+        )}
+
+        <View style={[styles.badge, { backgroundColor: BUS_COLORS[dep.bus] + '1A', borderColor: BUS_COLORS[dep.bus] + '50' }]}>
+          <Text style={[styles.badgeText, { color: BUS_COLORS[dep.bus] }]}>{minsLabel}</Text>
+        </View>
       </View>
     </View>
   );
@@ -443,7 +464,18 @@ const styles = StyleSheet.create({
     minHeight: 88,
   },
   centered: { justifyContent: 'center' },
-  nextTime: { flex: 1, color: C.text, fontSize: 48, fontWeight: '700', letterSpacing: -1, lineHeight: 52 },
+  nextMain: { flex: 1, minWidth: 0, justifyContent: 'center' },
+  nextTime: { color: C.text, fontSize: 48, fontWeight: '700', letterSpacing: -1.5, lineHeight: 52, flexShrink: 1 },
+  nextMetaColumn: { alignItems: 'flex-end', gap: 8, flexShrink: 0 },
+  nextRouteBadge: {
+    minWidth: 58,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 10,
+    borderWidth: 1,
+    alignItems: 'center',
+  },
+  nextRouteBadgeText: { fontSize: 16, fontWeight: '800', letterSpacing: 0.8 },
   badge: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 8, borderWidth: 1 },
   badgeText: { fontSize: 13, fontWeight: '600', letterSpacing: 0.2 },
 
@@ -476,7 +508,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    paddingHorizontal: 11,
+    paddingHorizontal: 10,
     paddingVertical: 6,
     backgroundColor: C.live + '1A',
     borderRadius: 8,
