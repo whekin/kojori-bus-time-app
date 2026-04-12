@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, View, ViewStyle } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View, ViewStyle } from 'react-native';
+import { useQueryClient } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { BottomTabInset } from '@/constants/theme';
@@ -31,12 +32,17 @@ const C = {
   amber: BUS_COLORS['380'],
   teal: BUS_COLORS['316'],
   live: '#22C55E',
+  warning: '#F59E0B',
   error: '#EF4444',
 } as const;
 
 const MONO = Platform.select({ android: 'monospace', ios: 'Menlo', default: 'monospace' });
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+function formatHeaderTime(date = new Date()) {
+  return date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+}
+
 function formatMins(mins: number) {
   if (mins < 1) return 'now';
   if (mins < 60) return `+${mins}m`;
@@ -61,9 +67,9 @@ function getRealtimeStatus(dep: Departure) {
   if (drift < 0) {
     return {
       label: `LIVE ${Math.abs(drift)}m early`,
-      textColor: '#7DD3FC',
-      backgroundColor: '#7DD3FC14',
-      borderColor: '#7DD3FC38',
+      textColor: C.warning,
+      backgroundColor: C.warning + '14',
+      borderColor: C.warning + '38',
     };
   }
 
@@ -85,8 +91,8 @@ function BusTag({ bus }: { bus: BusLine }) {
   );
 }
 
-function LiveDot() {
-  return <View style={styles.liveDot} />;
+function LiveDot({ color = C.live }: { color?: string }) {
+  return <View style={[styles.liveDot, { backgroundColor: color }]} />;
 }
 
 function SectionDivider({ label, style }: { label: string; style?: ViewStyle }) {
@@ -115,6 +121,70 @@ function ErrorBanner({ message }: { message: string }) {
   );
 }
 
+function StopSelector({
+  stops,
+  activeStopId,
+  accentColor,
+  onSelectStop,
+}: {
+  stops: { id: string; label: string }[];
+  activeStopId: string;
+  accentColor: string;
+  onSelectStop: (id: string) => void;
+}) {
+  const activeIndex = Math.max(
+    0,
+    stops.findIndex(stop => stop.id === activeStopId),
+  );
+  const activeStop = stops[activeIndex] ?? stops[0];
+
+  if (!activeStop) return null;
+
+  const handleShift = (delta: number) => {
+    if (stops.length <= 1) return;
+    const nextIndex = (activeIndex + delta + stops.length) % stops.length;
+    onSelectStop(stops[nextIndex].id);
+  };
+
+  return (
+    <View style={styles.stopSelector}>
+      <Pressable
+        style={[
+          styles.stopNavButton,
+          stops.length <= 1 && styles.stopNavButtonDisabled,
+          { borderColor: accentColor + '35' },
+        ]}
+        disabled={stops.length <= 1}
+        onPress={() => handleShift(-1)}>
+        <Text style={[styles.stopNavGlyph, { color: stops.length <= 1 ? C.textFaint : accentColor }]}>‹</Text>
+      </Pressable>
+
+      <View style={[styles.stopSelectorMain, { borderColor: accentColor + '30', backgroundColor: accentColor + '10' }]}>
+        <View style={styles.stopSelectorLabelRow}>
+          <Text style={styles.stopSelectorEyebrow}>BOARDING STOP</Text>
+          <Text style={[styles.stopSelectorCount, { color: accentColor, fontFamily: MONO }]}>
+            {String(activeIndex + 1).padStart(2, '0')} / {String(stops.length).padStart(2, '0')}
+          </Text>
+        </View>
+        <Text style={styles.stopSelectorTitle} numberOfLines={1}>
+          {activeStop.label}
+        </Text>
+      </View>
+
+      <Pressable
+        style={[
+          styles.stopNavButton,
+          stops.length <= 1 && styles.stopNavButtonDisabled,
+          { borderColor: accentColor + '35' },
+        ]}
+        disabled={stops.length <= 1}
+        onPress={() => handleShift(1)}>
+        <Text style={[styles.stopNavGlyph, { color: stops.length <= 1 ? C.textFaint : accentColor }]}>›</Text>
+      </Pressable>
+    </View>
+  );
+}
+
 // ── Shared departure row ───────────────────────────────────────────────────────
 function DepartureRow({ dep, isLast }: { dep: Departure; isLast: boolean }) {
   const countdown = formatMins(dep.minsUntil);
@@ -132,7 +202,7 @@ function DepartureRow({ dep, isLast }: { dep: Departure; isLast: boolean }) {
               borderColor: realtimeStatus.borderColor,
             },
           ]}>
-          <LiveDot />
+          <LiveDot color={realtimeStatus.textColor} />
           <Text style={[styles.liveBadgeSmallText, { color: realtimeStatus.textColor }]}>
             {realtimeStatus.label}
           </Text>
@@ -166,46 +236,62 @@ function NextCard({
   const minsLabel = dep.minsUntil < 1 ? 'now' : `in ${dep.minsUntil} min`;
   const realtimeStatus = getRealtimeStatus(dep);
   return (
-    <View style={styles.nextCard}>
-      <View style={styles.nextMain}>
-        <Text
-          style={[styles.nextTime, { fontFamily: MONO }]}
-          numberOfLines={1}
-          adjustsFontSizeToFit
-          minimumFontScale={0.72}>
-          {dep.time}
-        </Text>
-      </View>
+    <View style={[styles.nextCard, { borderColor: accentColor + '30' }]}>
+      <View style={[styles.nextAccentBar, { backgroundColor: accentColor }]} />
+      <View style={styles.nextContent}>
+        <View style={styles.nextHeaderRow}>
+          <View style={styles.nextHeaderLeft}>
+            <View
+              style={[
+                styles.nextRouteBadge,
+                { backgroundColor: BUS_COLORS[dep.bus] + '18', borderColor: BUS_COLORS[dep.bus] + '55' },
+              ]}>
+              <Text style={[styles.nextRouteBadgeText, { color: BUS_COLORS[dep.bus], fontFamily: MONO }]}>
+                {dep.bus}
+              </Text>
+            </View>
+            <Text style={styles.nextEyebrow}>NEXT DEPARTURE</Text>
+          </View>
 
-      <View style={styles.nextMetaColumn}>
-        <View
-          style={[
-            styles.nextRouteBadge,
-            { backgroundColor: BUS_COLORS[dep.bus] + '18', borderColor: BUS_COLORS[dep.bus] + '55' },
-          ]}>
-          <Text style={[styles.nextRouteBadgeText, { color: BUS_COLORS[dep.bus], fontFamily: MONO }]}>
-            {dep.bus}
-          </Text>
+          {realtimeStatus ? (
+            <View
+              style={[
+                styles.liveBadge,
+                styles.nextStatusBadge,
+                {
+                  backgroundColor: realtimeStatus.backgroundColor,
+                  borderColor: realtimeStatus.borderColor,
+                },
+              ]}>
+              <LiveDot color={realtimeStatus.textColor} />
+              <Text style={[styles.liveBadgeText, { color: realtimeStatus.textColor }]}>
+                {realtimeStatus.label}
+              </Text>
+            </View>
+          ) : null}
         </View>
 
-        {realtimeStatus && (
-          <View
-            style={[
-              styles.liveBadge,
-              {
-                backgroundColor: realtimeStatus.backgroundColor,
-                borderColor: realtimeStatus.borderColor,
-              },
-            ]}>
-            <LiveDot />
-            <Text style={[styles.liveBadgeText, { color: realtimeStatus.textColor }]}>
-              {realtimeStatus.label}
+        <View style={styles.nextBodyRow}>
+          <View style={styles.nextMain}>
+            <Text
+              style={[styles.nextTime, { fontFamily: MONO }]}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.72}>
+              {dep.time}
             </Text>
           </View>
-        )}
 
-        <View style={[styles.badge, { backgroundColor: BUS_COLORS[dep.bus] + '1A', borderColor: BUS_COLORS[dep.bus] + '50' }]}>
-          <Text style={[styles.badgeText, { color: BUS_COLORS[dep.bus] }]}>{minsLabel}</Text>
+          <View
+            style={[
+              styles.nextCountdownBadge,
+              { backgroundColor: BUS_COLORS[dep.bus] + '16', borderColor: BUS_COLORS[dep.bus] + '45' },
+            ]}>
+            <Text style={styles.nextCountdownLabel}>ARRIVES</Text>
+            <Text style={[styles.nextCountdownValue, { color: BUS_COLORS[dep.bus], fontFamily: MONO }]}>
+              {minsLabel}
+            </Text>
+          </View>
         </View>
       </View>
     </View>
@@ -218,11 +304,15 @@ function ToKojoriView({
   activeStopId,
   onSelectStop,
   bottomInset,
+  isRefreshing,
+  onRefresh,
 }: {
   favoriteIds: string[];
   activeStopId: string;
   onSelectStop: (id: string) => void;
   bottomInset: number;
+  isRefreshing: boolean;
+  onRefresh: () => void;
 }) {
   const stopNames = useStopNames();
   const favoriteStops = favoriteIds.map(id => {
@@ -251,34 +341,37 @@ function ToKojoriView({
 
   return (
     <View style={styles.modeContainer}>
-      <View style={styles.fixedSection}>
-        <View style={styles.chipRow}>
-          {favoriteStops.map(s => (
-            <Pressable
-              key={s.id}
-              style={[styles.chip, s.id === activeStopId && { borderColor: C.amber, backgroundColor: C.amber + '14' }]}
-              onPress={() => onSelectStop(s.id)}>
-              <Text style={[styles.chipText, s.id === activeStopId && { color: C.amber, fontWeight: '600' }]}>
-                {s.label}
-              </Text>
-            </Pressable>
-          ))}
+      <ScrollView
+        style={styles.pageScroll}
+        contentContainerStyle={[styles.pageScrollContent, { paddingBottom: bottomInset + BottomTabInset + 24 }]}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={onRefresh}
+            tintColor={C.text}
+            colors={[C.text]}
+            progressBackgroundColor={C.surfaceHigh}
+          />
+        }>
+        <View style={styles.fixedSection}>
+          <StopSelector
+            stops={favoriteStops}
+            activeStopId={activeStopId}
+            accentColor={C.amber}
+            onSelectStop={onSelectStop}
+          />
+
+          {isError && <ErrorBanner message="Could not load schedule. Showing cached data." />}
+
+          <SectionDivider label="NEXT" />
+          <NextCard dep={next} accentColor={C.amber} isLoading={isLoading} />
         </View>
 
-        {isError && <ErrorBanner message="Could not load schedule. Showing cached data." />}
+        <SectionDivider label="UPCOMING" style={styles.dividerPadded} />
 
-        <SectionDivider label="NEXT" />
-        <NextCard dep={next} accentColor={C.amber} isLoading={isLoading} />
-      </View>
-
-      <SectionDivider label="UPCOMING" style={styles.dividerPadded} />
-
-      <ScrollView
-        style={styles.listScroll}
-        contentContainerStyle={[styles.listScrollContent, { paddingBottom: bottomInset + BottomTabInset + 24 }]}
-        showsVerticalScrollIndicator={false}>
         {upcoming.length > 0 ? (
-          <View style={styles.list}>
+          <View style={[styles.list, styles.listSection]}>
             {upcoming.map((dep, i) => (
               <DepartureRow
                 key={`${dep.bus}-${dep.time}`}
@@ -301,11 +394,15 @@ function ToTbilisiView({
   activeStopId,
   onSelectStop,
   bottomInset,
+  isRefreshing,
+  onRefresh,
 }: {
   favoriteIds: string[];
   activeStopId: string;
   onSelectStop: (id: string) => void;
   bottomInset: number;
+  isRefreshing: boolean;
+  onRefresh: () => void;
 }) {
   const stopNames = useStopNames();
   const favoriteStops = favoriteIds.map(id => {
@@ -334,34 +431,37 @@ function ToTbilisiView({
 
   return (
     <View style={styles.modeContainer}>
-      <View style={styles.fixedSection}>
-        <View style={styles.chipRow}>
-          {favoriteStops.map(s => (
-            <Pressable
-              key={s.id}
-              style={[styles.chip, s.id === activeStopId && { borderColor: C.teal, backgroundColor: C.teal + '14' }]}
-              onPress={() => onSelectStop(s.id)}>
-              <Text style={[styles.chipText, s.id === activeStopId && { color: C.teal, fontWeight: '600' }]}>
-                {s.label}
-              </Text>
-            </Pressable>
-          ))}
+      <ScrollView
+        style={styles.pageScroll}
+        contentContainerStyle={[styles.pageScrollContent, { paddingBottom: bottomInset + BottomTabInset + 24 }]}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={onRefresh}
+            tintColor={C.text}
+            colors={[C.text]}
+            progressBackgroundColor={C.surfaceHigh}
+          />
+        }>
+        <View style={styles.fixedSection}>
+          <StopSelector
+            stops={favoriteStops}
+            activeStopId={activeStopId}
+            accentColor={C.teal}
+            onSelectStop={onSelectStop}
+          />
+
+          {isError && <ErrorBanner message="Could not load schedule. Showing cached data." />}
+
+          <SectionDivider label="NEXT" />
+          <NextCard dep={next} accentColor={C.teal} isLoading={isLoading} />
         </View>
 
-        {isError && <ErrorBanner message="Could not load schedule. Showing cached data." />}
+        <SectionDivider label="UPCOMING" style={styles.dividerPadded} />
 
-        <SectionDivider label="NEXT" />
-        <NextCard dep={next} accentColor={C.teal} isLoading={isLoading} />
-      </View>
-
-      <SectionDivider label="UPCOMING" style={styles.dividerPadded} />
-
-      <ScrollView
-        style={styles.listScroll}
-        contentContainerStyle={[styles.listScrollContent, { paddingBottom: bottomInset + BottomTabInset + 24 }]}
-        showsVerticalScrollIndicator={false}>
         {upcoming.length > 0 ? (
-          <View style={styles.list}>
+          <View style={[styles.list, styles.listSection]}>
             {upcoming.map((dep, i) => (
               <DepartureRow
                 key={`${dep.bus}-${dep.time}`}
@@ -381,32 +481,60 @@ function ToTbilisiView({
 // ── Root ──────────────────────────────────────────────────────────────────────
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
+  const queryClient = useQueryClient();
   const { settings, update } = useSettings();
   const { detectedMode } = useLocation();
 
   const [mode, setMode] = useState<'kojori' | 'tbilisi'>('kojori');
   const [manualOverride, setManualOverride] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   useEffect(() => {
     if (!manualOverride && detectedMode) setMode(detectedMode);
   }, [detectedMode, manualOverride]);
 
-  const [clock, setClock] = useState(() =>
-    new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
-  );
+  const [clock, setClock] = useState(() => formatHeaderTime());
 
   useEffect(() => {
     const id = setInterval(() => {
-      setClock(new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }));
-    }, 60_000);
+      setClock(formatHeaderTime());
+    }, 30_000);
     return () => clearInterval(id);
   }, []);
 
   const accentColor = mode === 'kojori' ? C.amber : C.teal;
+  const activeDirection = mode === 'kojori' ? 'toKojori' : 'toTbilisi';
+  const activeStopId = mode === 'kojori' ? settings.activeTbilisiStopId : settings.activeKojoriStopId;
 
   function handleModeToggle(next: 'kojori' | 'tbilisi') {
     setMode(next);
     setManualOverride(true);
+  }
+
+  async function handleRefresh() {
+    if (isRefreshing) return;
+    setIsRefreshing(true);
+    setClock(formatHeaderTime());
+
+    try {
+      await Promise.all([
+        queryClient.refetchQueries({
+          queryKey: ['arrivals', activeStopId],
+          exact: true,
+        }),
+        queryClient.refetchQueries({
+          queryKey: ['schedule', ROUTES['380'].id, ROUTES['380'][activeDirection]],
+          exact: true,
+        }),
+        queryClient.refetchQueries({
+          queryKey: ['schedule', ROUTES['316'].id, ROUTES['316'][activeDirection]],
+          exact: true,
+        }),
+      ]);
+    } finally {
+      setClock(formatHeaderTime());
+      setIsRefreshing(false);
+    }
   }
 
   return (
@@ -417,7 +545,19 @@ export default function HomeScreen() {
           <View style={[styles.locationDot, { backgroundColor: accentColor }]} />
           <Text style={styles.headerCity}>{mode === 'kojori' ? 'Tbilisi' : 'Kojori'}</Text>
         </View>
-        <Text style={[styles.headerClock, { fontFamily: MONO }]}>{clock}</Text>
+        <View style={styles.headerRight}>
+          <Text style={[styles.headerClock, { fontFamily: MONO }]}>{clock}</Text>
+          <Pressable
+            style={styles.refreshButton}
+            onPress={handleRefresh}
+            disabled={isRefreshing}>
+            {isRefreshing ? (
+              <ActivityIndicator size="small" color={C.textDim} />
+            ) : (
+              <Text style={styles.refreshGlyph}>↻</Text>
+            )}
+          </Pressable>
+        </View>
       </View>
 
       {/* Mode toggle */}
@@ -442,6 +582,8 @@ export default function HomeScreen() {
           activeStopId={settings.activeTbilisiStopId}
           onSelectStop={id => update({ activeTbilisiStopId: id })}
           bottomInset={insets.bottom}
+          isRefreshing={isRefreshing}
+          onRefresh={handleRefresh}
         />
       ) : (
         <ToTbilisiView
@@ -449,6 +591,8 @@ export default function HomeScreen() {
           activeStopId={settings.activeKojoriStopId}
           onSelectStop={id => update({ activeKojoriStopId: id })}
           bottomInset={insets.bottom}
+          isRefreshing={isRefreshing}
+          onRefresh={handleRefresh}
         />
       )}
     </View>
@@ -466,9 +610,21 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
   },
   headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   locationDot: { width: 8, height: 8, borderRadius: 4 },
   headerCity: { color: C.text, fontSize: 16, fontWeight: '600', letterSpacing: 0.2 },
-  headerClock: { color: C.textDim, fontSize: 15 },
+  headerClock: { color: C.textDim, fontSize: 15, letterSpacing: 0.4 },
+  refreshButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    borderWidth: 1,
+    borderColor: C.border,
+    backgroundColor: C.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  refreshGlyph: { fontSize: 16, fontWeight: '700', color: C.textDim },
 
   toggleWrap: { paddingHorizontal: 20, paddingBottom: 4 },
   toggle: {
@@ -484,19 +640,34 @@ const styles = StyleSheet.create({
   toggleText: { color: C.textDim, fontSize: 14, fontWeight: '600', letterSpacing: 0.3 },
 
   modeContainer: { flex: 1 },
+  pageScroll: { flex: 1 },
+  pageScrollContent: { flexGrow: 1 },
   fixedSection: { paddingHorizontal: 20, paddingTop: 8 },
   dividerPadded: { paddingHorizontal: 20 },
-
-  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingVertical: 14 },
-  chip: {
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    borderRadius: 100,
-    backgroundColor: C.surface,
+  stopSelector: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10 },
+  stopSelectorMain: {
+    flex: 1,
+    minWidth: 0,
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: C.border,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
   },
-  chipText: { color: C.textDim, fontSize: 13, fontWeight: '500' },
+  stopSelectorLabelRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  stopSelectorEyebrow: { color: C.textFaint, fontSize: 10, fontWeight: '700', letterSpacing: 1.8 },
+  stopSelectorCount: { fontSize: 11, fontWeight: '700' },
+  stopSelectorTitle: { color: C.text, fontSize: 15, fontWeight: '600', marginTop: 4 },
+  stopNavButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: C.surface,
+  },
+  stopNavButtonDisabled: { borderColor: C.border, opacity: 0.5 },
+  stopNavGlyph: { fontSize: 18, fontWeight: '700', marginTop: -1 },
 
   divider: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 14 },
   dividerLine: { flex: 1, height: 1, backgroundColor: C.border },
@@ -504,28 +675,42 @@ const styles = StyleSheet.create({
 
   nextCard: {
     flexDirection: 'row',
-    alignItems: 'center',
     backgroundColor: C.surface,
-    borderRadius: 16,
-    padding: 20,
-    gap: 14,
+    borderRadius: 18,
     borderWidth: 1,
-    borderColor: C.border,
-    minHeight: 88,
+    overflow: 'hidden',
+    minHeight: 96,
   },
   centered: { justifyContent: 'center' },
-  nextMain: { flex: 1, minWidth: 0, justifyContent: 'center' },
-  nextTime: { color: C.text, fontSize: 48, fontWeight: '700', letterSpacing: -1.5, lineHeight: 52, flexShrink: 1 },
-  nextMetaColumn: { alignItems: 'flex-end', gap: 8, flexShrink: 0 },
+  nextAccentBar: { width: 4, alignSelf: 'stretch' },
+  nextContent: { flex: 1, paddingHorizontal: 16, paddingVertical: 14, gap: 12 },
+  nextHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
+  nextHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 10, minWidth: 0, flexShrink: 1 },
+  nextEyebrow: { color: C.textFaint, fontSize: 10, fontWeight: '700', letterSpacing: 1.8 },
+  nextBodyRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 12 },
+  nextMain: { flex: 1, minWidth: 0, justifyContent: 'flex-end' },
+  nextTime: { color: C.text, fontSize: 46, fontWeight: '700', letterSpacing: -1.6, lineHeight: 48, flexShrink: 1 },
   nextRouteBadge: {
-    minWidth: 58,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    borderRadius: 10,
+    minWidth: 54,
+    paddingHorizontal: 9,
+    paddingVertical: 6,
+    borderRadius: 999,
     borderWidth: 1,
     alignItems: 'center',
   },
-  nextRouteBadgeText: { fontSize: 16, fontWeight: '800', letterSpacing: 0.8 },
+  nextRouteBadgeText: { fontSize: 14, fontWeight: '800', letterSpacing: 0.8 },
+  nextStatusBadge: { flexShrink: 1 },
+  nextCountdownBadge: {
+    minWidth: 84,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 14,
+    borderWidth: 1,
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+  },
+  nextCountdownLabel: { color: C.textFaint, fontSize: 9, fontWeight: '700', letterSpacing: 1.4 },
+  nextCountdownValue: { fontSize: 16, fontWeight: '800', marginTop: 3 },
   badge: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 8, borderWidth: 1 },
   badgeText: { fontSize: 13, fontWeight: '600', letterSpacing: 0.2 },
 
@@ -539,9 +724,6 @@ const styles = StyleSheet.create({
   },
   busTagText: { fontSize: 14, fontWeight: '700', letterSpacing: 0.5 },
 
-  listScroll: { flex: 1 },
-  listScrollContent: { paddingHorizontal: 20 },
-
   list: {
     backgroundColor: C.surface,
     borderRadius: 16,
@@ -549,6 +731,7 @@ const styles = StyleSheet.create({
     borderColor: C.border,
     overflow: 'hidden',
   },
+  listSection: { marginHorizontal: 20 },
   row: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 15, gap: 14 },
   rowDivider: { borderBottomWidth: 1, borderBottomColor: C.border },
   rowTime: { flex: 1, color: C.text, fontSize: 22, fontWeight: '600', letterSpacing: -0.3 },
