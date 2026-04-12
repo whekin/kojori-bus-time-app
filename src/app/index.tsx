@@ -3,6 +3,7 @@ import { ActivityIndicator, Platform, Pressable, RefreshControl, ScrollView, Sty
 import { useQueryClient } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { StopSelector } from '@/components/stop-selector';
 import { BottomTabInset } from '@/constants/theme';
 import { useArrivals } from '@/hooks/use-arrivals';
 import { useLocation } from '@/hooks/use-location';
@@ -117,70 +118,6 @@ function ErrorBanner({ message }: { message: string }) {
   return (
     <View style={styles.errorBanner}>
       <Text style={styles.errorText}>{message}</Text>
-    </View>
-  );
-}
-
-function StopSelector({
-  stops,
-  activeStopId,
-  accentColor,
-  onSelectStop,
-}: {
-  stops: { id: string; label: string }[];
-  activeStopId: string;
-  accentColor: string;
-  onSelectStop: (id: string) => void;
-}) {
-  const activeIndex = Math.max(
-    0,
-    stops.findIndex(stop => stop.id === activeStopId),
-  );
-  const activeStop = stops[activeIndex] ?? stops[0];
-
-  if (!activeStop) return null;
-
-  const handleShift = (delta: number) => {
-    if (stops.length <= 1) return;
-    const nextIndex = (activeIndex + delta + stops.length) % stops.length;
-    onSelectStop(stops[nextIndex].id);
-  };
-
-  return (
-    <View style={styles.stopSelector}>
-      <Pressable
-        style={[
-          styles.stopNavButton,
-          stops.length <= 1 && styles.stopNavButtonDisabled,
-          { borderColor: accentColor + '35' },
-        ]}
-        disabled={stops.length <= 1}
-        onPress={() => handleShift(-1)}>
-        <Text style={[styles.stopNavGlyph, { color: stops.length <= 1 ? C.textFaint : accentColor }]}>‹</Text>
-      </Pressable>
-
-      <View style={[styles.stopSelectorMain, { borderColor: accentColor + '30', backgroundColor: accentColor + '10' }]}>
-        <View style={styles.stopSelectorLabelRow}>
-          <Text style={styles.stopSelectorEyebrow}>BOARDING STOP</Text>
-          <Text style={[styles.stopSelectorCount, { color: accentColor, fontFamily: MONO }]}>
-            {String(activeIndex + 1).padStart(2, '0')} / {String(stops.length).padStart(2, '0')}
-          </Text>
-        </View>
-        <Text style={styles.stopSelectorTitle} numberOfLines={1}>
-          {activeStop.label}
-        </Text>
-      </View>
-
-      <Pressable
-        style={[
-          styles.stopNavButton,
-          stops.length <= 1 && styles.stopNavButtonDisabled,
-          { borderColor: accentColor + '35' },
-        ]}
-        disabled={stops.length <= 1}
-        onPress={() => handleShift(1)}>
-        <Text style={[styles.stopNavGlyph, { color: stops.length <= 1 ? C.textFaint : accentColor }]}>›</Text>
-      </Pressable>
     </View>
   );
 }
@@ -644,30 +581,6 @@ const styles = StyleSheet.create({
   pageScrollContent: { flexGrow: 1 },
   fixedSection: { paddingHorizontal: 20, paddingTop: 8 },
   dividerPadded: { paddingHorizontal: 20 },
-  stopSelector: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10 },
-  stopSelectorMain: {
-    flex: 1,
-    minWidth: 0,
-    borderRadius: 16,
-    borderWidth: 1,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-  },
-  stopSelectorLabelRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
-  stopSelectorEyebrow: { color: C.textFaint, fontSize: 10, fontWeight: '700', letterSpacing: 1.8 },
-  stopSelectorCount: { fontSize: 11, fontWeight: '700' },
-  stopSelectorTitle: { color: C.text, fontSize: 15, fontWeight: '600', marginTop: 4 },
-  stopNavButton: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: C.surface,
-  },
-  stopNavButtonDisabled: { borderColor: C.border, opacity: 0.5 },
-  stopNavGlyph: { fontSize: 18, fontWeight: '700', marginTop: -1 },
 
   divider: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 14 },
   dividerLine: { flex: 1, height: 1, backgroundColor: C.border },

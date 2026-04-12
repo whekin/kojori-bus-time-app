@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { StopSelector } from '@/components/stop-selector';
 import { BottomTabInset } from '@/constants/theme';
 import { useSchedule } from '@/hooks/use-schedule';
 import {
@@ -149,17 +150,17 @@ export default function TimetableScreen() {
       </View>
 
       {/* Stop selector */}
-      <View style={styles.chipRow}>
-        {stops.map((s, i) => (
-          <Pressable
-            key={s.id}
-            style={[styles.chip, i === stopIndex && { borderColor: accentColor, backgroundColor: accentColor + '14' }]}
-            onPress={() => setStopIndex(i)}>
-            <Text style={[styles.chipText, i === stopIndex && { color: accentColor, fontWeight: '600' }]}>
-              {s.label}
-            </Text>
-          </Pressable>
-        ))}
+      <View style={styles.stopSelectorWrap}>
+        <StopSelector
+          stops={stops}
+          activeStopId={stopId}
+          accentColor={accentColor}
+          onSelectStop={id => {
+            const nextIndex = stops.findIndex(stop => stop.id === id);
+            if (nextIndex >= 0) setStopIndex(nextIndex);
+          }}
+          label="TIMETABLE STOP"
+        />
       </View>
 
       {/* Bus filter */}
@@ -248,16 +249,7 @@ const styles = StyleSheet.create({
   toggleSegOn: { backgroundColor: C.surfaceHigh, borderWidth: 1, borderColor: C.borderStrong },
   toggleText: { color: C.textDim, fontSize: 14, fontWeight: '600', letterSpacing: 0.3 },
 
-  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingHorizontal: 20, paddingBottom: 10 },
-  chip: {
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    borderRadius: 100,
-    backgroundColor: C.surface,
-    borderWidth: 1,
-    borderColor: C.border,
-  },
-  chipText: { color: C.textDim, fontSize: 13, fontWeight: '500' },
+  stopSelectorWrap: { paddingHorizontal: 20, paddingBottom: 10 },
 
   filterRow: { flexDirection: 'row', gap: 8, paddingHorizontal: 20, paddingBottom: 12 },
   filterChip: {
