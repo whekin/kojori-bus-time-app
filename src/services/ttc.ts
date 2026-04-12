@@ -58,14 +58,14 @@ export interface StopInfo {
  * First entry = recommended default.
  */
 export const ALL_TBILISI_STOPS: StopInfo[] = [
-  { id: '1:3932', label: 'Baratashvili St' },  // starting stop — most accurate schedule
-  { id: '1:853', label: 'Liberty Square' },
+  { id: '1:3932', label: 'Nikoloz Baratashvili Street' }, // starting stop — most accurate schedule
+  { id: '1:853',  label: 'Sulkhan-Saba Street' },
 ];
 
 export const ALL_KOJORI_STOPS: StopInfo[] = [
-  { id: '1:2856', label: 'Vazha-Pshavela #56' },
-  { id: '1:3782', label: 'Chkheidze St' },
-  { id: '1:3537', label: 'Stop #3537' },  // name TBD — fetched from API on first load
+  { id: '1:2856', label: 'Kojori, Vazha-Pshavela St #56' },
+  { id: '1:3782', label: 'Kojori, Alexandre Chkheidze Street' },
+  { id: '1:3537', label: 'Kojori, Nikoloz Baratashvili Street' },
 ];
 
 /** Default favourite stop IDs shown as chips on home screen */
@@ -128,9 +128,9 @@ export async function fetchRouteStops(routeId: string, patternSuffix: string): P
     { headers },
   );
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  // API returns array of stop objects; normalise to StopInfo
-  const raw: { id: string; name: string }[] = await res.json();
-  return raw.map(s => ({ id: s.id, label: s.name }));
+  // Response: [{ stop: { id, name, ... }, patternSuffixes: [...] }]
+  const raw: { stop: { id: string; name: string } }[] = await res.json();
+  return raw.map(s => ({ id: s.stop.id, label: s.stop.name }));
 }
 
 export async function fetchVehiclePositions(
