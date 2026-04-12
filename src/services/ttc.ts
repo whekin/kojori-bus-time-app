@@ -174,6 +174,12 @@ export function formatTime(mins: number): string {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 }
 
+/** Formats a future offset in minutes from now to "HH:mm". */
+export function formatFutureTime(offsetMins: number, now = new Date()): string {
+  const nowMins = now.getHours() * 60 + now.getMinutes();
+  return formatTime(nowMins + offsetMins);
+}
+
 export interface Departure {
   bus: BusLine;
   time: string;      // display time "HH:mm"
@@ -232,6 +238,8 @@ export function mergeArrivalsIntoSchedule(
   departures: Departure[],
   arrivals: ArrivalTime[],
 ): Departure[] {
+  const now = new Date();
+
   return departures
     .map(dep => {
       const match = arrivals.find(
@@ -249,11 +257,13 @@ export function mergeArrivalsIntoSchedule(
       return {
         ...dep,
         live: true,
+        time: formatFutureTime(match.realtimeArrivalMinutes, now),
         scheduledMinsUntil: dep.minsUntil,
         liveMinutes: match.realtimeArrivalMinutes,
         driftMinutes: match.realtimeArrivalMinutes - dep.minsUntil,
         minsUntil: match.realtimeArrivalMinutes,
       };
     })
+    .filter(dep => dep.minsUntil >= 0)
     .sort((a, b) => a.minsUntil - b.minsUntil);
 }
