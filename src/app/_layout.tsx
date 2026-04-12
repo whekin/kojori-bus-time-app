@@ -1,16 +1,45 @@
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
-import React from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import React, { useEffect } from 'react';
 import { useColorScheme } from 'react-native';
 
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
 import AppTabs from '@/components/app-tabs';
+import { SettingsProvider } from '@/hooks/use-settings';
+import { prefillScheduleCache } from '@/hooks/use-schedule';
+import { prefillStopNames } from '@/hooks/use-stop-names';
 
-export default function TabLayout() {
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: 2,
+      staleTime: 60_000,
+    },
+  },
+});
+
+// Runs once: loads persisted schedule caches into QueryClient so screens
+// have data immediately without waiting for a network round-trip.
+function CachePrefiller() {
+  useEffect(() => {
+    prefillScheduleCache(queryClient);
+    prefillStopNames(queryClient);
+  }, []);
+  return null;
+}
+
+export default function RootLayout() {
   const colorScheme = useColorScheme();
+
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <AnimatedSplashOverlay />
-      <AppTabs />
-    </ThemeProvider>
+    <QueryClientProvider client={queryClient}>
+      <SettingsProvider>
+        <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+          <CachePrefiller />
+          <AnimatedSplashOverlay />
+          <AppTabs />
+        </ThemeProvider>
+      </SettingsProvider>
+    </QueryClientProvider>
   );
 }
