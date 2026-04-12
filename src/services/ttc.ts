@@ -176,8 +176,10 @@ export function formatTime(mins: number): string {
 
 export interface Departure {
   bus: BusLine;
-  time: string;   // display time "HH:mm"
+  time: string;      // display time "HH:mm"
   minsUntil: number;
+  live?: boolean;
+  liveMinutes?: number; // realtime ETA in mins (only when live=true)
 }
 
 /**
@@ -188,7 +190,7 @@ export function computeUpcomingDepartures(
   schedule380: SchedulePeriod[] | undefined,
   schedule316: SchedulePeriod[] | undefined,
   stopId: string,
-  horizonMins = 180,
+  horizonMins = 23 * 60,
 ): Departure[] {
   const now = new Date();
   const nowMins = now.getHours() * 60 + now.getMinutes();
@@ -216,4 +218,27 @@ export function computeUpcomingDepartures(
   }
 
   return result.sort((a, b) => a.minsUntil - b.minsUntil);
+}
+
+/**
+ * Overlays live arrival data onto schedule-based departures.
+ * If a live arrival matches a departure within ±8 min, marks it live
+ * and updates minsUntil to the realtime ETA.
+ */
+export function mergeArrivalsIntoSchedule(
+  departures: Departure[],
+  arrivals: ArrivalTime[],
+): Departure[] {
+  return departures.map(dep => {
+    const match = arrivals.find(
+      a => a.shortName === dep.bus && Math.abs(a.realtimeArrivalMinutes - dep.minsUntil) <= 8,
+    );
+    if (!match) return dep;
+    return {
+      ...dep,
+      live: match.realtime,
+      liveMinutes: match.realtimeArrivalMinutes,
+      minsUntil: match.realtime ? match.realtimeArrivalMinutes : dep.minsUntil,
+    };
+  });
 }

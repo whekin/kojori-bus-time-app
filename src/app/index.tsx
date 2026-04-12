@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, View, ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { BottomTabInset } from '@/constants/theme';
@@ -9,14 +9,12 @@ import { useSchedule } from '@/hooks/use-schedule';
 import { useSettings } from '@/hooks/use-settings';
 import { useStopNames } from '@/hooks/use-stop-names';
 import {
-  ALL_KOJORI_STOPS,
-  ALL_TBILISI_STOPS,
-  ArrivalTime,
   BusLine,
   BUS_COLORS,
   computeUpcomingDepartures,
   Departure,
   findStop,
+  mergeArrivalsIntoSchedule,
   ROUTES,
 } from '@/services/ttc';
 
@@ -61,9 +59,9 @@ function LiveDot() {
   return <View style={styles.liveDot} />;
 }
 
-function SectionDivider({ label }: { label: string }) {
+function SectionDivider({ label, style }: { label: string; style?: ViewStyle }) {
   return (
-    <View style={styles.divider}>
+    <View style={[styles.divider, style]}>
       <View style={styles.dividerLine} />
       <Text style={styles.dividerLabel}>{label}</Text>
       <View style={styles.dividerLine} />
@@ -83,6 +81,62 @@ function ErrorBanner({ message }: { message: string }) {
   return (
     <View style={styles.errorBanner}>
       <Text style={styles.errorText}>{message}</Text>
+    </View>
+  );
+}
+
+// ── Shared departure row ───────────────────────────────────────────────────────
+function DepartureRow({ dep, isLast }: { dep: Departure; isLast: boolean }) {
+  const countdown = formatMins(dep.minsUntil);
+  return (
+    <View style={[styles.row, !isLast && styles.rowDivider]}>
+      <BusTag bus={dep.bus} />
+      <Text style={[styles.rowTime, { fontFamily: MONO }]}>{dep.time}</Text>
+      {dep.live ? (
+        <View style={styles.liveBadgeSmall}>
+          <LiveDot />
+          <Text style={styles.liveBadgeSmallText}>LIVE</Text>
+        </View>
+      ) : null}
+      <Text style={[styles.rowCountdown, { fontFamily: MONO }]}>{countdown}</Text>
+    </View>
+  );
+}
+
+// ── Shared "next bus" card ─────────────────────────────────────────────────────
+function NextCard({
+  dep,
+  accentColor,
+  isLoading,
+}: {
+  dep: Departure | undefined;
+  accentColor: string;
+  isLoading: boolean;
+}) {
+  if (isLoading && !dep) {
+    return (
+      <View style={[styles.nextCard, styles.centered]}>
+        <ActivityIndicator color={accentColor} />
+      </View>
+    );
+  }
+  if (!dep) {
+    return <EmptyState message="No more departures today" />;
+  }
+  const minsLabel = dep.minsUntil < 1 ? 'now' : `in ${dep.minsUntil} min`;
+  return (
+    <View style={styles.nextCard}>
+      <BusTag bus={dep.bus} />
+      <Text style={[styles.nextTime, { fontFamily: MONO }]}>{dep.time}</Text>
+      {dep.live && (
+        <View style={styles.liveBadge}>
+          <LiveDot />
+          <Text style={styles.liveBadgeText}>LIVE</Text>
+        </View>
+      )}
+      <View style={[styles.badge, { backgroundColor: BUS_COLORS[dep.bus] + '1A', borderColor: BUS_COLORS[dep.bus] + '50' }]}>
+        <Text style={[styles.badgeText, { color: BUS_COLORS[dep.bus] }]}>{minsLabel}</Text>
+      </View>
     </View>
   );
 }
@@ -107,10 +161,16 @@ function ToKojoriView({
 
   const { data: s380, isLoading: l380, isError: e380 } = useSchedule(ROUTES['380'].id, ROUTES['380'].toKojori);
   const { data: s316, isLoading: l316, isError: e316 } = useSchedule(ROUTES['316'].id, ROUTES['316'].toKojori);
+  const { arrivals } = useArrivals(activeStopId, 'toKojori');
 
-  const departures = useMemo(
+  const rawDepartures = useMemo(
     () => computeUpcomingDepartures(s380, s316, activeStopId),
     [s380, s316, activeStopId],
+  );
+
+  const departures = useMemo(
+    () => mergeArrivalsIntoSchedule(rawDepartures, arrivals),
+    [rawDepartures, arrivals],
   );
 
   const isLoading = l380 || l316;
@@ -121,7 +181,6 @@ function ToKojoriView({
   return (
     <View style={styles.modeContainer}>
       <View style={styles.fixedSection}>
-        {/* Stop selector */}
         <View style={styles.chipRow}>
           {favoriteStops.map(s => (
             <Pressable
@@ -138,25 +197,7 @@ function ToKojoriView({
         {isError && <ErrorBanner message="Could not load schedule. Showing cached data." />}
 
         <SectionDivider label="NEXT" />
-
-        {/* Next departure card */}
-        {isLoading && !next ? (
-          <View style={[styles.nextCard, styles.centered]}>
-            <ActivityIndicator color={C.amber} />
-          </View>
-        ) : next ? (
-          <View style={styles.nextCard}>
-            <BusTag bus={next.bus} />
-            <Text style={[styles.nextTime, { fontFamily: MONO }]}>{next.time}</Text>
-            <View style={[styles.badge, { backgroundColor: BUS_COLORS[next.bus] + '1A', borderColor: BUS_COLORS[next.bus] + '50' }]}>
-              <Text style={[styles.badgeText, { color: BUS_COLORS[next.bus] }]}>
-                {next.minsUntil < 1 ? 'now' : `in ${next.minsUntil} min`}
-              </Text>
-            </View>
-          </View>
-        ) : (
-          <EmptyState message="No more departures today" />
-        )}
+        <NextCard dep={next} accentColor={C.amber} isLoading={isLoading} />
       </View>
 
       <SectionDivider label="UPCOMING" style={styles.dividerPadded} />
@@ -176,19 +217,9 @@ function ToKojoriView({
             ))}
           </View>
         ) : !isLoading ? (
-          <EmptyState message="No more departures in the next 3 hours" />
+          <EmptyState message="No more departures today" />
         ) : null}
       </ScrollView>
-    </View>
-  );
-}
-
-function DepartureRow({ dep, isLast }: { dep: Departure; isLast: boolean }) {
-  return (
-    <View style={[styles.row, !isLast && styles.rowDivider]}>
-      <BusTag bus={dep.bus} />
-      <Text style={[styles.rowTime, { fontFamily: MONO }]}>{dep.time}</Text>
-      <Text style={[styles.rowCountdown, { fontFamily: MONO }]}>{formatMins(dep.minsUntil)}</Text>
     </View>
   );
 }
@@ -210,15 +241,29 @@ function ToTbilisiView({
     const base = findStop(id) ?? { id, label: `Stop #${id.split(':')[1]}` };
     return { ...base, label: stopNames[id] ?? base.label };
   });
-  const { arrivals, isLoading, isError } = useArrivals(activeStopId);
 
-  const next = arrivals[0];
-  const upcoming = arrivals.slice(1);
+  const { data: s380, isLoading: l380, isError: e380 } = useSchedule(ROUTES['380'].id, ROUTES['380'].toTbilisi);
+  const { data: s316, isLoading: l316, isError: e316 } = useSchedule(ROUTES['316'].id, ROUTES['316'].toTbilisi);
+  const { arrivals, isError: eArrival } = useArrivals(activeStopId, 'toTbilisi');
+
+  const rawDepartures = useMemo(
+    () => computeUpcomingDepartures(s380, s316, activeStopId),
+    [s380, s316, activeStopId],
+  );
+
+  const departures = useMemo(
+    () => mergeArrivalsIntoSchedule(rawDepartures, arrivals),
+    [rawDepartures, arrivals],
+  );
+
+  const isLoading = l380 || l316;
+  const isError = (e380 || e316 || eArrival) && !s380 && !s316;
+  const next = departures[0];
+  const upcoming = departures.slice(1);
 
   return (
     <View style={styles.modeContainer}>
       <View style={styles.fixedSection}>
-        {/* Stop selector */}
         <View style={styles.chipRow}>
           {favoriteStops.map(s => (
             <Pressable
@@ -232,31 +277,10 @@ function ToTbilisiView({
           ))}
         </View>
 
-        {isError && <ErrorBanner message="Could not reach TTC. Check your connection." />}
+        {isError && <ErrorBanner message="Could not load schedule. Showing cached data." />}
 
-        <SectionDivider label="ARRIVING SOON" />
-
-        {/* Next arrival card */}
-        {isLoading && !next ? (
-          <View style={[styles.nextCard, styles.centered]}>
-            <ActivityIndicator color={C.teal} />
-          </View>
-        ) : next ? (
-          <View style={styles.nextCard}>
-            <BusTag bus={next.shortName as BusLine} />
-            <Text style={[styles.nextTime, { fontFamily: MONO }]}>
-              {next.realtimeArrivalMinutes < 1 ? 'now' : `${next.realtimeArrivalMinutes} min`}
-            </Text>
-            {next.realtime ? (
-              <View style={styles.liveBadge}>
-                <LiveDot />
-                <Text style={styles.liveBadgeText}>LIVE</Text>
-              </View>
-            ) : null}
-          </View>
-        ) : (
-          <EmptyState message="No arrivals found for this stop" />
-        )}
+        <SectionDivider label="NEXT" />
+        <NextCard dep={next} accentColor={C.teal} isLoading={isLoading} />
       </View>
 
       <SectionDivider label="UPCOMING" style={styles.dividerPadded} />
@@ -267,40 +291,18 @@ function ToTbilisiView({
         showsVerticalScrollIndicator={false}>
         {upcoming.length > 0 ? (
           <View style={styles.list}>
-            {upcoming.map((arr, i) => (
-              <ArrivalRow
-                key={`${arr.shortName}-${arr.realtimeArrivalMinutes}-${i}`}
-                arrival={arr}
+            {upcoming.map((dep, i) => (
+              <DepartureRow
+                key={`${dep.bus}-${dep.time}`}
+                dep={dep}
                 isLast={i === upcoming.length - 1}
               />
             ))}
           </View>
         ) : !isLoading ? (
-          <EmptyState message="No further arrivals in range" />
+          <EmptyState message="No more departures today" />
         ) : null}
       </ScrollView>
-    </View>
-  );
-}
-
-function ArrivalRow({ arrival, isLast }: { arrival: ArrivalTime; isLast: boolean }) {
-  const mins = arrival.realtimeArrivalMinutes;
-  return (
-    <View style={[styles.row, !isLast && styles.rowDivider]}>
-      <BusTag bus={arrival.shortName as BusLine} />
-      <Text style={[styles.rowTime, { fontFamily: MONO }]}>
-        {mins < 1 ? 'now' : `${mins} min`}
-      </Text>
-      <View style={styles.rowTrailing}>
-        {arrival.realtime ? (
-          <View style={styles.liveBadgeSmall}>
-            <LiveDot />
-            <Text style={styles.liveBadgeSmallText}>LIVE</Text>
-          </View>
-        ) : (
-          <Text style={styles.schedLabel}>sched</Text>
-        )}
-      </View>
     </View>
   );
 }
@@ -322,7 +324,6 @@ export default function HomeScreen() {
     new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
   );
 
-  // Refresh clock every minute
   useEffect(() => {
     const id = setInterval(() => {
       setClock(new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }));
@@ -470,7 +471,6 @@ const styles = StyleSheet.create({
   rowDivider: { borderBottomWidth: 1, borderBottomColor: C.border },
   rowTime: { flex: 1, color: C.text, fontSize: 22, fontWeight: '600', letterSpacing: -0.3 },
   rowCountdown: { color: C.textDim, fontSize: 13, fontWeight: '500' },
-  rowTrailing: { alignItems: 'flex-end', minWidth: 48 },
 
   liveBadge: {
     flexDirection: 'row',
@@ -487,7 +487,6 @@ const styles = StyleSheet.create({
   liveBadgeSmall: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   liveBadgeSmallText: { color: C.live, fontSize: 11, fontWeight: '700', letterSpacing: 0.8 },
   liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: C.live },
-  schedLabel: { color: C.textDim, fontSize: 12, fontWeight: '500' },
 
   emptyState: { paddingVertical: 32, alignItems: 'center' },
   emptyText: { color: C.textDim, fontSize: 14 },

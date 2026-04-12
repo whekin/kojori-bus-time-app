@@ -1,11 +1,11 @@
 import { useQuery } from '@tanstack/react-query';
 
-import { ArrivalTime, BusLine, fetchArrivalTimes } from '@/services/ttc';
+import { ArrivalTime, BusLine, fetchArrivalTimes, ROUTES } from '@/services/ttc';
 
 const BUSES: BusLine[] = ['380', '316'];
 
 /** Real-time + scheduled arrivals for a stop. Refreshes every 30s. */
-export function useArrivals(stopId: string) {
+export function useArrivals(stopId: string, direction?: 'toKojori' | 'toTbilisi') {
   const query = useQuery<ArrivalTime[]>({
     queryKey: ['arrivals', stopId],
     queryFn: () => fetchArrivalTimes(stopId),
@@ -14,9 +14,15 @@ export function useArrivals(stopId: string) {
     retry: 1,
   });
 
-  // Filter to only our two bus lines and sort by ETA
   const arrivals = (query.data ?? [])
-    .filter(a => (BUSES as string[]).includes(a.shortName))
+    .filter(a => {
+      if (!(BUSES as string[]).includes(a.shortName)) return false;
+      if (direction) {
+        const expected = ROUTES[a.shortName as BusLine][direction];
+        return a.patternSuffix === expected;
+      }
+      return true;
+    })
     .sort((a, b) => a.realtimeArrivalMinutes - b.realtimeArrivalMinutes);
 
   return { ...query, arrivals };
