@@ -179,7 +179,9 @@ export interface Departure {
   time: string;      // display time "HH:mm"
   minsUntil: number;
   live?: boolean;
+  scheduledMinsUntil?: number;
   liveMinutes?: number; // realtime ETA in mins (only when live=true)
+  driftMinutes?: number;
 }
 
 /**
@@ -230,16 +232,28 @@ export function mergeArrivalsIntoSchedule(
   departures: Departure[],
   arrivals: ArrivalTime[],
 ): Departure[] {
-  return departures.map(dep => {
-    const match = arrivals.find(
-      a => a.shortName === dep.bus && Math.abs(a.realtimeArrivalMinutes - dep.minsUntil) <= 8,
-    );
-    if (!match) return dep;
-    return {
-      ...dep,
-      live: match.realtime,
-      liveMinutes: match.realtimeArrivalMinutes,
-      minsUntil: match.realtime ? match.realtimeArrivalMinutes : dep.minsUntil,
-    };
-  });
+  return departures
+    .map(dep => {
+      const match = arrivals.find(
+        a => a.shortName === dep.bus && Math.abs(a.realtimeArrivalMinutes - dep.minsUntil) <= 8,
+      );
+      if (!match) return dep;
+      if (!match.realtime) {
+        return {
+          ...dep,
+          live: false,
+          scheduledMinsUntil: dep.minsUntil,
+        };
+      }
+
+      return {
+        ...dep,
+        live: true,
+        scheduledMinsUntil: dep.minsUntil,
+        liveMinutes: match.realtimeArrivalMinutes,
+        driftMinutes: match.realtimeArrivalMinutes - dep.minsUntil,
+        minsUntil: match.realtimeArrivalMinutes,
+      };
+    })
+    .sort((a, b) => a.minsUntil - b.minsUntil);
 }

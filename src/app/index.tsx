@@ -45,6 +45,36 @@ function formatMins(mins: number) {
   return m > 0 ? `+${h}h\u202F${m}m` : `+${h}h`;
 }
 
+function getRealtimeStatus(dep: Departure) {
+  if (!dep.live) return null;
+
+  const drift = dep.driftMinutes ?? 0;
+  if (drift > 0) {
+    return {
+      label: `LIVE +${drift}m`,
+      textColor: C.error,
+      backgroundColor: C.error + '14',
+      borderColor: C.error + '38',
+    };
+  }
+
+  if (drift < 0) {
+    return {
+      label: `LIVE ${Math.abs(drift)}m early`,
+      textColor: '#7DD3FC',
+      backgroundColor: '#7DD3FC14',
+      borderColor: '#7DD3FC38',
+    };
+  }
+
+  return {
+    label: 'LIVE on time',
+    textColor: C.live,
+    backgroundColor: C.live + '14',
+    borderColor: C.live + '38',
+  };
+}
+
 // ── Atoms ─────────────────────────────────────────────────────────────────────
 function BusTag({ bus }: { bus: BusLine }) {
   const color = BUS_COLORS[bus];
@@ -88,14 +118,24 @@ function ErrorBanner({ message }: { message: string }) {
 // ── Shared departure row ───────────────────────────────────────────────────────
 function DepartureRow({ dep, isLast }: { dep: Departure; isLast: boolean }) {
   const countdown = formatMins(dep.minsUntil);
+  const realtimeStatus = getRealtimeStatus(dep);
   return (
     <View style={[styles.row, !isLast && styles.rowDivider]}>
       <BusTag bus={dep.bus} />
       <Text style={[styles.rowTime, { fontFamily: MONO }]}>{dep.time}</Text>
-      {dep.live ? (
-        <View style={styles.liveBadgeSmall}>
+      {realtimeStatus ? (
+        <View
+          style={[
+            styles.liveBadgeSmall,
+            {
+              backgroundColor: realtimeStatus.backgroundColor,
+              borderColor: realtimeStatus.borderColor,
+            },
+          ]}>
           <LiveDot />
-          <Text style={styles.liveBadgeSmallText}>LIVE</Text>
+          <Text style={[styles.liveBadgeSmallText, { color: realtimeStatus.textColor }]}>
+            {realtimeStatus.label}
+          </Text>
         </View>
       ) : null}
       <Text style={[styles.rowCountdown, { fontFamily: MONO }]}>{countdown}</Text>
@@ -124,6 +164,7 @@ function NextCard({
     return <EmptyState message="No more departures today" />;
   }
   const minsLabel = dep.minsUntil < 1 ? 'now' : `in ${dep.minsUntil} min`;
+  const realtimeStatus = getRealtimeStatus(dep);
   return (
     <View style={styles.nextCard}>
       <View style={styles.nextMain}>
@@ -147,10 +188,19 @@ function NextCard({
           </Text>
         </View>
 
-        {dep.live && (
-          <View style={styles.liveBadge}>
+        {realtimeStatus && (
+          <View
+            style={[
+              styles.liveBadge,
+              {
+                backgroundColor: realtimeStatus.backgroundColor,
+                borderColor: realtimeStatus.borderColor,
+              },
+            ]}>
             <LiveDot />
-            <Text style={styles.liveBadgeText}>LIVE</Text>
+            <Text style={[styles.liveBadgeText, { color: realtimeStatus.textColor }]}>
+              {realtimeStatus.label}
+            </Text>
           </View>
         )}
 
@@ -510,14 +560,20 @@ const styles = StyleSheet.create({
     gap: 5,
     paddingHorizontal: 10,
     paddingVertical: 6,
-    backgroundColor: C.live + '1A',
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: C.live + '40',
   },
-  liveBadgeText: { color: C.live, fontSize: 11, fontWeight: '800', letterSpacing: 1.2 },
-  liveBadgeSmall: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  liveBadgeSmallText: { color: C.live, fontSize: 11, fontWeight: '700', letterSpacing: 0.8 },
+  liveBadgeText: { fontSize: 11, fontWeight: '800', letterSpacing: 0.6 },
+  liveBadgeSmall: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  liveBadgeSmallText: { fontSize: 11, fontWeight: '700', letterSpacing: 0.2 },
   liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: C.live },
 
   emptyState: { paddingVertical: 32, alignItems: 'center' },
