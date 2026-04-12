@@ -10,7 +10,9 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { DirectionToggle } from '@/components/direction-toggle';
 import { StopSelector } from '@/components/stop-selector';
+import { TtcStatusBanner } from '@/components/ttc-status-banner';
 import { BottomTabInset } from '@/constants/theme';
 import { useSchedule } from '@/hooks/use-schedule';
 import {
@@ -131,23 +133,20 @@ export default function TimetableScreen() {
 
       {/* Direction toggle */}
       <View style={styles.toggleWrap}>
-        <View style={styles.toggle}>
-          <Pressable
-            style={[styles.toggleSeg, direction === 'toKojori' && styles.toggleSegOn]}
-            onPress={() => { setDirection('toKojori'); setStopIndex(0); }}>
-            <Text style={[styles.toggleText, direction === 'toKojori' && { color: C.amber }]}>
-              → Kojori
-            </Text>
-          </Pressable>
-          <Pressable
-            style={[styles.toggleSeg, direction === 'toTbilisi' && styles.toggleSegOn]}
-            onPress={() => { setDirection('toTbilisi'); setStopIndex(0); }}>
-            <Text style={[styles.toggleText, direction === 'toTbilisi' && { color: C.teal }]}>
-              → Tbilisi
-            </Text>
-          </Pressable>
-        </View>
+        <DirectionToggle
+          value={direction}
+          onChange={next => {
+            setDirection(next);
+            setStopIndex(0);
+          }}
+          options={[
+            { value: 'toKojori', label: '→ Kojori', accentColor: C.amber },
+            { value: 'toTbilisi', label: '→ Tbilisi', accentColor: C.teal },
+          ]}
+        />
       </View>
+
+      <TtcStatusBanner />
 
       {/* Stop selector */}
       <View style={styles.stopSelectorWrap}>
@@ -237,17 +236,6 @@ const styles = StyleSheet.create({
   headerCount: { color: C.textDim, fontSize: 13, fontWeight: '500' },
 
   toggleWrap: { paddingHorizontal: 20, paddingBottom: 12 },
-  toggle: {
-    flexDirection: 'row',
-    backgroundColor: C.surface,
-    borderRadius: 12,
-    padding: 3,
-    borderWidth: 1,
-    borderColor: C.border,
-  },
-  toggleSeg: { flex: 1, paddingVertical: 11, alignItems: 'center', borderRadius: 9 },
-  toggleSegOn: { backgroundColor: C.surfaceHigh, borderWidth: 1, borderColor: C.borderStrong },
-  toggleText: { color: C.textDim, fontSize: 14, fontWeight: '600', letterSpacing: 0.3 },
 
   stopSelectorWrap: { paddingHorizontal: 20, paddingBottom: 10 },
 

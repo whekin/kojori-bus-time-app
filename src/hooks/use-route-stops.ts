@@ -26,6 +26,7 @@ export function useRouteStops(direction: Direction) {
     queries: [
       {
         queryKey: ['route-stops', direction],
+        meta: { source: 'ttc' },
         queryFn: () => fetchStopsForDirection(direction),
         staleTime: 24 * 60 * 60 * 1000, // 24h — route stops almost never change
         retry: 1,

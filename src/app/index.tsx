@@ -3,7 +3,9 @@ import { ActivityIndicator, Platform, Pressable, RefreshControl, ScrollView, Sty
 import { useQueryClient } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { DirectionToggle } from '@/components/direction-toggle';
 import { StopSelector } from '@/components/stop-selector';
+import { TtcStatusBanner } from '@/components/ttc-status-banner';
 import { BottomTabInset } from '@/constants/theme';
 import { useArrivals } from '@/hooks/use-arrivals';
 import { useLocation } from '@/hooks/use-location';
@@ -499,19 +501,17 @@ export default function HomeScreen() {
 
       {/* Mode toggle */}
       <View style={styles.toggleWrap}>
-        <View style={styles.toggle}>
-          <Pressable
-            style={[styles.toggleSeg, mode === 'kojori' && styles.toggleSegOn]}
-            onPress={() => handleModeToggle('kojori')}>
-            <Text style={[styles.toggleText, mode === 'kojori' && { color: C.amber }]}>→ Kojori</Text>
-          </Pressable>
-          <Pressable
-            style={[styles.toggleSeg, mode === 'tbilisi' && styles.toggleSegOn]}
-            onPress={() => handleModeToggle('tbilisi')}>
-            <Text style={[styles.toggleText, mode === 'tbilisi' && { color: C.teal }]}>→ Tbilisi</Text>
-          </Pressable>
-        </View>
+        <DirectionToggle
+          value={mode}
+          onChange={handleModeToggle}
+          options={[
+            { value: 'kojori', label: '→ Kojori', accentColor: C.amber },
+            { value: 'tbilisi', label: '→ Tbilisi', accentColor: C.teal },
+          ]}
+        />
       </View>
+
+      <TtcStatusBanner />
 
       {mode === 'kojori' ? (
         <ToKojoriView
@@ -564,17 +564,6 @@ const styles = StyleSheet.create({
   refreshGlyph: { fontSize: 16, fontWeight: '700', color: C.textDim },
 
   toggleWrap: { paddingHorizontal: 20, paddingBottom: 4 },
-  toggle: {
-    flexDirection: 'row',
-    backgroundColor: C.surface,
-    borderRadius: 12,
-    padding: 3,
-    borderWidth: 1,
-    borderColor: C.border,
-  },
-  toggleSeg: { flex: 1, paddingVertical: 11, alignItems: 'center', borderRadius: 9 },
-  toggleSegOn: { backgroundColor: C.surfaceHigh, borderWidth: 1, borderColor: C.borderStrong },
-  toggleText: { color: C.textDim, fontSize: 14, fontWeight: '600', letterSpacing: 0.3 },
 
   modeContainer: { flex: 1 },
   pageScroll: { flex: 1 },

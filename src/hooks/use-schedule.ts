@@ -52,6 +52,7 @@ export async function prefillScheduleCache(client: QueryClient) {
 export function useSchedule(routeId: string, patternSuffix: string) {
   return useQuery<SchedulePeriod[]>({
     queryKey: ['schedule', routeId, patternSuffix],
+    meta: { source: 'ttc' },
     queryFn: async () => {
       const data = await fetchSchedule(routeId, patternSuffix);
       writeCache(routeId, patternSuffix, data); // fire and forget

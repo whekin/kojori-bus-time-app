@@ -8,6 +8,7 @@ const BUSES: BusLine[] = ['380', '316'];
 export function useArrivals(stopId: string, direction?: 'toKojori' | 'toTbilisi') {
   const query = useQuery<ArrivalTime[]>({
     queryKey: ['arrivals', stopId],
+    meta: { source: 'ttc' },
     queryFn: () => fetchArrivalTimes(stopId),
     refetchInterval: 30_000,
     staleTime: 20_000,

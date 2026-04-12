@@ -6,6 +6,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
 import AppTabs from '@/components/app-tabs';
+import { prefillRoutePolylineCache } from '@/hooks/use-route-polylines';
 import { SettingsProvider } from '@/hooks/use-settings';
 import { prefillScheduleCache } from '@/hooks/use-schedule';
 import { prefillStopNames } from '@/hooks/use-stop-names';
@@ -24,6 +25,7 @@ const queryClient = new QueryClient({
 function CachePrefiller() {
   useEffect(() => {
     prefillScheduleCache(queryClient);
+    prefillRoutePolylineCache(queryClient);
     prefillStopNames(queryClient);
   }, []);
   return null;

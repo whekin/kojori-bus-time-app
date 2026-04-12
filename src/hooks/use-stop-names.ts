@@ -46,6 +46,7 @@ export function useStopNames(): Record<string, string> {
   const results = useQueries({
     queries: ALL_STOP_IDS.map(id => ({
       queryKey: ['stop', id],
+      meta: { source: 'ttc' },
       queryFn: async () => {
         const data = await fetchStopDetails(id);
         // Persist updated names to AsyncStorage

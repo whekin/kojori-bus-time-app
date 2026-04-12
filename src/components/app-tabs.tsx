@@ -5,11 +5,12 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { interpolateColor, useAnimatedStyle, useSharedValue, type SharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import ExploreScreen from '@/app/explore';
 import HomeScreen from '@/app/index';
 import SettingsScreen from '@/app/settings';
 import TimetableScreen from '@/app/timetable';
 
-type TabRoute = 'index' | 'timetable' | 'settings';
+type TabRoute = 'index' | 'explore' | 'timetable' | 'settings';
 
 const C = {
   bg: '#09090B',
@@ -86,11 +87,12 @@ const TABS: Array<{
   title: string;
   icon: React.ComponentProps<typeof MaterialCommunityIcons>['name'];
   accent: string;
-  component: React.ComponentType;
+  render: (isActive: boolean) => React.ReactNode;
 }> = [
-  { route: 'index', title: 'Home', icon: 'home-variant', accent: C.amber, component: HomeScreen },
-  { route: 'timetable', title: 'Timetable', icon: 'table-clock', accent: C.teal, component: TimetableScreen },
-  { route: 'settings', title: 'Settings', icon: 'cog', accent: C.text, component: SettingsScreen },
+  { route: 'index', title: 'Home', icon: 'home-variant', accent: C.amber, render: () => <HomeScreen /> },
+  { route: 'explore', title: 'Map', icon: 'map-marker-radius', accent: '#7DD3FC', render: isActive => <ExploreScreen isActive={isActive} /> },
+  { route: 'timetable', title: 'Timetable', icon: 'table-clock', accent: C.teal, render: () => <TimetableScreen /> },
+  { route: 'settings', title: 'Settings', icon: 'cog', accent: C.text, render: () => <SettingsScreen /> },
 ];
 
 export default function AppTabs() {
@@ -129,11 +131,10 @@ export default function AppTabs() {
           if (nextIndex === activeIndex) return;
           setActiveIndex(nextIndex);
         }}>
-        {TABS.map(tab => {
-          const ScreenComponent = tab.component;
+        {TABS.map((tab, index) => {
           return (
             <View key={tab.route} style={styles.page}>
-              <ScreenComponent />
+              {tab.render(activeIndex === index)}
             </View>
           );
         })}

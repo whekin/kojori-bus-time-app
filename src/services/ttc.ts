@@ -1,3 +1,5 @@
+import { reportTtcFailure, reportTtcSuccess } from '@/hooks/use-ttc-health';
+
 const BASE = 'https://transit.ttc.com.ge/pis-gateway/api';
 const API_KEY = 'c0a2f304-551a-4d08-b8df-2c53ecd57f9f';
 
@@ -36,6 +38,11 @@ export interface VehiclePosition {
   lon: number;
   heading: number;
   nextStopId: string;
+}
+
+export interface PolylinePoint {
+  latitude: number;
+  longitude: number;
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -93,56 +100,117 @@ export const KOJORI_BOUNDS = {
 // ── API functions ─────────────────────────────────────────────────────────────
 
 export async function fetchArrivalTimes(stopId: string): Promise<ArrivalTime[]> {
-  const res = await fetch(
-    `${BASE}/v2/stops/${stopId}/arrival-times?locale=en&ignoreScheduledArrivalTimes=false`,
-    { headers },
-  );
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json();
+  try {
+    const res = await fetch(
+      `${BASE}/v2/stops/${stopId}/arrival-times?locale=en&ignoreScheduledArrivalTimes=false`,
+      { headers },
+    );
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    reportTtcSuccess();
+    return res.json();
+  } catch (error) {
+    reportTtcFailure();
+    throw error;
+  }
 }
 
 export async function fetchSchedule(
   routeId: string,
   patternSuffix: string,
 ): Promise<SchedulePeriod[]> {
-  const res = await fetch(
-    `${BASE}/v3/routes/${routeId}/schedule?patternSuffix=${patternSuffix}&locale=en`,
-    { headers },
-  );
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json();
+  try {
+    const res = await fetch(
+      `${BASE}/v3/routes/${routeId}/schedule?patternSuffix=${patternSuffix}&locale=en`,
+      { headers },
+    );
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    reportTtcSuccess();
+    return res.json();
+  } catch (error) {
+    reportTtcFailure();
+    throw error;
+  }
 }
 
 /** Fetches name + coordinates for a single stop. */
 export async function fetchStopDetails(stopId: string): Promise<{ id: string; name: string }> {
-  const res = await fetch(`${BASE}/v2/stops/${stopId}?locale=en`, { headers });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const data = await res.json();
-  return { id: data.id ?? stopId, name: data.name };
+  try {
+    const res = await fetch(`${BASE}/v2/stops/${stopId}?locale=en`, { headers });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    reportTtcSuccess();
+    return { id: data.id ?? stopId, name: data.name };
+  } catch (error) {
+    reportTtcFailure();
+    throw error;
+  }
 }
 
 /** Fetches all stops for a route pattern — used in Settings to populate the full picker. */
 export async function fetchRouteStops(routeId: string, patternSuffix: string): Promise<StopInfo[]> {
-  const res = await fetch(
-    `${BASE}/v3/routes/${routeId}/stops-of-patterns?patternSuffixes=${patternSuffix}&locale=en`,
-    { headers },
-  );
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  // Response: [{ stop: { id, name, ... }, patternSuffixes: [...] }]
-  const raw: { stop: { id: string; name: string } }[] = await res.json();
-  return raw.map(s => ({ id: s.stop.id, label: s.stop.name }));
+  try {
+    const res = await fetch(
+      `${BASE}/v3/routes/${routeId}/stops-of-patterns?patternSuffixes=${patternSuffix}&locale=en`,
+      { headers },
+    );
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    // Response: [{ stop: { id, name, ... }, patternSuffixes: [...] }]
+    const raw: { stop: { id: string; name: string } }[] = await res.json();
+    reportTtcSuccess();
+    return raw.map(s => ({ id: s.stop.id, label: s.stop.name }));
+  } catch (error) {
+    reportTtcFailure();
+    throw error;
+  }
+}
+
+export async function fetchRoutePolyline(
+  routeId: string,
+  patternSuffix: string,
+): Promise<PolylinePoint[]> {
+  try {
+    const res = await fetch(
+      `${BASE}/v3/routes/${routeId}/stops-of-patterns?patternSuffixes=${patternSuffix}&locale=en`,
+      { headers },
+    );
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+    const raw: { stop: { lat?: number; lon?: number } }[] = await res.json();
+    reportTtcSuccess();
+
+    return raw
+      .map(entry => ({
+        latitude: entry.stop.lat ?? NaN,
+        longitude: entry.stop.lon ?? NaN,
+      }))
+      .filter(point => Number.isFinite(point.latitude) && Number.isFinite(point.longitude))
+      .filter((point, index, points) => {
+        if (index === 0) return true;
+        const previous = points[index - 1];
+        return point.latitude !== previous.latitude || point.longitude !== previous.longitude;
+      });
+  } catch (error) {
+    reportTtcFailure();
+    throw error;
+  }
 }
 
 export async function fetchVehiclePositions(
   routeId: string,
   patternSuffix: string,
 ): Promise<Record<string, VehiclePosition[]>> {
-  const res = await fetch(
-    `${BASE}/v3/routes/${routeId}/positions?patternSuffixes=${patternSuffix}`,
-    { headers },
-  );
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json();
+  try {
+    const res = await fetch(
+      `${BASE}/v3/routes/${routeId}/positions?patternSuffixes=${patternSuffix}`,
+      { headers },
+    );
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    reportTtcSuccess();
+    return res.json();
+  } catch (error) {
+    reportTtcFailure();
+    throw error;
+  }
 }
 
 // ── Schedule helpers ──────────────────────────────────────────────────────────
