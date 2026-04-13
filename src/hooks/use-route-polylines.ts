@@ -10,10 +10,11 @@ import {
 
 type Direction = 'toKojori' | 'toTbilisi';
 
-export function useRoutePolylines(direction: Direction) {
+export function useRoutePolylines(direction: Direction, enabled = true) {
   return useQuery<Record<BusLine, PolylinePoint[]>>({
     queryKey: ['route-polylines', direction],
     meta: { source: 'ttc' },
+    enabled,
     queryFn: async () => {
       try {
         const data = await fetchRoutePolylinesForDirection(direction);

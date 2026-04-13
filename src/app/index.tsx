@@ -1,6 +1,7 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View, ViewStyle } from 'react-native';
 import { useQueryClient } from '@tanstack/react-query';
+import { useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { DirectionToggle } from '@/components/direction-toggle';
@@ -40,6 +41,15 @@ const C = {
 } as const;
 
 const MONO = Platform.select({ android: 'monospace', ios: 'Menlo', default: 'monospace' });
+type SharedMode = 'kojori' | 'tbilisi';
+
+function modeToDirection(mode: SharedMode) {
+  return mode === 'kojori' ? 'toKojori' : 'toTbilisi';
+}
+
+function directionToMode(direction: 'toKojori' | 'toTbilisi'): SharedMode {
+  return direction === 'toKojori' ? 'kojori' : 'tbilisi';
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function formatHeaderTime(date = new Date()) {
@@ -425,17 +435,61 @@ function ToTbilisiView({
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
-  const { settings, update } = useSettings();
+  const { settings, update, setSharedDirection, hasManualDirectionOverride, isLoaded } = useSettings();
   const { detectedMode } = useLocation();
+  const { widgetMode, widgetStopId } = useLocalSearchParams<{
+    widgetMode?: string;
+    widgetStopId?: string;
+  }>();
 
-  const [mode, setMode] = useState<'kojori' | 'tbilisi'>('kojori');
-  const [manualOverride, setManualOverride] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [now, setNow] = useState(() => new Date());
+  const handledWidgetLink = useRef<string | null>(null);
+  const mode = directionToMode(settings.sharedDirection);
 
   useEffect(() => {
-    if (!manualOverride && detectedMode) setMode(detectedMode);
-  }, [detectedMode, manualOverride]);
+    if (!isLoaded || hasManualDirectionOverride || !detectedMode) return;
+
+    setSharedDirection(modeToDirection(detectedMode), false);
+  }, [detectedMode, hasManualDirectionOverride, isLoaded, setSharedDirection]);
+
+  useEffect(() => {
+    if (widgetMode !== 'kojori' && widgetMode !== 'tbilisi') return;
+
+    const nextKey = `${widgetMode}:${widgetStopId ?? ''}`;
+    if (handledWidgetLink.current === nextKey) return;
+    handledWidgetLink.current = nextKey;
+
+    setSharedDirection(modeToDirection(widgetMode));
+
+    if (!widgetStopId) return;
+
+    if (widgetMode === 'kojori') {
+      const nextFavorites = settings.tbilisiFavorites.includes(widgetStopId)
+        ? settings.tbilisiFavorites
+        : [widgetStopId, ...settings.tbilisiFavorites];
+      update({
+        tbilisiFavorites: nextFavorites,
+        activeTbilisiStopId: widgetStopId,
+      });
+      return;
+    }
+
+    const nextFavorites = settings.kojoriFavorites.includes(widgetStopId)
+      ? settings.kojoriFavorites
+      : [widgetStopId, ...settings.kojoriFavorites];
+    update({
+      kojoriFavorites: nextFavorites,
+      activeKojoriStopId: widgetStopId,
+    });
+  }, [
+    setSharedDirection,
+    settings.kojoriFavorites,
+    settings.tbilisiFavorites,
+    update,
+    widgetMode,
+    widgetStopId,
+  ]);
 
   useEffect(() => {
     let intervalId: ReturnType<typeof setInterval> | undefined;
@@ -453,12 +507,11 @@ export default function HomeScreen() {
   }, []);
 
   const accentColor = mode === 'kojori' ? C.amber : C.teal;
-  const activeDirection = mode === 'kojori' ? 'toKojori' : 'toTbilisi';
+  const activeDirection = settings.sharedDirection;
   const activeStopId = mode === 'kojori' ? settings.activeTbilisiStopId : settings.activeKojoriStopId;
 
-  function handleModeToggle(next: 'kojori' | 'tbilisi') {
-    setMode(next);
-    setManualOverride(true);
+  function handleModeToggle(next: SharedMode) {
+    setSharedDirection(modeToDirection(next));
   }
 
   async function handleRefresh() {

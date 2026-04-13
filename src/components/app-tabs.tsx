@@ -160,7 +160,7 @@ export default function AppTabs() {
         }}>
         {TABS.map((tab, index) => {
           return (
-            <View key={tab.route} style={styles.page}>
+            <View key={tab.route} style={styles.page} collapsable={false}>
               {tab.render(activeIndex === index)}
             </View>
           );
@@ -208,7 +208,7 @@ export default function AppTabs() {
 const styles = StyleSheet.create({
   shell: { flex: 1, backgroundColor: C.bg },
   pager: { flex: 1 },
-  page: { flex: 1 },
+  page: { width: '100%', height: '100%' },
   navWrap: {
     position: 'absolute',
     left: 0,

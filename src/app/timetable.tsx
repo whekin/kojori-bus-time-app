@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Platform,
@@ -15,6 +15,7 @@ import { StopSelector } from '@/components/stop-selector';
 import { TtcStatusHeaderBadge } from '@/components/ttc-status-banner';
 import { BottomTabInset } from '@/constants/theme';
 import { useSchedule } from '@/hooks/use-schedule';
+import { useSettings } from '@/hooks/use-settings';
 import {
   ALL_KOJORI_STOPS,
   ALL_TBILISI_STOPS,
@@ -77,9 +78,14 @@ function BusTag({ bus }: { bus: BusLine }) {
 
 export default function TimetableScreen() {
   const insets = useSafeAreaInsets();
-  const [direction, setDirection] = useState<Direction>('toKojori');
+  const { settings, setSharedDirection } = useSettings();
   const [filter, setFilter] = useState<Filter>('all');
   const [stopIndex, setStopIndex] = useState(0);
+  const direction = settings.sharedDirection;
+
+  useEffect(() => {
+    setStopIndex(0);
+  }, [direction]);
 
   const stops = direction === 'toKojori' ? ALL_TBILISI_STOPS : ALL_KOJORI_STOPS;
   const stopId = stops[stopIndex]?.id ?? stops[0].id;
@@ -137,10 +143,7 @@ export default function TimetableScreen() {
       <View style={styles.toggleWrap}>
         <DirectionToggle
           value={direction}
-          onChange={next => {
-            setDirection(next);
-            setStopIndex(0);
-          }}
+          onChange={setSharedDirection}
           options={[
             { value: 'toKojori', label: '→ Kojori', accentColor: C.amber },
             { value: 'toTbilisi', label: '→ Tbilisi', accentColor: C.teal },

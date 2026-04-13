@@ -229,15 +229,145 @@ function FavoritesCard({
   );
 }
 
+function WidgetStopCard({
+  title,
+  stopId,
+  accentColor,
+  stopNames,
+  onManage,
+}: {
+  title: string;
+  stopId: string;
+  accentColor: string;
+  stopNames: Record<string, string>;
+  onManage: () => void;
+}) {
+  const shortId = stopId.split(':')[1];
+  const label = stopNames[stopId] ?? `Stop #${shortId}`;
+
+  return (
+    <View style={styles.card}>
+      <View style={[styles.favRow, { backgroundColor: accentColor + '08' }]}>
+        <View style={[styles.favDot, { backgroundColor: accentColor }]} />
+        <View style={styles.widgetCopy}>
+          <Text style={styles.widgetTitle}>{title}</Text>
+          <Text style={styles.widgetValue} numberOfLines={1}>{label}</Text>
+        </View>
+        <Text style={[styles.stopCodeInline, { fontFamily: MONO }]}>{shortId}</Text>
+      </View>
+      <View style={styles.itemDivider} />
+      <Pressable style={styles.manageBtn} onPress={onManage}>
+        <Text style={[styles.manageBtnText, { color: accentColor }]}>Change stop</Text>
+      </Pressable>
+    </View>
+  );
+}
+
+function SingleStopPickerModal({
+  visible,
+  title,
+  direction,
+  selectedId,
+  accentColor,
+  stopNames,
+  onSelect,
+  onClose,
+}: {
+  visible: boolean;
+  title: string;
+  direction: 'toKojori' | 'toTbilisi';
+  selectedId: string;
+  accentColor: string;
+  stopNames: Record<string, string>;
+  onSelect: (id: string) => void;
+  onClose: () => void;
+}) {
+  const [search, setSearch] = useState('');
+  const { stops: routeStops, isLoading } = useRouteStops(direction);
+  const insets = useSafeAreaInsets();
+  const query = search.trim().toLowerCase();
+
+  const enriched = useMemo<StopInfo[]>(
+    () => routeStops.map(s => ({ id: s.id, label: stopNames[s.id] ?? s.label })),
+    [routeStops, stopNames],
+  );
+
+  const filtered = useMemo(() => {
+    if (!query) return enriched;
+    return enriched.filter(s => s.label.toLowerCase().includes(query) || s.id.includes(query));
+  }, [enriched, query]);
+
+  return (
+    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+      <View style={[modalStyles.screen, { paddingTop: insets.top }]}>
+        <View style={modalStyles.header}>
+          <Pressable onPress={onClose} style={modalStyles.backBtn} hitSlop={12}>
+            <Text style={modalStyles.backText}>←</Text>
+          </Pressable>
+          <Text style={modalStyles.headerTitle}>{title}</Text>
+          <View style={modalStyles.backBtn} />
+        </View>
+
+        <View style={modalStyles.searchWrap}>
+          <TextInput
+            style={modalStyles.searchInput}
+            placeholder="Search by name or stop ID…"
+            placeholderTextColor={C.textFaint}
+            value={search}
+            onChangeText={setSearch}
+            autoFocus
+            autoCorrect={false}
+            clearButtonMode="while-editing"
+          />
+          {isLoading && <ActivityIndicator color={C.textDim} size="small" style={modalStyles.spinner} />}
+        </View>
+
+        <FlatList
+          data={filtered}
+          keyExtractor={s => s.id}
+          contentContainerStyle={[modalStyles.listContent, { paddingBottom: insets.bottom + 24 }]}
+          keyboardShouldPersistTaps="handled"
+          ItemSeparatorComponent={() => <View style={modalStyles.separator} />}
+          ListEmptyComponent={
+            <Text style={modalStyles.emptyText}>
+              {isLoading ? 'Loading stops…' : 'No stops found'}
+            </Text>
+          }
+          renderItem={({ item }) => {
+            const isSelected = item.id === selectedId;
+            const shortId = item.id.split(':')[1];
+            return (
+              <Pressable
+                style={[modalStyles.stopRow, isSelected && { backgroundColor: accentColor + '0C' }]}
+                onPress={() => {
+                  onSelect(item.id);
+                  onClose();
+                }}>
+                <View style={[modalStyles.checkbox, isSelected && { borderColor: accentColor, backgroundColor: accentColor + '22' }]}>
+                  {isSelected && <View style={[modalStyles.checkmark, { backgroundColor: accentColor }]} />}
+                </View>
+                <Text style={[modalStyles.stopLabel, isSelected && { color: C.text }]} numberOfLines={1}>
+                  {item.label}
+                </Text>
+                <Text style={[modalStyles.stopCode, { fontFamily: MONO }]}>{shortId}</Text>
+              </Pressable>
+            );
+          }}
+        />
+      </View>
+    </Modal>
+  );
+}
+
 // ── Root ──────────────────────────────────────────────────────────────────────
 
 export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
-  const { settings, toggleKojoriFavorite, toggleTbilisiFavorite } = useSettings();
+  const { settings, toggleKojoriFavorite, toggleTbilisiFavorite, update } = useSettings();
   const stopNames = useStopNames();
   const offlineStatus = useTtcOfflineStatus();
 
-  const [modal, setModal] = useState<'kojori' | 'tbilisi' | null>(null);
+  const [modal, setModal] = useState<'kojori' | 'tbilisi' | 'widget-kojori' | 'widget-tbilisi' | null>(null);
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
@@ -277,6 +407,30 @@ export default function SettingsScreen() {
           onRemove={toggleTbilisiFavorite}
           onManage={() => setModal('tbilisi')}
         />
+
+        {Platform.OS === 'android' ? (
+          <>
+            <View style={styles.sectionMeta}>
+              <Text style={styles.sectionHeader}>ANDROID WIDGET</Text>
+              <Text style={styles.sectionNote}>Used by the home-screen widget as the default stop for each direction.</Text>
+            </View>
+            <WidgetStopCard
+              title="→ Kojori default stop"
+              stopId={settings.widgetTbilisiStopId}
+              accentColor={C.amber}
+              stopNames={stopNames}
+              onManage={() => setModal('widget-tbilisi')}
+            />
+            <View style={styles.sectionSpacer} />
+            <WidgetStopCard
+              title="→ Tbilisi default stop"
+              stopId={settings.widgetKojoriStopId}
+              accentColor={C.teal}
+              stopNames={stopNames}
+              onManage={() => setModal('widget-kojori')}
+            />
+          </>
+        ) : null}
 
         {/* Data info */}
         <View style={styles.sectionMeta}>
@@ -371,6 +525,26 @@ export default function SettingsScreen() {
         onToggle={toggleTbilisiFavorite}
         onClose={() => setModal(null)}
       />
+      <SingleStopPickerModal
+        visible={modal === 'widget-tbilisi'}
+        title="Widget default for → Kojori"
+        direction="toKojori"
+        selectedId={settings.widgetTbilisiStopId}
+        accentColor={C.amber}
+        stopNames={stopNames}
+        onSelect={id => update({ widgetTbilisiStopId: id })}
+        onClose={() => setModal(null)}
+      />
+      <SingleStopPickerModal
+        visible={modal === 'widget-kojori'}
+        title="Widget default for → Tbilisi"
+        direction="toTbilisi"
+        selectedId={settings.widgetKojoriStopId}
+        accentColor={C.teal}
+        stopNames={stopNames}
+        onSelect={id => update({ widgetKojoriStopId: id })}
+        onClose={() => setModal(null)}
+      />
     </View>
   );
 }
@@ -387,15 +561,20 @@ const styles = StyleSheet.create({
   sectionMeta: { marginTop: 24, marginBottom: 10, gap: 4 },
   sectionHeader: { color: C.textFaint, fontSize: 10, fontWeight: '700', letterSpacing: 2.5 },
   sectionNote: { color: C.textDim, fontSize: 12, lineHeight: 17 },
+  sectionSpacer: { height: 12 },
 
   card: { backgroundColor: C.surface, borderRadius: 16, borderWidth: 1, borderColor: C.border, overflow: 'hidden' },
 
   favRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 13, gap: 10 },
   favDot: { width: 7, height: 7, borderRadius: 3.5, flexShrink: 0 },
   favLabel: { flex: 1, color: C.text, fontSize: 15, fontWeight: '500' },
+  widgetCopy: { flex: 1, gap: 2 },
+  widgetTitle: { color: C.textFaint, fontSize: 11, fontWeight: '700', letterSpacing: 1.3 },
+  widgetValue: { color: C.text, fontSize: 15, fontWeight: '500' },
   removeBtn: { padding: 4 },
   removeBtnDisabled: { opacity: 0.2 },
   removeText: { fontSize: 13, fontWeight: '700' },
+  stopCodeInline: { color: C.textFaint, fontSize: 12, flexShrink: 0 },
 
   manageBtn: { paddingHorizontal: 16, paddingVertical: 14, alignItems: 'center' },
   manageBtnText: { fontSize: 14, fontWeight: '600' },
