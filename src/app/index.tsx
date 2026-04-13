@@ -549,7 +549,7 @@ export default function HomeScreen() {
   const activeDirection = settings.sharedDirection;
   const activeStopId = mode === 'kojori' ? settings.activeTbilisiStopId : settings.activeKojoriStopId;
   const showLocationCard =
-    permission !== 'granted' ||
+    (permission !== 'granted' && permission !== 'unknown') ||
     hasManualDirectionOverride ||
     isLocating ||
     Boolean(locationError);
