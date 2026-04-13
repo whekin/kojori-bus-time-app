@@ -267,8 +267,8 @@ export function computeUpcomingDepartures(
   schedule316: SchedulePeriod[] | undefined,
   stopId: string,
   horizonMins = 23 * 60,
+  now = new Date(),
 ): Departure[] {
-  const now = new Date();
   const nowMins = now.getHours() * 60 + now.getMinutes();
   const midnightWrapThresholdMins = 12 * 60;
   const result: Departure[] = [];
@@ -305,8 +305,12 @@ export function computeUpcomingDepartures(
 export function mergeArrivalsIntoSchedule(
   departures: Departure[],
   arrivals: ArrivalTime[],
+  now = new Date(),
+  arrivalsUpdatedAt?: number,
 ): Departure[] {
-  const now = new Date();
+  const elapsedLiveMinutes = arrivalsUpdatedAt
+    ? Math.max(0, Math.floor((now.getTime() - arrivalsUpdatedAt) / 60_000))
+    : 0;
 
   return departures
     .map(dep => {
@@ -322,14 +326,16 @@ export function mergeArrivalsIntoSchedule(
         };
       }
 
+      const liveMinutes = Math.max(0, match.realtimeArrivalMinutes - elapsedLiveMinutes);
+
       return {
         ...dep,
         live: true,
-        time: formatFutureTime(match.realtimeArrivalMinutes, now),
+        time: formatFutureTime(liveMinutes, now),
         scheduledMinsUntil: dep.minsUntil,
-        liveMinutes: match.realtimeArrivalMinutes,
-        driftMinutes: match.realtimeArrivalMinutes - dep.minsUntil,
-        minsUntil: match.realtimeArrivalMinutes,
+        liveMinutes,
+        driftMinutes: liveMinutes - dep.minsUntil,
+        minsUntil: liveMinutes,
       };
     })
     .filter(dep => dep.minsUntil >= 0)

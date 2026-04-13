@@ -245,6 +245,7 @@ function ToKojoriView({
   bottomInset,
   isRefreshing,
   onRefresh,
+  now,
 }: {
   favoriteIds: string[];
   activeStopId: string;
@@ -252,6 +253,7 @@ function ToKojoriView({
   bottomInset: number;
   isRefreshing: boolean;
   onRefresh: () => void;
+  now: Date;
 }) {
   const stopNames = useStopNames();
   const favoriteStops = favoriteIds.map(id => {
@@ -261,16 +263,16 @@ function ToKojoriView({
 
   const { data: s380, isLoading: l380, isError: e380 } = useSchedule(ROUTES['380'].id, ROUTES['380'].toKojori);
   const { data: s316, isLoading: l316, isError: e316 } = useSchedule(ROUTES['316'].id, ROUTES['316'].toKojori);
-  const { arrivals } = useArrivals(activeStopId, 'toKojori');
+  const { arrivals, dataUpdatedAt } = useArrivals(activeStopId, 'toKojori');
 
   const rawDepartures = useMemo(
-    () => computeUpcomingDepartures(s380, s316, activeStopId),
-    [s380, s316, activeStopId],
+    () => computeUpcomingDepartures(s380, s316, activeStopId, undefined, now),
+    [s380, s316, activeStopId, now],
   );
 
   const departures = useMemo(
-    () => mergeArrivalsIntoSchedule(rawDepartures, arrivals),
-    [rawDepartures, arrivals],
+    () => mergeArrivalsIntoSchedule(rawDepartures, arrivals, now, dataUpdatedAt),
+    [rawDepartures, arrivals, now, dataUpdatedAt],
   );
 
   const isLoading = l380 || l316;
@@ -303,7 +305,7 @@ function ToKojoriView({
 
           {isError && <ErrorBanner message="Could not load schedule. Showing cached data." />}
 
-          <SectionDivider label="NEXT" />
+          <SectionDivider label="NEXT" style={styles.nextDivider} />
           <NextCard dep={next} accentColor={C.amber} isLoading={isLoading} />
         </View>
 
@@ -335,6 +337,7 @@ function ToTbilisiView({
   bottomInset,
   isRefreshing,
   onRefresh,
+  now,
 }: {
   favoriteIds: string[];
   activeStopId: string;
@@ -342,6 +345,7 @@ function ToTbilisiView({
   bottomInset: number;
   isRefreshing: boolean;
   onRefresh: () => void;
+  now: Date;
 }) {
   const stopNames = useStopNames();
   const favoriteStops = favoriteIds.map(id => {
@@ -351,16 +355,16 @@ function ToTbilisiView({
 
   const { data: s380, isLoading: l380, isError: e380 } = useSchedule(ROUTES['380'].id, ROUTES['380'].toTbilisi);
   const { data: s316, isLoading: l316, isError: e316 } = useSchedule(ROUTES['316'].id, ROUTES['316'].toTbilisi);
-  const { arrivals, isError: eArrival } = useArrivals(activeStopId, 'toTbilisi');
+  const { arrivals, dataUpdatedAt, isError: eArrival } = useArrivals(activeStopId, 'toTbilisi');
 
   const rawDepartures = useMemo(
-    () => computeUpcomingDepartures(s380, s316, activeStopId),
-    [s380, s316, activeStopId],
+    () => computeUpcomingDepartures(s380, s316, activeStopId, undefined, now),
+    [s380, s316, activeStopId, now],
   );
 
   const departures = useMemo(
-    () => mergeArrivalsIntoSchedule(rawDepartures, arrivals),
-    [rawDepartures, arrivals],
+    () => mergeArrivalsIntoSchedule(rawDepartures, arrivals, now, dataUpdatedAt),
+    [rawDepartures, arrivals, now, dataUpdatedAt],
   );
 
   const isLoading = l380 || l316;
@@ -393,7 +397,7 @@ function ToTbilisiView({
 
           {isError && <ErrorBanner message="Could not load schedule. Showing cached data." />}
 
-          <SectionDivider label="NEXT" />
+          <SectionDivider label="NEXT" style={styles.nextDivider} />
           <NextCard dep={next} accentColor={C.teal} isLoading={isLoading} />
         </View>
 
@@ -427,18 +431,25 @@ export default function HomeScreen() {
   const [mode, setMode] = useState<'kojori' | 'tbilisi'>('kojori');
   const [manualOverride, setManualOverride] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [now, setNow] = useState(() => new Date());
 
   useEffect(() => {
     if (!manualOverride && detectedMode) setMode(detectedMode);
   }, [detectedMode, manualOverride]);
 
-  const [clock, setClock] = useState(() => formatHeaderTime());
-
   useEffect(() => {
-    const id = setInterval(() => {
-      setClock(formatHeaderTime());
-    }, 30_000);
-    return () => clearInterval(id);
+    let intervalId: ReturnType<typeof setInterval> | undefined;
+    const timeoutId = setTimeout(() => {
+      setNow(new Date());
+      intervalId = setInterval(() => {
+        setNow(new Date());
+      }, 60_000);
+    }, 60_000 - (Date.now() % 60_000));
+
+    return () => {
+      clearTimeout(timeoutId);
+      if (intervalId) clearInterval(intervalId);
+    };
   }, []);
 
   const accentColor = mode === 'kojori' ? C.amber : C.teal;
@@ -453,7 +464,7 @@ export default function HomeScreen() {
   async function handleRefresh() {
     if (isRefreshing) return;
     setIsRefreshing(true);
-    setClock(formatHeaderTime());
+    setNow(new Date());
 
     try {
       await Promise.all([
@@ -471,7 +482,7 @@ export default function HomeScreen() {
         }),
       ]);
     } finally {
-      setClock(formatHeaderTime());
+      setNow(new Date());
       setIsRefreshing(false);
     }
   }
@@ -486,7 +497,7 @@ export default function HomeScreen() {
         </View>
         <TtcStatusHeaderBadge />
         <View style={styles.headerRight}>
-          <Text style={[styles.headerClock, { fontFamily: MONO }]}>{clock}</Text>
+          <Text style={[styles.headerClock, { fontFamily: MONO }]}>{formatHeaderTime(now)}</Text>
           <Pressable
             style={styles.refreshButton}
             onPress={handleRefresh}
@@ -520,6 +531,7 @@ export default function HomeScreen() {
           bottomInset={insets.bottom}
           isRefreshing={isRefreshing}
           onRefresh={handleRefresh}
+          now={now}
         />
       ) : (
         <ToTbilisiView
@@ -529,6 +541,7 @@ export default function HomeScreen() {
           bottomInset={insets.bottom}
           isRefreshing={isRefreshing}
           onRefresh={handleRefresh}
+          now={now}
         />
       )}
     </View>
@@ -571,6 +584,7 @@ const styles = StyleSheet.create({
   dividerPadded: { paddingHorizontal: 20 },
 
   divider: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 14 },
+  nextDivider: { paddingVertical: 8 },
   dividerLine: { flex: 1, height: 1, backgroundColor: C.border },
   dividerLabel: { color: C.textFaint, fontSize: 10, fontWeight: '700', letterSpacing: 2.5 },
 
