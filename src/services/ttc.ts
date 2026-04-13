@@ -45,6 +45,59 @@ export interface PolylinePoint {
   longitude: number;
 }
 
+function dedupePolylinePoints(points: PolylinePoint[]) {
+  return points.filter((point, index, allPoints) => {
+    if (index === 0) return true;
+    const previous = allPoints[index - 1];
+    return point.latitude !== previous.latitude || point.longitude !== previous.longitude;
+  });
+}
+
+function interpolateCatmullRom(
+  p0: PolylinePoint,
+  p1: PolylinePoint,
+  p2: PolylinePoint,
+  p3: PolylinePoint,
+  t: number,
+): PolylinePoint {
+  const t2 = t * t;
+  const t3 = t2 * t;
+
+  return {
+    latitude:
+      0.5 *
+      ((2 * p1.latitude) +
+        (-p0.latitude + p2.latitude) * t +
+        (2 * p0.latitude - 5 * p1.latitude + 4 * p2.latitude - p3.latitude) * t2 +
+        (-p0.latitude + 3 * p1.latitude - 3 * p2.latitude + p3.latitude) * t3),
+    longitude:
+      0.5 *
+      ((2 * p1.longitude) +
+        (-p0.longitude + p2.longitude) * t +
+        (2 * p0.longitude - 5 * p1.longitude + 4 * p2.longitude - p3.longitude) * t2 +
+        (-p0.longitude + 3 * p1.longitude - 3 * p2.longitude + p3.longitude) * t3),
+  };
+}
+
+function smoothPolyline(points: PolylinePoint[], segmentsPerLeg = 10) {
+  if (points.length < 3) return points;
+
+  const smoothed: PolylinePoint[] = [points[0]];
+
+  for (let index = 0; index < points.length - 1; index += 1) {
+    const p0 = points[Math.max(0, index - 1)];
+    const p1 = points[index];
+    const p2 = points[index + 1];
+    const p3 = points[Math.min(points.length - 1, index + 2)];
+
+    for (let step = 1; step <= segmentsPerLeg; step += 1) {
+      smoothed.push(interpolateCatmullRom(p0, p1, p2, p3, step / segmentsPerLeg));
+    }
+  }
+
+  return dedupePolylinePoints(smoothed);
+}
+
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 export const ROUTES = {
@@ -178,7 +231,7 @@ export async function fetchRoutePolyline(
     const raw: { stop: { lat?: number; lon?: number } }[] = await res.json();
     reportTtcSuccess();
 
-    return raw
+    const stopPoints = raw
       .map(entry => ({
         latitude: entry.stop.lat ?? NaN,
         longitude: entry.stop.lon ?? NaN,
@@ -189,6 +242,8 @@ export async function fetchRoutePolyline(
         const previous = points[index - 1];
         return point.latitude !== previous.latitude || point.longitude !== previous.longitude;
       });
+
+    return smoothPolyline(stopPoints);
   } catch (error) {
     reportTtcFailure();
     throw error;

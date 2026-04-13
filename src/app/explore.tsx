@@ -1,4 +1,5 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import * as Location from 'expo-location';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import MapView, { Marker, Polyline, Region } from 'react-native-maps';
@@ -48,6 +49,9 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
 
   const [mapReady, setMapReady] = useState(false);
   const [mapTimedOut, setMapTimedOut] = useState(false);
+  const [hasUserLocation, setHasUserLocation] = useState(false);
+  const [isLocating, setIsLocating] = useState(false);
+  const [locationMessage, setLocationMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (mapReady) return;
@@ -63,11 +67,12 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
   const subtitle = direction === 'toKojori'
     ? 'Tracking live TTC vehicles heading uphill.'
     : 'Tracking live TTC vehicles heading back into the city.';
-  const bottomNote = ttcStatus === 'offline'
+  const serviceNote = ttcStatus === 'offline'
     ? 'TTC is offline right now. Auto-refresh is slowed down while the map stays available.'
     : ttcStatus === 'degraded'
       ? 'TTC is unstable right now. Vehicle markers may lag until the feed settles.'
       : 'Updated every 3 seconds while this screen is visible.';
+  const bottomNote = locationMessage ?? serviceNote;
 
   const groupedCounts = useMemo(() => ({
     '380': positions.filter(position => position.bus === '380').length,
@@ -106,18 +111,53 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
     lastFitKeyRef.current = null;
   }, [direction]);
 
+  async function handleLocateMe() {
+    setIsLocating(true);
+    setLocationMessage(null);
+
+    try {
+      const permission = await Location.requestForegroundPermissionsAsync();
+      if (permission.status !== 'granted') {
+        setLocationMessage('Location permission is off. Enable it to jump to your position.');
+        return;
+      }
+
+      const current = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+
+      setHasUserLocation(true);
+      mapRef.current?.animateToRegion(
+        {
+          latitude: current.coords.latitude,
+          longitude: current.coords.longitude,
+          latitudeDelta: 0.018,
+          longitudeDelta: 0.018,
+        },
+        450,
+      );
+      setLocationMessage('Centered on your current location.');
+    } catch {
+      setLocationMessage('Could not get your location right now.');
+    } finally {
+      setIsLocating(false);
+    }
+  }
+
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
       <MapView
         ref={mapRef}
         style={{ flex: 1 }}
         initialRegion={DEFAULT_REGION}
+        userInterfaceStyle="dark"
+        showsUserLocation={hasUserLocation}
         onMapReady={() => {
           setMapReady(true);
           setMapTimedOut(false);
         }}>
         {routePolylines
-          ? (['380', '316'] as const).map(bus => {
+          ? (['316', '380'] as const).map((bus, index) => {
               const points = routePolylines[bus] ?? [];
               if (points.length < 2) return null;
 
@@ -127,6 +167,7 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
                   coordinates={points}
                   strokeColor={routeAccent(bus)}
                   strokeWidth={direction === 'toKojori' ? 4 : 3}
+                  zIndex={index + 1}
                   lineCap="round"
                   lineJoin="round"
                 />
@@ -144,17 +185,23 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
               description={`Vehicle ${position.vehicleId}`}>
               <View style={styles.markerWrap}>
                 <View style={[styles.markerGlow, { backgroundColor: accent + '24' }]} />
-                <View style={[styles.markerCard, { borderColor: accent }]}>
-                  <View style={[styles.markerBadge, { backgroundColor: accent }]}>
-                    <Text style={styles.markerBadgeText}>{position.bus}</Text>
-                  </View>
-                  <View style={styles.markerArrowWrap}>
+                <View style={styles.markerHeadingWrap}>
+                  <View style={[styles.markerHeadingStem, { backgroundColor: accent + '66' }]} />
+                  <View style={[styles.markerHeadingBadge, { backgroundColor: accent, shadowColor: accent + '66' }]}>
                     <MaterialCommunityIcons
                       name="navigation-variant"
-                      size={18}
-                      color={accent}
+                      size={14}
+                      color="#09090B"
                       style={{ transform: [{ rotate: `${position.heading}deg` }] }}
                     />
+                  </View>
+                </View>
+                <View style={[styles.markerCircle, { borderColor: accent, shadowColor: accent }]}>
+                  <View style={[styles.markerCircleInner, { backgroundColor: accent + '18' }]}>
+                    <MaterialCommunityIcons name="bus-side" size={18} color={accent} />
+                  </View>
+                  <View style={[styles.markerRouteChip, { backgroundColor: accent }]}>
+                    <Text style={styles.markerRouteChipText}>{position.bus}</Text>
                   </View>
                 </View>
               </View>
@@ -172,9 +219,21 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
             <Text style={styles.headerTitle}>{title}</Text>
             <Text style={styles.headerSubtitle}>{subtitle}</Text>
           </View>
-          <Pressable style={styles.refreshButton} onPress={() => refetch()}>
-            <MaterialCommunityIcons name="refresh" size={18} color={C.text} />
-          </Pressable>
+          <View style={styles.headerActions}>
+            <Pressable
+              style={[styles.actionButton, isLocating && styles.actionButtonDisabled]}
+              onPress={handleLocateMe}
+              disabled={isLocating}>
+              <MaterialCommunityIcons
+                name={isLocating ? 'crosshairs-question' : 'crosshairs-gps'}
+                size={18}
+                color={C.text}
+              />
+            </Pressable>
+            <Pressable style={styles.actionButton} onPress={() => refetch()}>
+              <MaterialCommunityIcons name="refresh" size={18} color={C.text} />
+            </Pressable>
+          </View>
         </View>
 
         <DirectionToggle
@@ -251,7 +310,13 @@ const styles = StyleSheet.create({
   headerEyebrow: { color: C.textFaint, fontSize: 10, fontWeight: '800', letterSpacing: 2 },
   headerTitle: { color: C.text, fontSize: 24, fontWeight: '700', marginTop: 4, letterSpacing: -0.6 },
   headerSubtitle: { color: C.textDim, fontSize: 13, marginTop: 3, lineHeight: 18 },
-  refreshButton: {
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    alignSelf: 'center',
+  },
+  actionButton: {
     width: 42,
     height: 42,
     borderRadius: 21,
@@ -260,8 +325,8 @@ const styles = StyleSheet.create({
     backgroundColor: C.panelHigh,
     alignItems: 'center',
     justifyContent: 'center',
-    alignSelf: 'center',
   },
+  actionButtonDisabled: { opacity: 0.72 },
   directionToggle: {
     backgroundColor: 'rgba(14,17,23,0.92)',
   },
@@ -286,30 +351,67 @@ const styles = StyleSheet.create({
   markerWrap: { alignItems: 'center', justifyContent: 'center' },
   markerGlow: {
     position: 'absolute',
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+  },
+  markerHeadingWrap: {
+    position: 'absolute',
+    top: -20,
+    right: -10,
+    alignItems: 'center',
+  },
+  markerHeadingStem: {
+    width: 2,
+    height: 10,
+    borderRadius: 999,
+    marginBottom: -1,
+  },
+  markerHeadingBadge: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOpacity: 0.32,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 7,
+    zIndex: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  markerCircle: {
     width: 42,
     height: 42,
     borderRadius: 21,
-  },
-  markerCard: {
-    minWidth: 52,
-    borderRadius: 18,
     borderWidth: 1.5,
-    backgroundColor: 'rgba(14,17,23,0.94)',
-    overflow: 'hidden',
+    backgroundColor: 'rgba(14,17,23,0.96)',
     alignItems: 'center',
+    justifyContent: 'center',
     shadowColor: '#000',
     shadowOpacity: 0.35,
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 6 },
     elevation: 8,
   },
-  markerBadge: {
-    width: '100%',
-    paddingVertical: 4,
+  markerCircleInner: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     alignItems: 'center',
+    justifyContent: 'center',
   },
-  markerBadgeText: { color: '#09090B', fontSize: 12, fontWeight: '900', letterSpacing: 0.4 },
-  markerArrowWrap: { paddingHorizontal: 10, paddingVertical: 8 },
+  markerRouteChip: {
+    position: 'absolute',
+    bottom: -7,
+    minWidth: 24,
+    paddingHorizontal: 6,
+    height: 15,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  markerRouteChipText: { color: '#09090B', fontSize: 9, fontWeight: '900', letterSpacing: 0.3 },
   bottomPanel: {
     position: 'absolute',
     left: 16,
