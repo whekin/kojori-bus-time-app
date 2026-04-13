@@ -2,7 +2,14 @@ import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import PagerView from 'react-native-pager-view';
 import React, { useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import Animated, { interpolateColor, useAnimatedStyle, useSharedValue, type SharedValue } from 'react-native-reanimated';
+import Animated, {
+  interpolateColor,
+  useAnimatedStyle,
+  useEvent,
+  useHandler,
+  useSharedValue,
+  type SharedValue,
+} from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import ExploreScreen from '@/app/explore';
@@ -27,6 +34,23 @@ const NAV_GAP = 10;
 const NAV_PADDING = 10;
 
 const AnimatedIcon = Animated.createAnimatedComponent(MaterialCommunityIcons);
+const AnimatedPagerView = Animated.createAnimatedComponent(PagerView);
+
+function usePagerScrollHandler(onPageScroll: (event: { position: number; offset: number }) => void) {
+  const { doDependenciesDiffer } = useHandler({ onPageScroll }, []);
+
+  return useEvent(
+    event => {
+      'worklet';
+      const handler = onPageScroll;
+      if (handler && event.eventName.endsWith('onPageScroll')) {
+        handler(event as unknown as { position: number; offset: number });
+      }
+    },
+    ['onPageScroll'],
+    doDependenciesDiffer,
+  );
+}
 
 function TabButton({
   tab,
@@ -102,6 +126,11 @@ export default function AppTabs() {
   const [navWidth, setNavWidth] = useState(0);
   const pagerProgress = useSharedValue(0);
 
+  const pageScrollHandler = usePagerScrollHandler(event => {
+    'worklet';
+    pagerProgress.value = event.position + event.offset;
+  });
+
   const tabWidth = navWidth > 0
     ? (navWidth - NAV_PADDING * 2 - NAV_GAP * (TABS.length - 1)) / TABS.length
     : 0;
@@ -116,15 +145,13 @@ export default function AppTabs() {
 
   return (
     <View style={styles.shell}>
-      <PagerView
+      <AnimatedPagerView
         ref={pagerRef}
         style={styles.pager}
         initialPage={0}
         offscreenPageLimit={3}
         overScrollMode="never"
-        onPageScroll={event => {
-          pagerProgress.value = event.nativeEvent.position + event.nativeEvent.offset;
-        }}
+        onPageScroll={pageScrollHandler}
         onPageSelected={event => {
           const nextIndex = event.nativeEvent.position;
           pagerProgress.value = nextIndex;
@@ -138,7 +165,7 @@ export default function AppTabs() {
             </View>
           );
         })}
-      </PagerView>
+      </AnimatedPagerView>
 
       <View style={[styles.navWrap, { paddingBottom: Math.max(insets.bottom, 10) }]}>
         <View
@@ -168,8 +195,6 @@ export default function AppTabs() {
                 pagerProgress={pagerProgress}
                 onPress={() => {
                   pagerRef.current?.setPage(index);
-                  pagerProgress.value = index;
-                  setActiveIndex(index);
                 }}
               />
             );
