@@ -216,11 +216,8 @@ export async function writeScheduleCache(routeId: string, patternSuffix: string,
 }
 
 export async function fetchRouteStopsForDirection(direction: Direction): Promise<StopInfo[]> {
-  const [stops380, stops316] = await Promise.all([
-    fetchRouteStops(ROUTES['380'].id, ROUTES['380'][direction]),
-    fetchRouteStops(ROUTES['316'].id, ROUTES['316'][direction]),
-  ]);
-
+  const stops380 = await fetchRouteStops(ROUTES['380'].id, ROUTES['380'][direction]);
+  const stops316 = await fetchRouteStops(ROUTES['316'].id, ROUTES['316'][direction]);
   return dedupeStops([...stops380, ...stops316]);
 }
 
@@ -241,15 +238,9 @@ export async function fetchRoutePolylinesForDirection(
   polylines: Record<BusLine, PolylinePoint[]>;
   source: RouteGeometrySource;
 }> {
-  const entries = await Promise.all(
-    ([
-      ['380', ROUTES['380']],
-      ['316', ROUTES['316']],
-    ] as const).map(async ([bus, route]) => {
-      const result = await fetchRoutePolyline(route.id, route[direction]);
-      return [bus, result] as const;
-    }),
-  );
+  const result380 = await fetchRoutePolyline(ROUTES['380'].id, ROUTES['380'][direction]);
+  const result316 = await fetchRoutePolyline(ROUTES['316'].id, ROUTES['316'][direction]);
+  const entries: [BusLine, typeof result380][] = [['380', result380], ['316', result316]];
 
   const sources = entries.map(([, result]) => result.source);
   const source =
@@ -369,24 +360,24 @@ export async function warmTtcOfflineData(client: QueryClient) {
   await refreshStep(
     'schedules',
     async () => {
-      const results = await Promise.allSettled(
-        ROUTE_PATTERN_PAIRS.map(async pair => {
+      let anySucceeded = false;
+      for (const pair of ROUTE_PATTERN_PAIRS) {
+        try {
           const fresh = await readScheduleCache(pair.routeId, pair.patternSuffix);
           if (fresh) {
             client.setQueryData(['schedule', pair.routeId, pair.patternSuffix], fresh);
-            return;
+            anySucceeded = true;
+            continue;
           }
 
           const data = await fetchSchedule(pair.routeId, pair.patternSuffix);
           await writeScheduleCache(pair.routeId, pair.patternSuffix, data);
           client.setQueryData(['schedule', pair.routeId, pair.patternSuffix], data);
-        }),
-      );
-
-      if (results.every(result => result.status === 'rejected')) {
-        throw new Error('Could not refresh schedules');
+          anySucceeded = true;
+        } catch {}
       }
 
+      if (!anySucceeded) throw new Error('Could not refresh schedules');
       return true;
     },
     1,
@@ -395,24 +386,24 @@ export async function warmTtcOfflineData(client: QueryClient) {
   await refreshStep(
     'routeStops',
     async () => {
-      const results = await Promise.allSettled(
-        DIRECTIONS.map(async direction => {
+      let anySucceeded = false;
+      for (const direction of DIRECTIONS) {
+        try {
           const fresh = await readRouteStopsCache(direction);
           if (fresh) {
             client.setQueryData(['route-stops', direction], fresh);
-            return;
+            anySucceeded = true;
+            continue;
           }
 
           const data = await fetchRouteStopsForDirection(direction);
           await writeRouteStopsCache(direction, data);
           client.setQueryData(['route-stops', direction], data);
-        }),
-      );
-
-      if (results.every(result => result.status === 'rejected')) {
-        throw new Error('Could not refresh route stops');
+          anySucceeded = true;
+        } catch {}
       }
 
+      if (!anySucceeded) throw new Error('Could not refresh route stops');
       return true;
     },
     2,
@@ -421,12 +412,14 @@ export async function warmTtcOfflineData(client: QueryClient) {
   await refreshStep(
     'polylines',
     async () => {
-      const results = await Promise.allSettled(
-        DIRECTIONS.map(async direction => {
+      let anySucceeded = false;
+      for (const direction of DIRECTIONS) {
+        try {
           const fresh = await readRoutePolylinesCache(direction);
           if (fresh) {
             client.setQueryData(['route-polylines', direction], fresh);
-            return;
+            anySucceeded = true;
+            continue;
           }
 
           const data = await fetchRoutePolylinesForDirection(direction);
@@ -440,13 +433,11 @@ export async function warmTtcOfflineData(client: QueryClient) {
             polylines: data.polylines,
             source: data.source,
           });
-        }),
-      );
-
-      if (results.every(result => result.status === 'rejected')) {
-        throw new Error('Could not refresh route polylines');
+          anySucceeded = true;
+        } catch {}
       }
 
+      if (!anySucceeded) throw new Error('Could not refresh route polylines');
       return true;
     },
     3,
