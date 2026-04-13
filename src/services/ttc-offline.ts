@@ -2,19 +2,28 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { QueryClient } from '@tanstack/react-query';
 
 import {
-  ALL_KOJORI_STOPS,
-  ALL_TBILISI_STOPS,
-  BusLine,
-  fetchRoutePolyline,
-  fetchRoutePolylineFromStops,
-  RouteGeometrySource,
-  fetchRouteStops,
-  fetchSchedule,
-  fetchStopDetails,
-  PolylinePoint,
-  ROUTES,
-  SchedulePeriod,
-  StopInfo,
+    BAKED_AT,
+    BAKED_POLYLINES,
+    BAKED_SCHEDULES,
+    BAKED_STOP_NAMES,
+    BAKED_STOPS,
+} from '@/assets/ttc-baked';
+
+import {
+    ALL_KOJORI_STOPS,
+    ALL_TBILISI_STOPS,
+    BusLine,
+    decodeGooglePolyline,
+    fetchRoutePolyline,
+    fetchRoutePolylineFromStops,
+    fetchRouteStops,
+    fetchSchedule,
+    fetchStopDetails,
+    PolylinePoint,
+    RouteGeometrySource,
+    ROUTES,
+    SchedulePeriod,
+    StopInfo,
 } from '@/services/ttc';
 
 type Direction = 'toKojori' | 'toTbilisi';
@@ -202,6 +211,57 @@ export function subscribeTtcOfflineStatus(listener: () => void) {
 
 export function getTtcOfflineSnapshot() {
   return snapshot;
+}
+
+/** True when today's date is covered by at least one baked schedule's serviceDates. */
+export function isBakedScheduleCurrent(): boolean {
+  const today = new Date().toISOString().split('T')[0];
+  return Object.values(BAKED_SCHEDULES).some((periods: unknown) =>
+    (periods as Array<{ serviceDates: string[] }>).some(p => p.serviceDates.includes(today)),
+  );
+}
+
+/**
+ * Seeds the query cache from the baked asset. Zero network, zero AsyncStorage.
+ * Called before hydrateTtcOfflineData so live/cached data can override baked.
+ */
+export function loadBakedData(client: QueryClient) {
+  // Schedules
+  for (const [key, periods] of Object.entries(BAKED_SCHEDULES)) {
+    const [bus, dir] = key.split('_') as [BusLine, Direction];
+    const route = ROUTES[bus];
+    const patternSuffix = route[dir];
+    client.setQueryData(['schedule', route.id, patternSuffix], periods);
+  }
+
+  // Polylines
+  for (const direction of ['toKojori', 'toTbilisi'] as Direction[]) {
+    const polylines380 = decodeGooglePolyline(BAKED_POLYLINES[`380_${direction}`] ?? '');
+    const polylines316 = decodeGooglePolyline(BAKED_POLYLINES[`316_${direction}`] ?? '');
+    client.setQueryData(['route-polylines', direction, 'encoded'], {
+      polylines: { '380': polylines380, '316': polylines316 },
+      source: 'google-directions',
+    });
+  }
+
+  // Stop names
+  for (const [stopId, name] of Object.entries(BAKED_STOP_NAMES)) {
+    client.setQueryData(['stop', stopId], { id: stopId, name });
+  }
+
+  // Route stops
+  for (const direction of ['toKojori', 'toTbilisi'] as Direction[]) {
+    type StopEntry = { stop: { id: string; name: string } };
+    const stopsForDir380 = (BAKED_STOPS[`380_${direction}` as keyof typeof BAKED_STOPS] as unknown as StopEntry[]) ?? [];
+    const stopsForDir316 = (BAKED_STOPS[`316_${direction}` as keyof typeof BAKED_STOPS] as unknown as StopEntry[]) ?? [];
+    const merged = dedupeStops([
+      ...stopsForDir380.map(s => ({ id: s.stop.id, label: s.stop.name })),
+      ...stopsForDir316.map(s => ({ id: s.stop.id, label: s.stop.name })),
+    ]);
+    client.setQueryData(['route-stops', direction], merged);
+  }
+
+  updateSnapshot({ status: 'ready', availableDatasets: TOTAL_OFFLINE_DATASETS, lastSyncAt: new Date(BAKED_AT).getTime() });
 }
 
 export async function readScheduleCache(

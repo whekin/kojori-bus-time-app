@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { BusLine, fetchVehiclePositions, ROUTES, VehiclePosition } from '@/services/ttc';
 
 type Direction = 'toKojori' | 'toTbilisi';
-const LIVE_REFRESH_MS = 3_000;
+const LIVE_REFRESH_MS = 10_000;
 const OFFLINE_REFRESH_MS = 30_000;
 
 export interface LiveVehiclePosition extends VehiclePosition {

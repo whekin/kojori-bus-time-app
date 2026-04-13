@@ -11,6 +11,7 @@ bun ios                # Start on iOS
 bun web                # Start on web
 bun lint               # Run ESLint via expo lint
 bun add <pkg>          # Add dependency (use instead of npm install)
+bun scripts/bake-ttc.ts  # Re-fetch static TTC data and write src/assets/ttc-baked.ts
 ```
 
 No test suite configured yet.
@@ -47,7 +48,7 @@ Kojori stops: `1:2856`, `1:4181`, `1:3782`, `1:3078`
 Endpoints used:
 - `GET /v2/stops/{stopId}/arrival-times?locale=en&ignoreScheduledArrivalTimes=false` — real-time + scheduled arrivals
 - `GET /v3/routes/{routeId}/schedule?patternSuffix={suffix}&locale=en` — full schedule (prefetch + cache)
-- `GET /v3/routes/{routeId}/positions?patternSuffixes={suffix}` — live vehicle GPS (3s refresh on map)
+- `GET /v3/routes/{routeId}/positions?patternSuffixes={suffix}` — live vehicle GPS (10s refresh on map)
 - `GET /v3/routes/{routeId}/stops-of-patterns?patternSuffixes={suffix}&locale=en` — stop list (prefetch)
 - `GET /v3/routes/{routeId}/polylines?patternSuffixes={suffix}` — route shape; returns `{ [patternSuffix]: { encodedValue: string, color: string } }` where `encodedValue` is a Google-encoded polyline
 

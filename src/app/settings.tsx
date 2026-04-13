@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { useQueryClient } from '@tanstack/react-query';
 import { BottomTabInset } from '@/constants/theme';
 import { useRouteStops } from '@/hooks/use-route-stops';
 import { useSettings } from '@/hooks/use-settings';
@@ -25,6 +26,7 @@ import {
   ROUTE_STOPS_CACHE_TTL,
   SCHEDULE_CACHE_TTL,
   STOP_NAMES_CACHE_TTL,
+  warmTtcOfflineData,
 } from '@/services/ttc-offline';
 
 const C = {
@@ -367,8 +369,20 @@ export default function SettingsScreen() {
   const { settings, toggleKojoriFavorite, toggleTbilisiFavorite, update } = useSettings();
   const stopNames = useStopNames();
   const offlineStatus = useTtcOfflineStatus();
+  const queryClient = useQueryClient();
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const [modal, setModal] = useState<'kojori' | 'tbilisi' | 'widget-kojori' | 'widget-tbilisi' | null>(null);
+
+  async function handleRefreshTimetables() {
+    if (isRefreshing) return;
+    setIsRefreshing(true);
+    try {
+      await warmTtcOfflineData(queryClient);
+    } finally {
+      setIsRefreshing(false);
+    }
+  }
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
@@ -522,6 +536,16 @@ export default function SettingsScreen() {
               </View>
             </>
           ) : null}
+          <View style={styles.itemDivider} />
+          <Pressable
+            style={[styles.manageBtn, isRefreshing && { opacity: 0.5 }]}
+            onPress={handleRefreshTimetables}
+            disabled={isRefreshing}>
+            {isRefreshing
+              ? <ActivityIndicator size="small" color={C.teal} />
+              : <Text style={[styles.manageBtnText, { color: C.teal }]}>Refresh timetables</Text>
+            }
+          </Pressable>
         </View>
       </ScrollView>
 

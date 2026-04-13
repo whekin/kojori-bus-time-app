@@ -7,7 +7,12 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
 import AppTabs from '@/components/app-tabs';
 import { SettingsProvider } from '@/hooks/use-settings';
-import { hydrateTtcOfflineData, warmTtcOfflineData } from '@/services/ttc-offline';
+import {
+  hydrateTtcOfflineData,
+  isBakedScheduleCurrent,
+  loadBakedData,
+  warmTtcOfflineData,
+} from '@/services/ttc-offline';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -23,8 +28,15 @@ function CachePrefiller() {
     let isActive = true;
 
     void (async () => {
+      // 1. Instantly seed from baked asset — zero network, zero I/O.
+      loadBakedData(queryClient);
+
+      // 2. Overlay with anything the user has previously fetched from AsyncStorage.
       await hydrateTtcOfflineData(queryClient);
-      if (isActive) {
+
+      // 3. Only hit the network if today's schedule isn't covered by the baked data
+      //    or previously cached data. Polylines/stops never auto-refresh.
+      if (isActive && !isBakedScheduleCurrent()) {
         await warmTtcOfflineData(queryClient);
       }
     })();

@@ -95,7 +95,7 @@ function smoothPolyline(points: PolylinePoint[], segmentsPerLeg = 10) {
   return dedupePolylinePoints(smoothed);
 }
 
-function decodeGooglePolyline(encoded: string): PolylinePoint[] {
+export function decodeGooglePolyline(encoded: string): PolylinePoint[] {
   const points: PolylinePoint[] = [];
   let index = 0;
   let latitude = 0;
