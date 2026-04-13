@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View, ViewStyle } from 'react-native';
+import { ActivityIndicator, Linking, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View, ViewStyle } from 'react-native';
 import { useQueryClient } from '@tanstack/react-query';
 import { useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -130,6 +130,37 @@ function ErrorBanner({ message }: { message: string }) {
   return (
     <View style={styles.errorBanner}>
       <Text style={styles.errorText}>{message}</Text>
+    </View>
+  );
+}
+
+function LocationAssistCard({
+  title,
+  message,
+  actionLabel,
+  onPress,
+  disabled = false,
+}: {
+  title: string;
+  message: string;
+  actionLabel?: string;
+  onPress?: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <View style={styles.locationCard}>
+      <View style={styles.locationCardCopy}>
+        <Text style={styles.locationCardTitle}>{title}</Text>
+        <Text style={styles.locationCardText}>{message}</Text>
+      </View>
+      {actionLabel && onPress ? (
+        <Pressable
+          style={[styles.locationCardButton, disabled && styles.locationCardButtonDisabled]}
+          onPress={onPress}
+          disabled={disabled}>
+          <Text style={styles.locationCardButtonText}>{actionLabel}</Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 }
@@ -436,7 +467,15 @@ export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const { settings, update, setSharedDirection, hasManualDirectionOverride, isLoaded } = useSettings();
-  const { detectedMode } = useLocation();
+  const {
+    detectedMode,
+    permission,
+    canAskAgain,
+    isLocating,
+    locationError,
+    requestLocationAccess,
+    refreshLocation,
+  } = useLocation();
   const { widgetMode, widgetStopId } = useLocalSearchParams<{
     widgetMode?: string;
     widgetStopId?: string;
@@ -509,9 +548,25 @@ export default function HomeScreen() {
   const accentColor = mode === 'kojori' ? C.amber : C.teal;
   const activeDirection = settings.sharedDirection;
   const activeStopId = mode === 'kojori' ? settings.activeTbilisiStopId : settings.activeKojoriStopId;
+  const showLocationCard =
+    permission !== 'granted' ||
+    hasManualDirectionOverride ||
+    isLocating ||
+    Boolean(locationError);
 
   function handleModeToggle(next: SharedMode) {
     setSharedDirection(modeToDirection(next));
+  }
+
+  async function handleEnableLocation() {
+    setSharedDirection(settings.sharedDirection, false);
+
+    if (permission === 'granted') {
+      await refreshLocation();
+      return;
+    }
+
+    await requestLocationAccess();
   }
 
   async function handleRefresh() {
@@ -539,6 +594,70 @@ export default function HomeScreen() {
       setIsRefreshing(false);
     }
   }
+
+  const locationCard = useMemo(() => {
+    if (!showLocationCard) return null;
+
+    if (isLocating) {
+      return {
+        title: 'Checking your location',
+        message: 'Finding whether you are closer to Kojori or Tbilisi for automatic direction.',
+      };
+    }
+
+    if (hasManualDirectionOverride) {
+      return {
+        title: 'Manual direction is active',
+        message: 'You switched direction manually. Re-enable location if you want the app to suggest the right side automatically again.',
+        actionLabel: permission === 'granted' ? 'Use my location' : 'Enable location',
+        onPress: handleEnableLocation,
+      };
+    }
+
+    if (permission === 'denied' && !canAskAgain) {
+      return {
+        title: 'Location permission is blocked',
+        message: 'Open system settings to turn location back on for automatic direction suggestions. Manual switching still works.',
+        actionLabel: 'Open settings',
+        onPress: () => {
+          void Linking.openSettings();
+        },
+      };
+    }
+
+    if (permission === 'denied') {
+      return {
+        title: 'Location is off',
+        message: 'Allow location if you want the app to switch between Kojori and Tbilisi automatically. You can still control it manually.',
+        actionLabel: 'Allow location',
+        onPress: handleEnableLocation,
+      };
+    }
+
+    if (locationError) {
+      return {
+        title: 'Could not read your location',
+        message: 'Automatic direction is available, but the last location check failed. Try again or keep using the manual toggle.',
+        actionLabel: 'Try again',
+        onPress: handleEnableLocation,
+      };
+    }
+
+    return {
+      title: 'Use location for smart direction',
+      message: 'Allow location to suggest whether you are heading to Kojori or Tbilisi automatically. You can keep using the toggle whenever you want.',
+      actionLabel: 'Enable location',
+      onPress: handleEnableLocation,
+    };
+  }, [
+    canAskAgain,
+    handleEnableLocation,
+    hasManualDirectionOverride,
+    isLocating,
+    locationError,
+    permission,
+    showLocationCard,
+  ]);
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
@@ -575,6 +694,18 @@ export default function HomeScreen() {
           ]}
         />
       </View>
+
+      {locationCard ? (
+        <View style={styles.locationCardWrap}>
+          <LocationAssistCard
+            title={locationCard.title}
+            message={locationCard.message}
+            actionLabel={locationCard.actionLabel}
+            onPress={locationCard.onPress}
+            disabled={isLocating}
+          />
+        </View>
+      ) : null}
 
       {mode === 'kojori' ? (
         <ToKojoriView
@@ -629,6 +760,30 @@ const styles = StyleSheet.create({
   refreshGlyph: { fontSize: 16, fontWeight: '700', color: C.textDim },
 
   toggleWrap: { paddingHorizontal: 20, paddingBottom: 4 },
+  locationCardWrap: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 4 },
+  locationCard: {
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: C.border,
+    backgroundColor: C.surface,
+    gap: 12,
+  },
+  locationCardCopy: { gap: 5 },
+  locationCardTitle: { color: C.text, fontSize: 14, fontWeight: '700' },
+  locationCardText: { color: C.textDim, fontSize: 12, lineHeight: 17 },
+  locationCardButton: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: C.borderStrong,
+    backgroundColor: C.surfaceHigh,
+  },
+  locationCardButtonDisabled: { opacity: 0.6 },
+  locationCardButtonText: { color: C.text, fontSize: 12, fontWeight: '700' },
 
   modeContainer: { flex: 1 },
   pageScroll: { flex: 1 },
