@@ -59,9 +59,11 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
     return () => clearTimeout(id);
   }, [mapReady]);
 
-  const { data: routePolylines } = useRoutePolylines(direction);
+  const { data: routeData } = useRoutePolylines(direction);
   const { data: positions = [], refetch } = useVehiclePositions(direction, isActive);
   const { status: ttcStatus } = useTtcHealth();
+  const routePolylines = routeData?.polylines;
+  const routeSource = routeData?.source ?? 'stops-fallback';
 
   const title = direction === 'toKojori' ? 'Inbound to Kojori' : 'Inbound to Tbilisi';
   const subtitle = direction === 'toKojori'
@@ -247,6 +249,23 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
         />
 
         <View style={styles.legendRow}>
+          <View
+            style={[
+              styles.geometryBadge,
+              routeSource === 'google-directions'
+                ? styles.geometryBadgeOn
+                : routeSource === 'hybrid-connected'
+                  ? styles.geometryBadgeHybrid
+                  : styles.geometryBadgeOff,
+            ]}>
+            <Text style={styles.geometryBadgeText}>
+              {routeSource === 'google-directions'
+                ? 'Google road'
+                : routeSource === 'hybrid-connected'
+                  ? 'Hybrid route'
+                  : 'Stops fallback'}
+            </Text>
+          </View>
           {(['380', '316'] as const).map(bus => {
             const accent = routeAccent(bus);
             return (
@@ -332,7 +351,32 @@ const styles = StyleSheet.create({
   },
   legendRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 10,
+  },
+  geometryBadge: {
+    paddingHorizontal: 11,
+    paddingVertical: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  geometryBadgeOn: {
+    backgroundColor: '#173222',
+    borderColor: '#28573a',
+  },
+  geometryBadgeHybrid: {
+    backgroundColor: '#34280f',
+    borderColor: '#6b521c',
+  },
+  geometryBadgeOff: {
+    backgroundColor: 'rgba(14,17,23,0.88)',
+    borderColor: C.border,
+  },
+  geometryBadgeText: {
+    color: C.text,
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.25,
   },
   legendCard: {
     flexDirection: 'row',

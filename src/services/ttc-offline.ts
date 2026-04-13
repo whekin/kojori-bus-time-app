@@ -6,6 +6,7 @@ import {
   ALL_TBILISI_STOPS,
   BusLine,
   fetchRoutePolyline,
+  RouteGeometrySource,
   fetchRouteStops,
   fetchSchedule,
   fetchStopDetails,
@@ -21,6 +22,12 @@ type OfflineDataset = 'schedules' | 'routeStops' | 'polylines' | 'stopNames';
 interface CacheEnvelope<T> {
   cachedAt: number;
   data: T;
+}
+
+export interface CachedRoutePolylines {
+  version: 3;
+  polylines: Record<BusLine, PolylinePoint[]>;
+  source: RouteGeometrySource;
 }
 
 export interface TtcOfflineSnapshot {
@@ -81,7 +88,7 @@ function routeStopsCacheKey(direction: Direction) {
 }
 
 function routePolylinesCacheKey(direction: Direction) {
-  return `@ttc_route_polylines_${direction}`;
+  return `@ttc_route_polylines_v3_${direction}`;
 }
 
 async function readEnvelope<T>(key: string): Promise<CacheEnvelope<T> | null> {
@@ -162,7 +169,7 @@ async function loadAvailability() {
     Promise.all(DIRECTIONS.map(direction => readEnvelope<StopInfo[]>(routeStopsCacheKey(direction)))),
     Promise.all(
       DIRECTIONS.map(direction =>
-        readEnvelope<Record<BusLine, PolylinePoint[]>>(routePolylinesCacheKey(direction)),
+        readEnvelope<CachedRoutePolylines>(routePolylinesCacheKey(direction)),
       ),
     ),
     readEnvelope<Record<string, string>>(STOP_NAMES_CACHE_KEY),
@@ -230,30 +237,44 @@ export async function writeRouteStopsCache(direction: Direction, data: StopInfo[
 
 export async function fetchRoutePolylinesForDirection(
   direction: Direction,
-): Promise<Record<BusLine, PolylinePoint[]>> {
+): Promise<{
+  polylines: Record<BusLine, PolylinePoint[]>;
+  source: RouteGeometrySource;
+}> {
   const entries = await Promise.all(
     ([
       ['380', ROUTES['380']],
       ['316', ROUTES['316']],
     ] as const).map(async ([bus, route]) => {
-      const points = await fetchRoutePolyline(route.id, route[direction]);
-      return [bus, points] as const;
+      const result = await fetchRoutePolyline(route.id, route[direction]);
+      return [bus, result] as const;
     }),
   );
 
-  return Object.fromEntries(entries) as Record<BusLine, PolylinePoint[]>;
+  const sources = entries.map(([, result]) => result.source);
+  const source =
+    sources.every(result => result === 'google-directions')
+      ? 'google-directions'
+      : sources.every(result => result === 'stops-fallback')
+        ? 'stops-fallback'
+        : 'hybrid-connected';
+
+  return {
+    polylines: Object.fromEntries(entries.map(([bus, result]) => [bus, result.points])) as Record<BusLine, PolylinePoint[]>,
+    source,
+  };
 }
 
 export async function readRoutePolylinesCache(
   direction: Direction,
   acceptStale = false,
-): Promise<Record<BusLine, PolylinePoint[]> | null> {
+): Promise<CachedRoutePolylines | null> {
   return readCachedData(routePolylinesCacheKey(direction), ROUTE_POLYLINES_CACHE_TTL, acceptStale);
 }
 
 export async function writeRoutePolylinesCache(
   direction: Direction,
-  data: Record<BusLine, PolylinePoint[]>,
+  data: CachedRoutePolylines,
 ) {
   await writeEnvelope(routePolylinesCacheKey(direction), data);
 }
@@ -319,7 +340,9 @@ export async function hydrateTtcOfflineData(client: QueryClient) {
   });
 
   polylines.forEach(({ direction, data }) => {
-    if (data) client.setQueryData(['route-polylines', direction], data);
+    if (data) {
+      client.setQueryData(['route-polylines', direction], data);
+    }
   });
 
   buildStopNamesQueryData(stopNames).forEach(entry => {
@@ -407,8 +430,16 @@ export async function warmTtcOfflineData(client: QueryClient) {
           }
 
           const data = await fetchRoutePolylinesForDirection(direction);
-          await writeRoutePolylinesCache(direction, data);
-          client.setQueryData(['route-polylines', direction], data);
+          await writeRoutePolylinesCache(direction, {
+            version: 3,
+            polylines: data.polylines,
+            source: data.source,
+          });
+          client.setQueryData(['route-polylines', direction], {
+            version: 3,
+            polylines: data.polylines,
+            source: data.source,
+          });
         }),
       );
 

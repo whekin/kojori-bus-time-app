@@ -2,6 +2,7 @@ import { reportTtcFailure, reportTtcSuccess } from '@/hooks/use-ttc-health';
 
 const BASE = 'https://transit.ttc.com.ge/pis-gateway/api';
 const API_KEY = 'c0a2f304-551a-4d08-b8df-2c53ecd57f9f';
+const GOOGLE_DIRECTIONS_API_KEY = process.env.EXPO_PUBLIC_GOOGLE_DIRECTIONS_API_KEY;
 
 const headers = { 'x-api-key': API_KEY };
 
@@ -44,6 +45,8 @@ export interface PolylinePoint {
   latitude: number;
   longitude: number;
 }
+
+export type RouteGeometrySource = 'google-directions' | 'hybrid-connected' | 'stops-fallback';
 
 function dedupePolylinePoints(points: PolylinePoint[]) {
   return points.filter((point, index, allPoints) => {
@@ -96,6 +99,132 @@ function smoothPolyline(points: PolylinePoint[], segmentsPerLeg = 10) {
   }
 
   return dedupePolylinePoints(smoothed);
+}
+
+function formatLatLng(point: PolylinePoint) {
+  return `${point.latitude},${point.longitude}`;
+}
+
+function decodeGooglePolyline(encoded: string): PolylinePoint[] {
+  const points: PolylinePoint[] = [];
+  let index = 0;
+  let latitude = 0;
+  let longitude = 0;
+
+  while (index < encoded.length) {
+    let result = 0;
+    let shift = 0;
+    let byte: number;
+
+    do {
+      byte = encoded.charCodeAt(index++) - 63;
+      result |= (byte & 0x1f) << shift;
+      shift += 5;
+    } while (byte >= 0x20);
+
+    latitude += result & 1 ? ~(result >> 1) : result >> 1;
+
+    result = 0;
+    shift = 0;
+
+    do {
+      byte = encoded.charCodeAt(index++) - 63;
+      result |= (byte & 0x1f) << shift;
+      shift += 5;
+    } while (byte >= 0x20);
+
+    longitude += result & 1 ? ~(result >> 1) : result >> 1;
+
+    points.push({
+      latitude: latitude / 1e5,
+      longitude: longitude / 1e5,
+    });
+  }
+
+  return points;
+}
+
+async function fetchRoutedLeg(origin: PolylinePoint, destination: PolylinePoint) {
+  const url = new URL('https://maps.googleapis.com/maps/api/directions/json');
+  url.searchParams.set('origin', formatLatLng(origin));
+  url.searchParams.set('destination', formatLatLng(destination));
+  url.searchParams.set('mode', 'driving');
+  url.searchParams.set('alternatives', 'false');
+  url.searchParams.set('key', GOOGLE_DIRECTIONS_API_KEY ?? '');
+
+  const response = await fetch(url.toString());
+  if (!response.ok) {
+    throw new Error(`Google Directions HTTP ${response.status}`);
+  }
+
+  const data = await response.json() as {
+    status?: string;
+    error_message?: string;
+    routes?: Array<{
+      overview_polyline?: {
+        points?: string;
+      };
+    }>;
+  };
+
+  if (data.status !== 'OK') {
+    throw new Error(data.error_message ?? data.status ?? 'No route returned');
+  }
+
+  const encodedPolyline = data.routes?.[0]?.overview_polyline?.points;
+  if (!encodedPolyline) {
+    throw new Error('Google Directions returned no overview polyline');
+  }
+
+  return decodeGooglePolyline(encodedPolyline);
+}
+
+function fallbackLeg(origin: PolylinePoint, destination: PolylinePoint) {
+  return smoothPolyline([origin, destination], 6);
+}
+
+async function fetchConnectedRoadPolyline(stopPoints: PolylinePoint[]) {
+  if (!GOOGLE_DIRECTIONS_API_KEY || stopPoints.length < 2) {
+    if (__DEV__ && !GOOGLE_DIRECTIONS_API_KEY) {
+      console.warn('[ttc] EXPO_PUBLIC_GOOGLE_DIRECTIONS_API_KEY is missing. Falling back to stop geometry.');
+    }
+    return {
+      points: smoothPolyline(stopPoints),
+      source: 'stops-fallback' as const,
+    };
+  }
+
+  const connectedPoints: PolylinePoint[] = [];
+  let routedLegs = 0;
+
+  for (let index = 0; index < stopPoints.length - 1; index += 1) {
+    const origin = stopPoints[index];
+    const destination = stopPoints[index + 1];
+
+    try {
+      const legPoints = await fetchRoutedLeg(origin, destination);
+      connectedPoints.push(...legPoints);
+      routedLegs += 1;
+    } catch (error) {
+      if (__DEV__) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.warn(`[ttc] Google Directions leg ${index + 1} failed. Using stop fallback for that segment. ${message}`);
+      }
+      connectedPoints.push(...fallbackLeg(origin, destination));
+    }
+  }
+
+  const source: RouteGeometrySource =
+    routedLegs === 0
+      ? 'stops-fallback'
+      : routedLegs === stopPoints.length - 1
+        ? 'google-directions'
+        : 'hybrid-connected';
+
+  return {
+    points: dedupePolylinePoints(connectedPoints),
+    source,
+  };
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -220,7 +349,7 @@ export async function fetchRouteStops(routeId: string, patternSuffix: string): P
 export async function fetchRoutePolyline(
   routeId: string,
   patternSuffix: string,
-): Promise<PolylinePoint[]> {
+): Promise<{ points: PolylinePoint[]; source: RouteGeometrySource }> {
   try {
     const res = await fetch(
       `${BASE}/v3/routes/${routeId}/stops-of-patterns?patternSuffixes=${patternSuffix}&locale=en`,
@@ -243,7 +372,25 @@ export async function fetchRoutePolyline(
         return point.latitude !== previous.latitude || point.longitude !== previous.longitude;
       });
 
-    return smoothPolyline(stopPoints);
+    if (stopPoints.length < 2) {
+      return {
+        points: stopPoints,
+        source: 'stops-fallback',
+      };
+    }
+
+    try {
+      return await fetchConnectedRoadPolyline(stopPoints);
+    } catch (error) {
+      if (__DEV__) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.warn(`[ttc] Google Directions routing failed. Falling back to stop geometry. ${message}`);
+      }
+      return {
+        points: smoothPolyline(stopPoints),
+        source: 'stops-fallback',
+      };
+    }
   } catch (error) {
     reportTtcFailure();
     throw error;
