@@ -242,9 +242,9 @@ const styles = StyleSheet.create({
 
   toggleWrap: { paddingHorizontal: 20, paddingBottom: 12 },
 
-  stopSelectorWrap: { paddingHorizontal: 20, paddingBottom: 10 },
+  stopSelectorWrap: { paddingBottom: 10 },
 
-  filterRow: { flexDirection: 'row', gap: 8, paddingHorizontal: 20, paddingBottom: 12 },
+  filterRow: { flexDirection: 'row', gap: 8, paddingBottom: 12 },
   filterChip: {
     paddingHorizontal: 16,
     paddingVertical: 7,
@@ -256,7 +256,6 @@ const styles = StyleSheet.create({
   filterChipText: { color: C.textDim, fontSize: 13, fontWeight: '500' },
 
   noteBanner: {
-    marginHorizontal: 20,
     marginBottom: 8,
     paddingHorizontal: 14,
     paddingVertical: 9,
