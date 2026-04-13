@@ -1,0 +1,15 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'expo.modules.kojoriwidget'
+version = '1.0.0'
+
+android {
+  namespace "expo.modules.kojoriwidget"
+  defaultConfig {
+    versionCode 1
+    versionName "1.0.0"
+  }
+}

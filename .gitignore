@@ -42,5 +42,9 @@ app-example
 /ios
 /android
 
+# local Expo modules
+modules/*/android/build/
+modules/*/android/.gradle/
+
 # EAS / build artifacts
 *.omx

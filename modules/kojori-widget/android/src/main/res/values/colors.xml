@@ -1,0 +1,13 @@
+<resources>
+  <color name="widget_surface">#111316</color>
+  <color name="widget_surface_high">#18191E</color>
+  <color name="widget_border">#1E2128</color>
+  <color name="widget_border_strong">#2A2F3A</color>
+  <color name="widget_text">#EDEAE4</color>
+  <color name="widget_text_dim">#8C92A0</color>
+  <color name="widget_text_faint">#565C6B</color>
+  <color name="widget_live">#22C55E</color>
+  <color name="widget_warning">#F59E0B</color>
+  <color name="widget_amber">#F5A20A</color>
+  <color name="widget_teal">#10B8A3</color>
+</resources>

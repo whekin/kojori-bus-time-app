@@ -1,0 +1,15 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <application>
+    <receiver
+      android:name="expo.modules.kojoriwidget.KojoriBusWidgetProvider"
+      android:exported="false">
+      <intent-filter>
+        <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+        <action android:name="expo.modules.kojoriwidget.SET_DIRECTION" />
+      </intent-filter>
+      <meta-data
+        android:name="android.appwidget.provider"
+        android:resource="@xml/kojori_bus_widget_info" />
+    </receiver>
+  </application>
+</manifest>

@@ -1,5 +1,6 @@
-import { NativeModules, Platform } from 'react-native';
+import { Platform } from 'react-native';
 
+import KojoriWidget from '../../modules/kojori-widget';
 import {
   BusLine,
   computeUpcomingDepartures,
@@ -47,12 +48,6 @@ interface WidgetStatePayload {
   generatedAt: number;
   directions: Record<WidgetMode, WidgetDirectionPayload>;
 }
-
-interface WidgetBridgeModule {
-  syncWidgetState(stateJson: string): Promise<void>;
-}
-
-const WidgetBridge = NativeModules.WidgetBridge as WidgetBridgeModule | undefined;
 
 function formatCountdown(minsUntil: number) {
   if (minsUntil < 1) return 'now';
@@ -166,7 +161,7 @@ async function buildDirectionPayload(
 }
 
 export async function syncAndroidWidgetState(settings: WidgetSyncSettings) {
-  if (Platform.OS !== 'android' || !WidgetBridge) return;
+  if (Platform.OS !== 'android' || !KojoriWidget) return;
 
   const now = new Date();
   const [kojori, tbilisi] = await Promise.all([
@@ -179,5 +174,5 @@ export async function syncAndroidWidgetState(settings: WidgetSyncSettings) {
     directions: { kojori, tbilisi },
   };
 
-  await WidgetBridge.syncWidgetState(JSON.stringify(payload));
+  await KojoriWidget.syncWidgetState(JSON.stringify(payload));
 }
