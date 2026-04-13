@@ -113,7 +113,7 @@ const TABS: Array<{
   accent: string;
   render: (isActive: boolean) => React.ReactNode;
 }> = [
-  { route: 'index', title: 'Home', icon: 'home-variant', accent: C.amber, render: () => <HomeScreen /> },
+  { route: 'index', title: 'Departures', icon: 'bus-clock', accent: C.amber, render: () => <HomeScreen /> },
   { route: 'explore', title: 'Map', icon: 'map-marker-radius', accent: '#7DD3FC', render: isActive => <ExploreScreen isActive={isActive} /> },
   { route: 'timetable', title: 'Timetable', icon: 'table-clock', accent: C.teal, render: () => <TimetableScreen /> },
   { route: 'settings', title: 'Settings', icon: 'cog', accent: C.text, render: () => <SettingsScreen /> },
