@@ -3,6 +3,8 @@ import { useQuery } from '@tanstack/react-query';
 import { BusLine, fetchVehiclePositions, ROUTES, VehiclePosition } from '@/services/ttc';
 
 type Direction = 'toKojori' | 'toTbilisi';
+const LIVE_REFRESH_MS = 3_000;
+const OFFLINE_REFRESH_MS = 30_000;
 
 export interface LiveVehiclePosition extends VehiclePosition {
   bus: BusLine;
@@ -48,7 +50,10 @@ export function useVehiclePositions(direction: Direction, enabled: boolean) {
     queryFn: () => fetchPositionsForDirection(direction),
     enabled,
     staleTime: 2_000,
-    refetchInterval: enabled ? 3_000 : false,
-    retry: 1,
+    refetchInterval: query => {
+      if (!enabled) return false;
+      return query.state.status === 'error' ? OFFLINE_REFRESH_MS : LIVE_REFRESH_MS;
+    },
+    retry: 0,
   });
 }

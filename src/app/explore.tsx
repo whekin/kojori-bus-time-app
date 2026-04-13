@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { DirectionToggle } from '@/components/direction-toggle';
 import { BottomTabInset } from '@/constants/theme';
 import { useRoutePolylines } from '@/hooks/use-route-polylines';
+import { useTtcHealth } from '@/hooks/use-ttc-health';
 import { useVehiclePositions } from '@/hooks/use-vehicle-positions';
 import { BUS_COLORS } from '@/services/ttc';
 
@@ -30,7 +31,6 @@ const DEFAULT_REGION: Region = {
 };
 
 type Direction = 'toKojori' | 'toTbilisi';
-type MapMode = 'pure' | 'full';
 
 type ExploreScreenProps = {
   isActive?: boolean;
@@ -43,44 +43,31 @@ function routeAccent(bus: '380' | '316') {
 export default function ExploreScreen({ isActive = false }: ExploreScreenProps) {
   const insets = useSafeAreaInsets();
   const mapRef = useRef<MapView>(null);
-  const [mapMode, setMapMode] = useState<MapMode>('pure');
   const [direction, setDirection] = useState<Direction>('toKojori');
   const lastFitKeyRef = useRef<string | null>(null);
 
   const [mapReady, setMapReady] = useState(false);
   const [mapTimedOut, setMapTimedOut] = useState(false);
-  const isFullMap = mapMode === 'full';
-  const mapFeedEnabled = isActive && isFullMap;
 
   useEffect(() => {
-    if (!isActive || mapReady) return;
+    if (mapReady) return;
     const id = setTimeout(() => setMapTimedOut(true), 8000);
     return () => clearTimeout(id);
-  }, [isActive, mapReady]);
+  }, [mapReady]);
 
-  useEffect(() => {
-    if (isActive) return;
-    setMapReady(false);
-    setMapTimedOut(false);
-  }, [isActive]);
+  const { data: routePolylines } = useRoutePolylines(direction);
+  const { data: positions = [], refetch } = useVehiclePositions(direction, isActive);
+  const { status: ttcStatus } = useTtcHealth();
 
-  useEffect(() => {
-    setMapReady(false);
-    setMapTimedOut(false);
-    lastFitKeyRef.current = null;
-  }, [mapMode]);
-
-  const { data: routePolylines } = useRoutePolylines(direction, mapFeedEnabled);
-  const { data: positions = [], isError, refetch } = useVehiclePositions(direction, mapFeedEnabled);
-
-  const title = isFullMap
-    ? direction === 'toKojori' ? 'Inbound to Kojori' : 'Inbound to Tbilisi'
-    : 'Pure Map Probe';
-  const subtitle = isFullMap
-    ? direction === 'toKojori'
-      ? 'Tracking live TTC vehicles heading uphill.'
-      : 'Tracking live TTC vehicles heading back into the city.'
-    : 'No TTC overlays or network data. This checks whether Expo Go can render a bare native map.';
+  const title = direction === 'toKojori' ? 'Inbound to Kojori' : 'Inbound to Tbilisi';
+  const subtitle = direction === 'toKojori'
+    ? 'Tracking live TTC vehicles heading uphill.'
+    : 'Tracking live TTC vehicles heading back into the city.';
+  const bottomNote = ttcStatus === 'offline'
+    ? 'TTC is offline right now. Auto-refresh is slowed down while the map stays available.'
+    : ttcStatus === 'degraded'
+      ? 'TTC is unstable right now. Vehicle markers may lag until the feed settles.'
+      : 'Updated every 3 seconds while this screen is visible.';
 
   const groupedCounts = useMemo(() => ({
     '380': positions.filter(position => position.bus === '380').length,
@@ -88,7 +75,7 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
   }), [positions]);
 
   useEffect(() => {
-    if (!isFullMap || !isActive || positions.length === 0) return;
+    if (!isActive || positions.length === 0) return;
 
     const fitKey = `${direction}-${positions.map(position => `${position.bus}-${position.vehicleId}`).sort().join('|')}`;
     if (fitKey === lastFitKeyRef.current) return;
@@ -113,7 +100,7 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
     }, 250);
 
     return () => clearTimeout(timeoutId);
-  }, [direction, isActive, isFullMap, positions]);
+  }, [direction, isActive, positions]);
 
   useEffect(() => {
     lastFitKeyRef.current = null;
@@ -121,67 +108,60 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
-      <View style={styles.mapViewport}>
-        {isActive ? (
-          <MapView
-            key={mapMode}
-            ref={mapRef}
-            style={styles.map}
-            initialRegion={DEFAULT_REGION}
-            onMapReady={() => {
-              setMapReady(true);
-              setMapTimedOut(false);
-            }}>
-            {isFullMap && routePolylines
-              ? (['380', '316'] as const).map(bus => {
-                  const points = routePolylines[bus] ?? [];
-                  if (points.length < 2) return null;
+      <MapView
+        ref={mapRef}
+        style={{ flex: 1 }}
+        initialRegion={DEFAULT_REGION}
+        onMapReady={() => {
+          setMapReady(true);
+          setMapTimedOut(false);
+        }}>
+        {routePolylines
+          ? (['380', '316'] as const).map(bus => {
+              const points = routePolylines[bus] ?? [];
+              if (points.length < 2) return null;
 
-                  return (
-                    <Polyline
-                      key={`route-${bus}`}
-                      coordinates={points}
-                      strokeColor={routeAccent(bus)}
-                      strokeWidth={direction === 'toKojori' ? 4 : 3}
-                      lineCap="round"
-                      lineJoin="round"
-                    />
-                  );
-                })
-              : null}
-            {isFullMap ? positions.map(position => {
-              const accent = routeAccent(position.bus);
               return (
-                <Marker
-                  key={`${position.bus}-${position.vehicleId}`}
-                  coordinate={{ latitude: position.lat, longitude: position.lon }}
-                  anchor={{ x: 0.5, y: 0.5 }}
-                  title={`${position.bus} to ${direction === 'toKojori' ? 'Kojori' : 'Tbilisi'}`}
-                  description={`Vehicle ${position.vehicleId}`}>
-                  <View style={styles.markerWrap}>
-                    <View style={[styles.markerGlow, { backgroundColor: accent + '24' }]} />
-                    <View style={[styles.markerCard, { borderColor: accent }]}>
-                      <View style={[styles.markerBadge, { backgroundColor: accent }]}>
-                        <Text style={styles.markerBadgeText}>{position.bus}</Text>
-                      </View>
-                      <View style={styles.markerArrowWrap}>
-                        <MaterialCommunityIcons
-                          name="navigation-variant"
-                          size={18}
-                          color={accent}
-                          style={{ transform: [{ rotate: `${position.heading}deg` }] }}
-                        />
-                      </View>
-                    </View>
-                  </View>
-                </Marker>
+                <Polyline
+                  key={`route-${bus}`}
+                  coordinates={points}
+                  strokeColor={routeAccent(bus)}
+                  strokeWidth={direction === 'toKojori' ? 4 : 3}
+                  lineCap="round"
+                  lineJoin="round"
+                />
               );
-            }) : null}
-          </MapView>
-        ) : (
-          <View style={styles.mapPlaceholder} />
-        )}
-      </View>
+            })
+          : null}
+        {positions.map(position => {
+          const accent = routeAccent(position.bus);
+          return (
+            <Marker
+              key={`${position.bus}-${position.vehicleId}`}
+              coordinate={{ latitude: position.lat, longitude: position.lon }}
+              anchor={{ x: 0.5, y: 0.5 }}
+              title={`${position.bus} to ${direction === 'toKojori' ? 'Kojori' : 'Tbilisi'}`}
+              description={`Vehicle ${position.vehicleId}`}>
+              <View style={styles.markerWrap}>
+                <View style={[styles.markerGlow, { backgroundColor: accent + '24' }]} />
+                <View style={[styles.markerCard, { borderColor: accent }]}>
+                  <View style={[styles.markerBadge, { backgroundColor: accent }]}>
+                    <Text style={styles.markerBadgeText}>{position.bus}</Text>
+                  </View>
+                  <View style={styles.markerArrowWrap}>
+                    <MaterialCommunityIcons
+                      name="navigation-variant"
+                      size={18}
+                      color={accent}
+                      style={{ transform: [{ rotate: `${position.heading}deg` }] }}
+                    />
+                  </View>
+                </View>
+              </View>
+            </Marker>
+          );
+        })}
+      </MapView>
 
       <View style={styles.mapShadeTop} pointerEvents="none" />
 
@@ -192,24 +172,11 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
             <Text style={styles.headerTitle}>{title}</Text>
             <Text style={styles.headerSubtitle}>{subtitle}</Text>
           </View>
-          {isFullMap ? (
-            <Pressable style={styles.refreshButton} onPress={() => refetch()}>
-              <MaterialCommunityIcons name="refresh" size={18} color={C.text} />
-            </Pressable>
-          ) : null}
+          <Pressable style={styles.refreshButton} onPress={() => refetch()}>
+            <MaterialCommunityIcons name="refresh" size={18} color={C.text} />
+          </Pressable>
         </View>
 
-        <DirectionToggle
-          value={mapMode}
-          onChange={setMapMode}
-          options={[
-            { value: 'pure', label: 'Pure map', accentColor: '#7DD3FC' },
-            { value: 'full', label: 'Full map', accentColor: C.amber },
-          ]}
-          style={styles.modeToggle}
-        />
-
-        {isFullMap ? (
         <DirectionToggle
           value={direction}
           onChange={setDirection}
@@ -219,41 +186,25 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
           ]}
           style={styles.directionToggle}
         />
-        ) : (
-          <View style={styles.probeCard}>
-            <Text style={styles.probeTitle}>{mapReady ? 'MapView mounted' : 'Waiting for native map'}</Text>
-            <Text style={styles.probeText}>
-              If this stays dark in `Pure map`, the issue is below your TTC overlays and likely in Expo Go, Android Maps rendering, or the pager/native view stack.
-            </Text>
-          </View>
-        )}
 
-        {isFullMap ? (
-          <View style={styles.legendRow}>
-            {(['380', '316'] as const).map(bus => {
-              const accent = routeAccent(bus);
-              return (
-                <View key={bus} style={styles.legendCard}>
-                  <View style={[styles.legendSwatch, { backgroundColor: accent }]} />
-                  <Text style={styles.legendText}>{bus}</Text>
-                  <Text style={styles.legendCount}>{groupedCounts[bus]}</Text>
-                </View>
-              );
-            })}
-          </View>
-        ) : null}
+        <View style={styles.legendRow}>
+          {(['380', '316'] as const).map(bus => {
+            const accent = routeAccent(bus);
+            return (
+              <View key={bus} style={styles.legendCard}>
+                <View style={[styles.legendSwatch, { backgroundColor: accent }]} />
+                <Text style={styles.legendText}>{bus}</Text>
+                <Text style={styles.legendCount}>{groupedCounts[bus]}</Text>
+              </View>
+            );
+          })}
+        </View>
       </View>
 
       <View style={[styles.bottomPanel, { bottom: insets.bottom + BottomTabInset + 18 }]}>
-        <Text style={styles.bottomMeta}>
-          {isFullMap ? `${positions.length} buses visible` : mapReady ? 'Map ready event fired' : 'No map ready event yet'}
-        </Text>
+        <Text style={styles.bottomMeta}>{positions.length} buses visible</Text>
         <Text style={styles.bottomNote}>
-          {isFullMap
-            ? isError
-              ? 'TTC is offline right now. The map stays available and vehicle markers will return automatically once the feed recovers.'
-              : 'Updated every 3 seconds while this screen is visible.'
-            : 'Use the toggle above to compare the bare map against the full TTC map in the same screen.'}
+          {bottomNote}
         </Text>
       </View>
 
@@ -261,9 +212,8 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
         <View style={styles.configOverlay} pointerEvents="none">
           <Text style={styles.configTitle}>Map not loading</Text>
           <Text style={styles.configText}>
-            {isFullMap
-              ? 'The base map loads but a provider/config issue is still possible. If `Pure map` works and `Full map` does not, the regression is in the TTC overlays/data path.'
-              : 'If `Pure map` also fails, this is not caused by TTC overlays. It points to Expo Go, Android native map rendering, or the pager/native view stack.'}
+            The API key may be invalid or Maps SDK for Android is not enabled.{'\n'}
+            Enable it at console.cloud.google.com → APIs &amp; Services → Library → "Maps SDK for Android".
           </Text>
         </View>
       ) : null}
@@ -273,9 +223,6 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: C.bg },
-  mapViewport: { flex: 1, overflow: 'hidden' },
-  map: { ...StyleSheet.absoluteFillObject },
-  mapPlaceholder: { flex: 1, backgroundColor: C.bg },
   mapShadeTop: {
     position: 'absolute',
     top: 0,
@@ -289,9 +236,6 @@ const styles = StyleSheet.create({
     left: 16,
     right: 16,
     gap: 12,
-  },
-  modeToggle: {
-    backgroundColor: 'rgba(14,17,23,0.92)',
   },
   headerRow: {
     flexDirection: 'row',
@@ -321,17 +265,6 @@ const styles = StyleSheet.create({
   directionToggle: {
     backgroundColor: 'rgba(14,17,23,0.92)',
   },
-  probeCard: {
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderRadius: 18,
-    backgroundColor: 'rgba(14,17,23,0.90)',
-    borderWidth: 1,
-    borderColor: C.border,
-    gap: 6,
-  },
-  probeTitle: { color: C.text, fontSize: 15, fontWeight: '700' },
-  probeText: { color: C.textDim, fontSize: 13, lineHeight: 18 },
   legendRow: {
     flexDirection: 'row',
     gap: 10,
