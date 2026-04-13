@@ -131,7 +131,6 @@ export default function TimetableScreen() {
         )}
       </View>
 
-      {/* Direction toggle */}
       <View style={styles.toggleWrap}>
         <DirectionToggle
           value={direction}
@@ -146,79 +145,83 @@ export default function TimetableScreen() {
         />
       </View>
 
-      <TtcStatusBanner />
+      <SectionList
+        sections={sections}
+        keyExtractor={(item, i) => `${item.bus}-${item.time}-${i}`}
+        showsVerticalScrollIndicator={false}
+        stickySectionHeadersEnabled={false}
+        contentContainerStyle={[
+          styles.listContent,
+          { paddingBottom: insets.bottom + BottomTabInset + 24 },
+        ]}
+        ListHeaderComponent={
+          <View>
+            <TtcStatusBanner />
 
-      {/* Stop selector */}
-      <View style={styles.stopSelectorWrap}>
-        <StopSelector
-          stops={stops}
-          activeStopId={stopId}
-          accentColor={accentColor}
-          onSelectStop={id => {
-            const nextIndex = stops.findIndex(stop => stop.id === id);
-            if (nextIndex >= 0) setStopIndex(nextIndex);
-          }}
-          label="TIMETABLE STOP"
-        />
-      </View>
+            <View style={styles.stopSelectorWrap}>
+              <StopSelector
+                stops={stops}
+                activeStopId={stopId}
+                accentColor={accentColor}
+                onSelectStop={id => {
+                  const nextIndex = stops.findIndex(stop => stop.id === id);
+                  if (nextIndex >= 0) setStopIndex(nextIndex);
+                }}
+                label="TIMETABLE STOP"
+              />
+            </View>
 
-      {/* Bus filter */}
-      <View style={styles.filterRow}>
-        {(['all', '380', '316'] as Filter[]).map(f => {
-          const isActive = filter === f;
-          const chipColor = f === '380' ? C.amber : f === '316' ? C.teal : accentColor;
-          return (
-            <Pressable
-              key={f}
-              style={[styles.filterChip, isActive && { borderColor: chipColor, backgroundColor: chipColor + '14' }]}
-              onPress={() => setFilter(f)}>
-              <Text style={[styles.filterChipText, isActive && { color: chipColor, fontWeight: '600' }]}>
-                {f === 'all' ? 'All buses' : f}
+            <View style={styles.filterRow}>
+              {(['all', '380', '316'] as Filter[]).map(f => {
+                const isActive = filter === f;
+                const chipColor = f === '380' ? C.amber : f === '316' ? C.teal : accentColor;
+                return (
+                  <Pressable
+                    key={f}
+                    style={[styles.filterChip, isActive && { borderColor: chipColor, backgroundColor: chipColor + '14' }]}
+                    onPress={() => setFilter(f)}>
+                    <Text style={[styles.filterChipText, isActive && { color: chipColor, fontWeight: '600' }]}>
+                      {f === 'all' ? 'All buses' : f}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            <View style={styles.noteBanner}>
+              <Text style={styles.noteText}>
+                {direction === 'toKojori'
+                  ? 'Times from the starting stop. Intermediate stops arrive ~5–10 min earlier.'
+                  : 'Times from selected Kojori stop.'}
               </Text>
-            </Pressable>
-          );
-        })}
-      </View>
-
-      {/* Schedule accuracy note */}
-      <View style={styles.noteBanner}>
-        <Text style={styles.noteText}>
-          {direction === 'toKojori'
-            ? 'Times from the starting stop. Intermediate stops arrive ~5–10 min earlier.'
-            : 'Times from selected Kojori stop.'}
-        </Text>
-      </View>
-
-      {/* Timetable */}
-      {isLoading && sections.length === 0 ? (
-        <View style={styles.loadingCenter}>
-          <ActivityIndicator color={accentColor} size="large" />
-        </View>
-      ) : (
-        <SectionList
-          sections={sections}
-          keyExtractor={(item, i) => `${item.bus}-${item.time}-${i}`}
-          showsVerticalScrollIndicator={false}
-          stickySectionHeadersEnabled={false}
-          contentContainerStyle={[
-            styles.listContent,
-            { paddingBottom: insets.bottom + BottomTabInset + 24 },
-          ]}
-          renderSectionHeader={({ section }) => (
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionHeaderText}>{section.title.toUpperCase()}</Text>
-              <View style={styles.sectionHeaderLine} />
-              <Text style={styles.sectionCount}>{section.data.length}</Text>
             </View>
-          )}
-          renderItem={({ item, index, section }) => (
-            <View style={[styles.timeRow, index < section.data.length - 1 && styles.timeRowDivider]}>
-              <BusTag bus={item.bus} />
-              <Text style={[styles.timeText, { fontFamily: MONO }]}>{item.time}</Text>
+          </View>
+        }
+        ListEmptyComponent={
+          isLoading ? (
+            <View style={styles.loadingCenter}>
+              <ActivityIndicator color={accentColor} size="large" />
             </View>
-          )}
-        />
-      )}
+          ) : (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyText}>No timetable entries for this filter.</Text>
+            </View>
+          )
+        }
+        renderSectionHeader={({ section }) => (
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionHeaderText}>{section.title.toUpperCase()}</Text>
+            <View style={styles.sectionHeaderLine} />
+            <Text style={styles.sectionCount}>{section.data.length}</Text>
+          </View>
+        )}
+        renderItem={({ item, index, section }) => (
+          <View style={[styles.timeRow, index < section.data.length - 1 && styles.timeRowDivider]}>
+            <BusTag bus={item.bus} />
+            <Text style={[styles.timeText, { fontFamily: MONO }]}>{item.time}</Text>
+          </View>
+        )}
+      />
     </View>
   );
 }
@@ -263,6 +266,8 @@ const styles = StyleSheet.create({
   noteText: { color: C.textDim, fontSize: 12, lineHeight: 17 },
 
   loadingCenter: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  emptyState: { paddingVertical: 32, alignItems: 'center' },
+  emptyText: { color: C.textDim, fontSize: 14 },
 
   listContent: { paddingHorizontal: 20 },
   sectionHeader: {

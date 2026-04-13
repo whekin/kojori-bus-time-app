@@ -294,6 +294,8 @@ function ToKojoriView({
           />
         }>
         <View style={styles.fixedSection}>
+          <TtcStatusBanner />
+
           <StopSelector
             stops={favoriteStops}
             activeStopId={activeStopId}
@@ -384,6 +386,8 @@ function ToTbilisiView({
           />
         }>
         <View style={styles.fixedSection}>
+          <TtcStatusBanner />
+
           <StopSelector
             stops={favoriteStops}
             activeStopId={activeStopId}
@@ -510,8 +514,6 @@ export default function HomeScreen() {
           ]}
         />
       </View>
-
-      <TtcStatusBanner />
 
       {mode === 'kojori' ? (
         <ToKojoriView
