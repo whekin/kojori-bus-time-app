@@ -17,11 +17,10 @@ import { BottomTabInset } from '@/constants/theme';
 import { useSchedule } from '@/hooks/use-schedule';
 import { useSettings } from '@/hooks/use-settings';
 import {
-  ALL_KOJORI_STOPS,
-  ALL_TBILISI_STOPS,
   BusLine,
   BUS_COLORS,
   extractStopTimes,
+  findStop,
   getTodayPeriod,
   parseTimeToMins,
   ROUTES,
@@ -78,17 +77,21 @@ function BusTag({ bus }: { bus: BusLine }) {
 
 export default function TimetableScreen() {
   const insets = useSafeAreaInsets();
-  const { settings, setSharedDirection } = useSettings();
+  const { settings, setSharedDirection, update } = useSettings();
   const [filter, setFilter] = useState<Filter>('all');
-  const [stopIndex, setStopIndex] = useState(0);
   const direction = settings.sharedDirection;
 
-  useEffect(() => {
-    setStopIndex(0);
-  }, [direction]);
+  const favoriteIds = direction === 'toKojori' ? settings.tbilisiFavorites : settings.kojoriFavorites;
+  const stops = favoriteIds.map(id => findStop(id) ?? { id, label: `Stop #${id.split(':')[1]}` });
+  const stopId = direction === 'toKojori' ? settings.activeTbilisiStopId : settings.activeKojoriStopId;
 
-  const stops = direction === 'toKojori' ? ALL_TBILISI_STOPS : ALL_KOJORI_STOPS;
-  const stopId = stops[stopIndex]?.id ?? stops[0].id;
+  function handleSelectStop(id: string) {
+    if (direction === 'toKojori') {
+      update({ activeTbilisiStopId: id });
+    } else {
+      update({ activeKojoriStopId: id });
+    }
+  }
 
   const { data: s380, isLoading: l380 } = useSchedule(
     ROUTES['380'].id,
@@ -167,10 +170,7 @@ export default function TimetableScreen() {
                 stops={stops}
                 activeStopId={stopId}
                 accentColor={accentColor}
-                onSelectStop={id => {
-                  const nextIndex = stops.findIndex(stop => stop.id === id);
-                  if (nextIndex >= 0) setStopIndex(nextIndex);
-                }}
+                onSelectStop={handleSelectStop}
                 label="TIMETABLE STOP"
               />
             </View>
