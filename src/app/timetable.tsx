@@ -12,7 +12,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { DirectionToggle } from '@/components/direction-toggle';
 import { StopSelector } from '@/components/stop-selector';
-import { TtcStatusBanner } from '@/components/ttc-status-banner';
+import { TtcStatusHeaderBadge } from '@/components/ttc-status-banner';
 import { BottomTabInset } from '@/constants/theme';
 import { useSchedule } from '@/hooks/use-schedule';
 import {
@@ -124,11 +124,14 @@ export default function TimetableScreen() {
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Timetable</Text>
-        {isLoading ? (
-          <ActivityIndicator color={C.textDim} size="small" />
-        ) : (
-          <Text style={styles.headerCount}>{totalCount} departures</Text>
-        )}
+        <TtcStatusHeaderBadge />
+        <View style={styles.headerRight}>
+          {isLoading ? (
+            <ActivityIndicator color={C.textDim} size="small" />
+          ) : (
+            <Text style={styles.headerCount}>{totalCount} departures</Text>
+          )}
+        </View>
       </View>
 
       <View style={styles.toggleWrap}>
@@ -156,8 +159,6 @@ export default function TimetableScreen() {
         ]}
         ListHeaderComponent={
           <View>
-            <TtcStatusBanner />
-
             <View style={styles.stopSelectorWrap}>
               <StopSelector
                 stops={stops}
@@ -230,12 +231,13 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: C.bg },
   header: {
     flexDirection: 'row',
-    alignItems: 'baseline',
+    alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
     paddingVertical: 14,
   },
   headerTitle: { color: C.text, fontSize: 20, fontWeight: '700', letterSpacing: -0.3 },
+  headerRight: { minWidth: 72, alignItems: 'flex-end' },
   headerCount: { color: C.textDim, fontSize: 13, fontWeight: '500' },
 
   toggleWrap: { paddingHorizontal: 20, paddingBottom: 12 },

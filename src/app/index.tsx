@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { DirectionToggle } from '@/components/direction-toggle';
 import { StopSelector } from '@/components/stop-selector';
-import { TtcStatusBanner } from '@/components/ttc-status-banner';
+import { TtcStatusHeaderBadge } from '@/components/ttc-status-banner';
 import { BottomTabInset } from '@/constants/theme';
 import { useArrivals } from '@/hooks/use-arrivals';
 import { useLocation } from '@/hooks/use-location';
@@ -294,8 +294,6 @@ function ToKojoriView({
           />
         }>
         <View style={styles.fixedSection}>
-          <TtcStatusBanner />
-
           <StopSelector
             stops={favoriteStops}
             activeStopId={activeStopId}
@@ -386,8 +384,6 @@ function ToTbilisiView({
           />
         }>
         <View style={styles.fixedSection}>
-          <TtcStatusBanner />
-
           <StopSelector
             stops={favoriteStops}
             activeStopId={activeStopId}
@@ -488,6 +484,7 @@ export default function HomeScreen() {
           <View style={[styles.locationDot, { backgroundColor: accentColor }]} />
           <Text style={styles.headerCity}>{mode === 'kojori' ? 'Tbilisi' : 'Kojori'}</Text>
         </View>
+        <TtcStatusHeaderBadge />
         <View style={styles.headerRight}>
           <Text style={[styles.headerClock, { fontFamily: MONO }]}>{clock}</Text>
           <Pressable

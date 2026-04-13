@@ -1,5 +1,4 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
-import Constants from 'expo-constants';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import MapView, { Marker, PROVIDER_GOOGLE, Region, type MapStyleElement } from 'react-native-maps';
@@ -7,7 +6,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { DirectionToggle } from '@/components/direction-toggle';
 import { BottomTabInset } from '@/constants/theme';
-import { TtcStatusBanner } from '@/components/ttc-status-banner';
 import { useVehiclePositions } from '@/hooks/use-vehicle-positions';
 import { BUS_COLORS } from '@/services/ttc';
 
@@ -64,9 +62,14 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
   const mapRef = useRef<MapView>(null);
   const [direction, setDirection] = useState<Direction>('toKojori');
   const lastFitKeyRef = useRef<string | null>(null);
-  const isMapConfigured =
-    Platform.OS !== 'android' ||
-    Boolean(Constants.expoConfig?.extra?.maps?.androidConfigured);
+  const [mapReady, setMapReady] = useState(false);
+  const [mapTimedOut, setMapTimedOut] = useState(false);
+
+  useEffect(() => {
+    if (mapReady) return;
+    const id = setTimeout(() => setMapTimedOut(true), 8000);
+    return () => clearTimeout(id);
+  }, [mapReady]);
 
   const { data: positions = [], isError, refetch } = useVehiclePositions(direction, isActive);
 
@@ -124,7 +127,8 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
         rotateEnabled={false}
         pitchEnabled={false}
         showsCompass={false}
-        showsPointsOfInterests={false}>
+        showsPointsOfInterests={false}
+        onMapReady={() => { setMapReady(true); setMapTimedOut(false); }}>
         {positions.map(position => {
           const accent = routeAccent(position.bus);
           return (
@@ -179,8 +183,6 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
           style={styles.directionToggle}
         />
 
-        <TtcStatusBanner />
-
         <View style={styles.legendRow}>
           {(['380', '316'] as const).map(bus => {
             const accent = routeAccent(bus);
@@ -196,24 +198,20 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
       </View>
 
       <View style={[styles.bottomPanel, { bottom: insets.bottom + BottomTabInset + 18 }]}>
-        <Text style={styles.bottomMeta}>
-          {isMapConfigured ? `${positions.length} buses visible` : 'Map provider not configured'}
-        </Text>
+        <Text style={styles.bottomMeta}>{positions.length} buses visible</Text>
         <Text style={styles.bottomNote}>
-          {!isMapConfigured
-            ? 'Add GOOGLE_MAPS_API_KEY_ANDROID and rebuild the app to enable the native map on Android.'
-            : isError
+          {isError
             ? 'TTC is offline right now. The map stays available and vehicle markers will return automatically once the feed recovers.'
             : 'Updated every 3 seconds while this screen is visible.'}
         </Text>
       </View>
 
-      {!isMapConfigured ? (
+      {mapTimedOut ? (
         <View style={styles.configOverlay} pointerEvents="none">
-          <Text style={styles.configTitle}>Map provider missing</Text>
+          <Text style={styles.configTitle}>Map not loading</Text>
           <Text style={styles.configText}>
-            Android needs a Google Maps API key to render the base map. Until that is configured,
-            this tab will stay blank underneath the chrome.
+            The API key may be invalid or the Maps SDK for Android is not enabled in Google Cloud Console.
+            Enable it at console.cloud.google.com → APIs &amp; Services → Library → "Maps SDK for Android".
           </Text>
         </View>
       ) : null}
@@ -339,4 +337,5 @@ const styles = StyleSheet.create({
   },
   configTitle: { color: C.text, fontSize: 16, fontWeight: '700' },
   configText: { color: C.textDim, fontSize: 13, textAlign: 'center', lineHeight: 18, marginTop: 6 },
+  configCode: { color: C.text, fontFamily: 'monospace', fontSize: 12 },
 });
