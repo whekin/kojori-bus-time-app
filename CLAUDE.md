@@ -47,9 +47,9 @@ Kojori stops: `1:2856`, `1:4181`, `1:3782`, `1:3078`
 Endpoints used:
 - `GET /v2/stops/{stopId}/arrival-times?locale=en&ignoreScheduledArrivalTimes=false` — real-time + scheduled arrivals
 - `GET /v3/routes/{routeId}/schedule?patternSuffix={suffix}&locale=en` — full schedule (prefetch + cache)
-- `GET /v3/routes/{routeId}/positions?patternSuffixes={suffix}` — live vehicle GPS (5s refresh on map)
+- `GET /v3/routes/{routeId}/positions?patternSuffixes={suffix}` — live vehicle GPS (3s refresh on map)
 - `GET /v3/routes/{routeId}/stops-of-patterns?patternSuffixes={suffix}&locale=en` — stop list (prefetch)
-- `GET /v3/routes/{routeId}/polylines?patternSuffixes={suffix}` — route shape (prefetch)
+- `GET /v3/routes/{routeId}/polylines?patternSuffixes={suffix}` — route shape; returns `{ [patternSuffix]: { encodedValue: string, color: string } }` where `encodedValue` is a Google-encoded polyline
 
 Response field notes: `realtimeArrivalMinutes` = GPS-tracked ETA; `scheduledArrivalMinutes` = timetable. Starting stop schedule is reliable; middle/end stops arrive ~5–10 min early.
 

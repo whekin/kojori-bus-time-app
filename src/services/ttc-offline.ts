@@ -6,6 +6,7 @@ import {
   ALL_TBILISI_STOPS,
   BusLine,
   fetchRoutePolyline,
+  fetchRoutePolylineFromStops,
   RouteGeometrySource,
   fetchRouteStops,
   fetchSchedule,
@@ -253,6 +254,20 @@ export async function fetchRoutePolylinesForDirection(
   return {
     polylines: Object.fromEntries(entries.map(([bus, result]) => [bus, result.points])) as Record<BusLine, PolylinePoint[]>,
     source,
+  };
+}
+
+export async function fetchRoutePolylinesFromStopsForDirection(
+  direction: Direction,
+): Promise<{
+  polylines: Record<BusLine, PolylinePoint[]>;
+  source: RouteGeometrySource;
+}> {
+  const result380 = await fetchRoutePolylineFromStops(ROUTES['380'].id, ROUTES['380'][direction]);
+  const result316 = await fetchRoutePolylineFromStops(ROUTES['316'].id, ROUTES['316'][direction]);
+  return {
+    polylines: { '380': result380.points, '316': result316.points },
+    source: 'stops-fallback',
   };
 }
 

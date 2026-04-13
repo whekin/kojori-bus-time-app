@@ -1,9 +1,11 @@
 import { useQuery } from '@tanstack/react-query';
 
+import { useSettings } from '@/hooks/use-settings';
 import { BusLine, PolylinePoint, RouteGeometrySource } from '@/services/ttc';
 import {
   CachedRoutePolylines,
   fetchRoutePolylinesForDirection,
+  fetchRoutePolylinesFromStopsForDirection,
   readRoutePolylinesCache,
   ROUTE_POLYLINES_CACHE_TTL,
   writeRoutePolylinesCache,
@@ -33,12 +35,18 @@ function normalizeRoutePolylinesPayload(
 }
 
 export function useRoutePolylines(direction: Direction) {
+  const { settings } = useSettings();
+  const useEncoded = settings.useEncodedPolylines;
+
   return useQuery<RoutePolylinesPayload>({
-    queryKey: ['route-polylines', direction],
+    queryKey: ['route-polylines', direction, useEncoded ? 'encoded' : 'stops'],
     meta: { source: 'ttc' },
     queryFn: async () => {
       try {
-        const data = await fetchRoutePolylinesForDirection(direction);
+        const fetch = useEncoded
+          ? fetchRoutePolylinesForDirection
+          : fetchRoutePolylinesFromStopsForDirection;
+        const data = await fetch(direction);
         void writeRoutePolylinesCache(direction, {
           version: 3,
           polylines: data.polylines,

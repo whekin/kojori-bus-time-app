@@ -7,6 +7,7 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   View,
@@ -432,6 +433,26 @@ export default function SettingsScreen() {
           </>
         ) : null}
 
+        {/* Map */}
+        <View style={styles.sectionMeta}>
+          <Text style={styles.sectionHeader}>MAP</Text>
+          <Text style={styles.sectionNote}>Route shape drawn on the live map.</Text>
+        </View>
+        <View style={styles.card}>
+          <View style={styles.toggleRow}>
+            <View style={styles.toggleCopy}>
+              <Text style={styles.toggleLabel}>Encoded polylines</Text>
+              <Text style={styles.toggleNote}>Use the API's own route geometry. Disable to fall back to stop-coordinate interpolation.</Text>
+            </View>
+            <Switch
+              value={settings.useEncodedPolylines}
+              onValueChange={value => update({ useEncodedPolylines: value })}
+              trackColor={{ false: C.border, true: C.teal + 'aa' }}
+              thumbColor={settings.useEncodedPolylines ? C.teal : C.textDim}
+            />
+          </View>
+        </View>
+
         {/* Data info */}
         <View style={styles.sectionMeta}>
           <Text style={styles.sectionHeader}>DATA SOURCE</Text>
@@ -580,6 +601,11 @@ const styles = StyleSheet.create({
   manageBtnText: { fontSize: 14, fontWeight: '600' },
 
   itemDivider: { height: 1, backgroundColor: C.border, marginLeft: 16 },
+
+  toggleRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, gap: 14 },
+  toggleCopy: { flex: 1, gap: 3 },
+  toggleLabel: { color: C.text, fontSize: 15, fontWeight: '500' },
+  toggleNote: { color: C.textDim, fontSize: 12, lineHeight: 17 },
 
   infoRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 18, paddingVertical: 14, gap: 12 },
   infoLabel: { color: C.textDim, fontSize: 14, fontWeight: '500' },
