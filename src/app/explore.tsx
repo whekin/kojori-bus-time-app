@@ -1,11 +1,12 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
-import MapView, { Marker, PROVIDER_GOOGLE, Region, type MapStyleElement } from 'react-native-maps';
+import MapView, { Marker, Polyline, PROVIDER_GOOGLE, Region, type MapStyleElement } from 'react-native-maps';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { DirectionToggle } from '@/components/direction-toggle';
 import { BottomTabInset } from '@/constants/theme';
+import { useRoutePolylines } from '@/hooks/use-route-polylines';
 import { useVehiclePositions } from '@/hooks/use-vehicle-positions';
 import { BUS_COLORS } from '@/services/ttc';
 
@@ -62,6 +63,7 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
   const mapRef = useRef<MapView>(null);
   const [direction, setDirection] = useState<Direction>('toKojori');
   const lastFitKeyRef = useRef<string | null>(null);
+
   const [mapReady, setMapReady] = useState(false);
   const [mapTimedOut, setMapTimedOut] = useState(false);
 
@@ -71,6 +73,7 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
     return () => clearTimeout(id);
   }, [mapReady]);
 
+  const { data: routePolylines } = useRoutePolylines(direction);
   const { data: positions = [], isError, refetch } = useVehiclePositions(direction, isActive);
 
   const title = direction === 'toKojori' ? 'Inbound to Kojori' : 'Inbound to Tbilisi';
@@ -119,16 +122,26 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
     <View style={[styles.screen, { paddingTop: insets.top }]}>
       <MapView
         ref={mapRef}
-        provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
-        style={styles.map}
+        style={{ flex: 1 }}
         initialRegion={DEFAULT_REGION}
-        customMapStyle={DARK_MAP_STYLE}
-        toolbarEnabled={false}
-        rotateEnabled={false}
-        pitchEnabled={false}
-        showsCompass={false}
-        showsPointsOfInterests={false}
         onMapReady={() => { setMapReady(true); setMapTimedOut(false); }}>
+        {routePolylines
+          ? (['380', '316'] as const).map(bus => {
+              const points = routePolylines[bus] ?? [];
+              if (points.length < 2) return null;
+
+              return (
+                <Polyline
+                  key={`route-${bus}`}
+                  coordinates={points}
+                  strokeColor={routeAccent(bus)}
+                  strokeWidth={direction === 'toKojori' ? 4 : 3}
+                  lineCap="round"
+                  lineJoin="round"
+                />
+              );
+            })
+          : null}
         {positions.map(position => {
           const accent = routeAccent(position.bus);
           return (
@@ -210,7 +223,7 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
         <View style={styles.configOverlay} pointerEvents="none">
           <Text style={styles.configTitle}>Map not loading</Text>
           <Text style={styles.configText}>
-            The API key may be invalid or the Maps SDK for Android is not enabled in Google Cloud Console.
+            The API key may be invalid or Maps SDK for Android is not enabled.{'\n'}
             Enable it at console.cloud.google.com → APIs &amp; Services → Library → "Maps SDK for Android".
           </Text>
         </View>
@@ -221,7 +234,7 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: C.bg },
-  map: { flex: 1 },
+  map: { ...StyleSheet.absoluteFillObject },
   mapShadeTop: {
     position: 'absolute',
     top: 0,

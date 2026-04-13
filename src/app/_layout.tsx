@@ -6,10 +6,8 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
 import AppTabs from '@/components/app-tabs';
-import { prefillRoutePolylineCache } from '@/hooks/use-route-polylines';
 import { SettingsProvider } from '@/hooks/use-settings';
-import { prefillScheduleCache } from '@/hooks/use-schedule';
-import { prefillStopNames } from '@/hooks/use-stop-names';
+import { hydrateTtcOfflineData, warmTtcOfflineData } from '@/services/ttc-offline';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -20,14 +18,22 @@ const queryClient = new QueryClient({
   },
 });
 
-// Runs once: loads persisted schedule caches into QueryClient so screens
-// have data immediately without waiting for a network round-trip.
 function CachePrefiller() {
   useEffect(() => {
-    prefillScheduleCache(queryClient);
-    prefillRoutePolylineCache(queryClient);
-    prefillStopNames(queryClient);
+    let isActive = true;
+
+    void (async () => {
+      await hydrateTtcOfflineData(queryClient);
+      if (isActive) {
+        await warmTtcOfflineData(queryClient);
+      }
+    })();
+
+    return () => {
+      isActive = false;
+    };
   }, []);
+
   return null;
 }
 

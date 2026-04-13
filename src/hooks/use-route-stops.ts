@@ -1,41 +1,37 @@
-import { useQueries } from '@tanstack/react-query';
-import { useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
 
-import { fetchRouteStops, ROUTES, StopInfo } from '@/services/ttc';
+import { StopInfo } from '@/services/ttc';
+import {
+  fetchRouteStopsForDirection,
+  readRouteStopsCache,
+  ROUTE_STOPS_CACHE_TTL,
+  writeRouteStopsCache,
+} from '@/services/ttc-offline';
 
 type Direction = 'toKojori' | 'toTbilisi';
 
-async function fetchStopsForDirection(direction: Direction): Promise<StopInfo[]> {
-  // Fetch from both bus lines and merge
-  const [stops380, stops316] = await Promise.all([
-    fetchRouteStops(ROUTES['380'].id, ROUTES['380'][direction]),
-    fetchRouteStops(ROUTES['316'].id, ROUTES['316'][direction]),
-  ]);
-
-  // Deduplicate by stop ID, preserving order
-  const seen = new Set<string>();
-  return [...stops380, ...stops316].filter(s => {
-    if (seen.has(s.id)) return false;
-    seen.add(s.id);
-    return true;
-  });
-}
-
 export function useRouteStops(direction: Direction) {
-  return useQueries({
-    queries: [
-      {
-        queryKey: ['route-stops', direction],
-        meta: { source: 'ttc' },
-        queryFn: () => fetchStopsForDirection(direction),
-        staleTime: 24 * 60 * 60 * 1000, // 24h — route stops almost never change
-        retry: 1,
-      },
-    ],
-    combine: results => ({
-      stops: (results[0].data ?? []) as StopInfo[],
-      isLoading: results[0].isLoading,
-      isError: results[0].isError,
-    }),
+  const query = useQuery<StopInfo[]>({
+    queryKey: ['route-stops', direction],
+    meta: { source: 'ttc' },
+    queryFn: async () => {
+      try {
+        const data = await fetchRouteStopsForDirection(direction);
+        void writeRouteStopsCache(direction, data);
+        return data;
+      } catch (error) {
+        const cached = await readRouteStopsCache(direction, true);
+        if (cached) return cached;
+        throw error;
+      }
+    },
+    staleTime: ROUTE_STOPS_CACHE_TTL,
+    retry: 1,
   });
+
+  return {
+    stops: query.data ?? [],
+    isLoading: query.isLoading,
+    isError: query.isError,
+  };
 }

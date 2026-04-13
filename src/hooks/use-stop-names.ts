@@ -1,27 +1,14 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { QueryClient, useQueries } from '@tanstack/react-query';
 
 import { ALL_KOJORI_STOPS, ALL_TBILISI_STOPS, fetchStopDetails } from '@/services/ttc';
+import {
+  readCachedStopName,
+  readStopNameCache,
+  STOP_NAMES_CACHE_TTL,
+  writeStopName,
+} from '@/services/ttc-offline';
 
-const CACHE_KEY = '@ttc_stop_names';
 const ALL_STOP_IDS = [...ALL_TBILISI_STOPS, ...ALL_KOJORI_STOPS].map(s => s.id);
-
-// ── Persistence ───────────────────────────────────────────────────────────────
-
-async function readNameCache(): Promise<Record<string, string>> {
-  try {
-    const raw = await AsyncStorage.getItem(CACHE_KEY);
-    return raw ? JSON.parse(raw) : {};
-  } catch {
-    return {};
-  }
-}
-
-async function writeNameCache(names: Record<string, string>) {
-  try {
-    await AsyncStorage.setItem(CACHE_KEY, JSON.stringify(names));
-  } catch {}
-}
 
 /**
  * Call once in _layout.tsx after QueryClient is created.
@@ -29,7 +16,7 @@ async function writeNameCache(names: Record<string, string>) {
  * immediately, then React Query refreshes stale ones in background.
  */
 export async function prefillStopNames(client: QueryClient) {
-  const cached = await readNameCache();
+  const cached = await readStopNameCache(true);
   for (const [stopId, name] of Object.entries(cached)) {
     client.setQueryData(['stop', stopId], { id: stopId, name });
   }
@@ -48,13 +35,17 @@ export function useStopNames(): Record<string, string> {
       queryKey: ['stop', id],
       meta: { source: 'ttc' },
       queryFn: async () => {
-        const data = await fetchStopDetails(id);
-        // Persist updated names to AsyncStorage
-        const cached = await readNameCache();
-        writeNameCache({ ...cached, [id]: data.name });
-        return data;
+        try {
+          const data = await fetchStopDetails(id);
+          void writeStopName(id, data.name);
+          return data;
+        } catch (error) {
+          const cachedName = await readCachedStopName(id, true);
+          if (cachedName) return { id, name: cachedName };
+          throw error;
+        }
       },
-      staleTime: 7 * 24 * 60 * 60 * 1000, // 7 days — stop names almost never change
+      staleTime: STOP_NAMES_CACHE_TTL,
       retry: 1,
     })),
   });

@@ -17,7 +17,14 @@ import { BottomTabInset } from '@/constants/theme';
 import { useRouteStops } from '@/hooks/use-route-stops';
 import { useSettings } from '@/hooks/use-settings';
 import { useStopNames } from '@/hooks/use-stop-names';
+import { useTtcOfflineStatus } from '@/hooks/use-ttc-offline';
 import { BUS_COLORS, StopInfo } from '@/services/ttc';
+import {
+  ROUTE_POLYLINES_CACHE_TTL,
+  ROUTE_STOPS_CACHE_TTL,
+  SCHEDULE_CACHE_TTL,
+  STOP_NAMES_CACHE_TTL,
+} from '@/services/ttc-offline';
 
 const C = {
   bg: '#09090B',
@@ -33,6 +40,39 @@ const C = {
 } as const;
 
 const MONO = Platform.select({ android: 'monospace', ios: 'Menlo', default: 'monospace' });
+
+function formatTtl(ms: number) {
+  const hours = Math.round(ms / (60 * 60 * 1000));
+  if (hours < 24) return `${hours} h`;
+  const days = Math.round(hours / 24);
+  return `${days} d`;
+}
+
+function formatLastSync(timestamp: number | null) {
+  if (!timestamp) return 'Not yet';
+  return new Date(timestamp).toLocaleString('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function formatOfflineStatus(status: ReturnType<typeof useTtcOfflineStatus>) {
+  if (status.status === 'warming') {
+    return `Syncing ${status.completedSteps}/${status.totalSteps}`;
+  }
+
+  if (status.status === 'hydrating') {
+    return 'Loading saved data';
+  }
+
+  if (status.availableDatasets === status.totalDatasets) {
+    return 'Ready';
+  }
+
+  return `Partial ${status.availableDatasets}/${status.totalDatasets}`;
+}
 
 // ── Stop picker modal ─────────────────────────────────────────────────────────
 
@@ -195,6 +235,7 @@ export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const { settings, toggleKojoriFavorite, toggleTbilisiFavorite } = useSettings();
   const stopNames = useStopNames();
+  const offlineStatus = useTtcOfflineStatus();
 
   const [modal, setModal] = useState<'kojori' | 'tbilisi' | null>(null);
 
@@ -260,14 +301,52 @@ export default function SettingsScreen() {
           </View>
           <View style={styles.itemDivider} />
           <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Schedule cache</Text>
-            <Text style={styles.infoValue}>12 h</Text>
+            <Text style={styles.infoLabel}>Offline cache</Text>
+            <Text style={styles.infoValue}>{formatOfflineStatus(offlineStatus)}</Text>
+          </View>
+          <View style={styles.itemDivider} />
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>Saved datasets</Text>
+            <Text style={styles.infoValue}>
+              {offlineStatus.availableDatasets}/{offlineStatus.totalDatasets}
+            </Text>
+          </View>
+          <View style={styles.itemDivider} />
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>Last offline sync</Text>
+            <Text style={styles.infoValue}>{formatLastSync(offlineStatus.lastSyncAt)}</Text>
+          </View>
+          <View style={styles.itemDivider} />
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>Timetables</Text>
+            <Text style={styles.infoValue}>{formatTtl(SCHEDULE_CACHE_TTL)}</Text>
+          </View>
+          <View style={styles.itemDivider} />
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>Stops + names</Text>
+            <Text style={styles.infoValue}>
+              {formatTtl(Math.max(ROUTE_STOPS_CACHE_TTL, STOP_NAMES_CACHE_TTL))}
+            </Text>
+          </View>
+          <View style={styles.itemDivider} />
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>Polylines</Text>
+            <Text style={styles.infoValue}>{formatTtl(ROUTE_POLYLINES_CACHE_TTL)}</Text>
           </View>
           <View style={styles.itemDivider} />
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>Real-time refresh</Text>
             <Text style={styles.infoValue}>Every 30 s</Text>
           </View>
+          {offlineStatus.error ? (
+            <>
+              <View style={styles.itemDivider} />
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Offline sync note</Text>
+                <Text style={[styles.infoValue, styles.infoValueWrap]}>{offlineStatus.error}</Text>
+              </View>
+            </>
+          ) : null}
         </View>
       </ScrollView>
 
@@ -323,9 +402,10 @@ const styles = StyleSheet.create({
 
   itemDivider: { height: 1, backgroundColor: C.border, marginLeft: 16 },
 
-  infoRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 18, paddingVertical: 14 },
+  infoRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 18, paddingVertical: 14, gap: 12 },
   infoLabel: { color: C.textDim, fontSize: 14, fontWeight: '500' },
   infoValue: { color: C.text, fontSize: 14, fontWeight: '500' },
+  infoValueWrap: { flex: 1, textAlign: 'right' },
   infoTags: { flexDirection: 'row', gap: 6 },
   miniTag: { borderWidth: 1.5, borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2 },
   miniTagText: { fontSize: 12, fontWeight: '700' },
