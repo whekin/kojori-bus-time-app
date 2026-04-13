@@ -491,7 +491,9 @@ export function computeUpcomingDepartures(
       // Wrap only clearly next-day trips; slightly past departures should disappear.
       let minsUntil = mins - nowMins;
       if (minsUntil < -midnightWrapThresholdMins) minsUntil += 24 * 60;
-      if (minsUntil < 0 || minsUntil > horizonMins) continue;
+      // Allow up to 15 min past scheduled time — a late bus can still be coming;
+      // mergeArrivalsIntoSchedule will drop unmatched past departures.
+      if (minsUntil < -15 || minsUntil > horizonMins) continue;
       result.push({ bus, time: formatTime(mins), minsUntil });
     }
   }
@@ -517,7 +519,7 @@ export function mergeArrivalsIntoSchedule(
   return departures
     .map(dep => {
       const match = arrivals.find(
-        a => a.shortName === dep.bus && Math.abs(a.realtimeArrivalMinutes - dep.minsUntil) <= 8,
+        a => a.shortName === dep.bus && Math.abs(a.realtimeArrivalMinutes - dep.minsUntil) <= 20,
       );
       if (!match) return dep;
       if (!match.realtime) {
