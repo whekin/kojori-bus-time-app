@@ -2,11 +2,12 @@
   <application>
     <receiver
       android:name="expo.modules.kojoriwidget.KojoriBusWidgetProvider"
-      android:exported="false">
+      android:exported="true">
       <intent-filter>
         <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
         <action android:name="expo.modules.kojoriwidget.SET_DIRECTION" />
         <action android:name="expo.modules.kojoriwidget.REFRESH" />
+        <action android:name="expo.modules.kojoriwidget.TICK" />
       </intent-filter>
       <meta-data
         android:name="android.appwidget.provider"

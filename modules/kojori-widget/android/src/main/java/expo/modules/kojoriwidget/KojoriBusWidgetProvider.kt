@@ -1,5 +1,6 @@
 package expo.modules.kojoriwidget
 
+import android.app.AlarmManager
 import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
@@ -8,6 +9,7 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Color
 import android.net.Uri
+import android.os.SystemClock
 import android.view.View
 import android.widget.RemoteViews
 import androidx.core.content.ContextCompat
@@ -19,11 +21,26 @@ class KojoriBusWidgetProvider : AppWidgetProvider() {
 
     when (intent.action) {
       ACTION_SET_DIRECTION -> {
+        if (!isTrustedWidgetAction(context, intent)) return
         val nextDirection = intent.getStringExtra(EXTRA_DIRECTION) ?: return
         WidgetPrefs.setDirection(context, nextDirection)
         refreshAll(context)
       }
-      ACTION_REFRESH -> refreshAll(context)
+      ACTION_REFRESH -> {
+        if (!isTrustedWidgetAction(context, intent)) return
+        WidgetPrefs.setRefreshingUntil(context, System.currentTimeMillis() + REFRESH_ANIMATION_MS)
+        scheduleRefreshAnimationClear(context)
+        refreshAll(context)
+      }
+      ACTION_TICK -> {
+        if (!isTrustedWidgetAction(context, intent)) return
+        refreshAll(context)
+      }
+      ACTION_CLEAR_REFRESH_ANIMATION -> {
+        if (!isTrustedWidgetAction(context, intent)) return
+        WidgetPrefs.clearRefreshing(context)
+        refreshAll(context)
+      }
     }
   }
 
@@ -32,9 +49,20 @@ class KojoriBusWidgetProvider : AppWidgetProvider() {
     appWidgetManager: AppWidgetManager,
     appWidgetIds: IntArray,
   ) {
+    scheduleMinuteTick(context)
     appWidgetIds.forEach { appWidgetId ->
       updateWidget(context, appWidgetManager, appWidgetId)
     }
+  }
+
+  override fun onEnabled(context: Context) {
+    super.onEnabled(context)
+    scheduleMinuteTick(context)
+  }
+
+  override fun onDisabled(context: Context) {
+    super.onDisabled(context)
+    cancelMinuteTick(context)
   }
 
   override fun onAppWidgetOptionsChanged(
@@ -50,7 +78,14 @@ class KojoriBusWidgetProvider : AppWidgetProvider() {
   companion object {
     private const val ACTION_SET_DIRECTION = "expo.modules.kojoriwidget.SET_DIRECTION"
     private const val ACTION_REFRESH = "expo.modules.kojoriwidget.REFRESH"
+    private const val ACTION_TICK = "expo.modules.kojoriwidget.TICK"
+    private const val ACTION_CLEAR_REFRESH_ANIMATION = "expo.modules.kojoriwidget.CLEAR_REFRESH_ANIMATION"
     private const val EXTRA_DIRECTION = "direction"
+    private const val EXTRA_ACTION_TOKEN = "action_token"
+    private const val TICK_INTERVAL_MS = 60_000L
+    private const val TICK_REQUEST_CODE = 9999
+    private const val CLEAR_REFRESH_REQUEST_CODE = 10000
+    private const val REFRESH_ANIMATION_MS = 1800L
 
     private data class WidgetPalette(
       val text: Int,
@@ -70,6 +105,14 @@ class KojoriBusWidgetProvider : AppWidgetProvider() {
       }
     }
 
+    private const val NARROW_WIDTH_THRESHOLD_DP = 180
+
+    private fun isNarrow(appWidgetManager: AppWidgetManager, appWidgetId: Int): Boolean {
+      val options = appWidgetManager.getAppWidgetOptions(appWidgetId)
+      val minWidth = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 0)
+      return minWidth in 1 until NARROW_WIDTH_THRESHOLD_DP
+    }
+
     private fun updateWidget(
       context: Context,
       appWidgetManager: AppWidgetManager,
@@ -80,9 +123,11 @@ class KojoriBusWidgetProvider : AppWidgetProvider() {
       val stateJson = WidgetPrefs.getStateJson(context)
       val root = stateJson?.let { runCatching { JSONObject(it) }.getOrNull() }
       val palette = readPalette(context, root)
+      val narrow = isNarrow(appWidgetManager, appWidgetId)
+      val isRefreshing = WidgetPrefs.getRefreshingUntil(context) > System.currentTimeMillis()
 
-      bindDirectionButtons(views, appWidgetId, currentDirection, context, palette)
-      bindRefreshButton(views, appWidgetId, context, palette)
+      bindDirectionButtons(views, appWidgetId, currentDirection, context, palette, narrow)
+      bindRefreshButton(views, appWidgetId, context, palette, isRefreshing)
 
       val listIntent = Intent(context, WidgetListService::class.java).apply {
         putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
@@ -140,20 +185,30 @@ class KojoriBusWidgetProvider : AppWidgetProvider() {
     private fun bindDirectionButtons(
       views: RemoteViews, appWidgetId: Int,
       currentDirection: String, context: Context, palette: WidgetPalette,
+      narrow: Boolean,
     ) {
-      styleDirectionButton(views, R.id.widget_toggle_kojori, "→ Kojori",
-        currentDirection == "kojori", palette.route380, palette.textDim)
-      styleDirectionButton(views, R.id.widget_toggle_tbilisi, "→ Tbilisi",
-        currentDirection == "tbilisi", palette.route316, palette.textDim)
+      // Toggle visibility of horizontal vs vertical container
+      views.setViewVisibility(R.id.widget_toggle_row_h, if (narrow) View.GONE else View.VISIBLE)
+      views.setViewVisibility(R.id.widget_toggle_row_v, if (narrow) View.VISIBLE else View.GONE)
 
-      views.setOnClickPendingIntent(
-        R.id.widget_toggle_kojori,
-        directionPendingIntent(context, appWidgetId, "kojori"),
-      )
-      views.setOnClickPendingIntent(
-        R.id.widget_toggle_tbilisi,
-        directionPendingIntent(context, appWidgetId, "tbilisi"),
-      )
+      val kojoriPI = directionPendingIntent(context, appWidgetId, "kojori")
+      val tbilisiPI = directionPendingIntent(context, appWidgetId, "tbilisi")
+
+      // Horizontal buttons
+      styleDirectionButton(views, R.id.widget_toggle_kojori, "Kojori",
+        currentDirection == "kojori", palette.route380, palette.textDim)
+      styleDirectionButton(views, R.id.widget_toggle_tbilisi, "Tbilisi",
+        currentDirection == "tbilisi", palette.route316, palette.textDim)
+      views.setOnClickPendingIntent(R.id.widget_toggle_kojori, kojoriPI)
+      views.setOnClickPendingIntent(R.id.widget_toggle_tbilisi, tbilisiPI)
+
+      // Vertical buttons
+      styleDirectionButton(views, R.id.widget_toggle_kojori_v, "→ Kojori",
+        currentDirection == "kojori", palette.route380, palette.textDim)
+      styleDirectionButton(views, R.id.widget_toggle_tbilisi_v, "→ Tbilisi",
+        currentDirection == "tbilisi", palette.route316, palette.textDim)
+      views.setOnClickPendingIntent(R.id.widget_toggle_kojori_v, kojoriPI)
+      views.setOnClickPendingIntent(R.id.widget_toggle_tbilisi_v, tbilisiPI)
     }
 
     private fun styleDirectionButton(
@@ -166,11 +221,14 @@ class KojoriBusWidgetProvider : AppWidgetProvider() {
     }
 
     private fun bindRefreshButton(
-      views: RemoteViews, appWidgetId: Int, context: Context, palette: WidgetPalette,
+      views: RemoteViews, appWidgetId: Int, context: Context, palette: WidgetPalette, isRefreshing: Boolean,
     ) {
       views.setTextColor(R.id.widget_refresh, palette.textDim)
+      views.setViewVisibility(R.id.widget_refresh, if (isRefreshing) View.GONE else View.VISIBLE)
+      views.setViewVisibility(R.id.widget_refresh_spinner, if (isRefreshing) View.VISIBLE else View.GONE)
       val intent = Intent(context, KojoriBusWidgetProvider::class.java).apply {
         action = ACTION_REFRESH
+        putExtra(EXTRA_ACTION_TOKEN, WidgetPrefs.getActionToken(context))
       }
       val pendingIntent = PendingIntent.getBroadcast(
         context, appWidgetId + 300, intent,
@@ -216,11 +274,63 @@ class KojoriBusWidgetProvider : AppWidgetProvider() {
         action = ACTION_SET_DIRECTION
         putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
         putExtra(EXTRA_DIRECTION, direction)
+        putExtra(EXTRA_ACTION_TOKEN, WidgetPrefs.getActionToken(context))
       }
       return PendingIntent.getBroadcast(
         context, appWidgetId + if (direction == "kojori") 100 else 200,
         intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
       )
+    }
+
+    private fun isTrustedWidgetAction(context: Context, intent: Intent): Boolean {
+      return intent.getStringExtra(EXTRA_ACTION_TOKEN) == WidgetPrefs.getActionToken(context)
+    }
+
+    private fun tickPendingIntent(context: Context): PendingIntent {
+      val intent = Intent(context, KojoriBusWidgetProvider::class.java).apply {
+        action = ACTION_TICK
+        putExtra(EXTRA_ACTION_TOKEN, WidgetPrefs.getActionToken(context))
+      }
+      return PendingIntent.getBroadcast(
+        context, TICK_REQUEST_CODE, intent,
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+      )
+    }
+
+    private fun clearRefreshAnimationPendingIntent(context: Context): PendingIntent {
+      val intent = Intent(context, KojoriBusWidgetProvider::class.java).apply {
+        action = ACTION_CLEAR_REFRESH_ANIMATION
+        putExtra(EXTRA_ACTION_TOKEN, WidgetPrefs.getActionToken(context))
+      }
+      return PendingIntent.getBroadcast(
+        context, CLEAR_REFRESH_REQUEST_CODE, intent,
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+      )
+    }
+
+    private fun scheduleMinuteTick(context: Context) {
+      val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+      alarmManager.setInexactRepeating(
+        AlarmManager.ELAPSED_REALTIME,
+        SystemClock.elapsedRealtime() + TICK_INTERVAL_MS,
+        TICK_INTERVAL_MS,
+        tickPendingIntent(context),
+      )
+    }
+
+    private fun scheduleRefreshAnimationClear(context: Context) {
+      val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+      alarmManager.setExact(
+        AlarmManager.ELAPSED_REALTIME,
+        SystemClock.elapsedRealtime() + REFRESH_ANIMATION_MS,
+        clearRefreshAnimationPendingIntent(context),
+      )
+    }
+
+    private fun cancelMinuteTick(context: Context) {
+      val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+      alarmManager.cancel(tickPendingIntent(context))
+      alarmManager.cancel(clearRefreshAnimationPendingIntent(context))
     }
 
     private fun readPalette(context: Context, root: JSONObject?): WidgetPalette {

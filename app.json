@@ -19,10 +19,12 @@
         "android.permission.ACCESS_COARSE_LOCATION"
       ],
       "blockedPermissions": [
+        "android.permission.ACCESS_BACKGROUND_LOCATION",
         "android.permission.SYSTEM_ALERT_WINDOW",
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.WRITE_EXTERNAL_STORAGE"
       ],
+      "allowBackup": false,
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundColor": "#09090B",

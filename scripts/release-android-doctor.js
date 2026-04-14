@@ -50,6 +50,7 @@ const requiredEnv = ['GOOGLE_MAPS_API_KEY_ANDROID'];
 const requiredFiles = [
   'app.json',
   'eas.json',
+  'android/app/src/main/AndroidManifest.xml',
   'release/google-play/README.md',
   'release/google-play/store-listing.md',
   'release/google-play/data-safety.md',
@@ -98,8 +99,46 @@ try {
     fail(`Unexpected Android package name: ${expo.android?.package}`);
     hasErrors = true;
   }
+
+  const permissions = expo.android?.permissions ?? [];
+  const blockedPermissions = expo.android?.blockedPermissions ?? [];
+
+  if (permissions.includes('android.permission.ACCESS_COARSE_LOCATION') && permissions.includes('android.permission.ACCESS_FINE_LOCATION')) {
+    pass('Android permissions include optional location access');
+  } else {
+    fail('Android permissions must include coarse and fine location access');
+    hasErrors = true;
+  }
+
+  if (blockedPermissions.includes('android.permission.SYSTEM_ALERT_WINDOW') && blockedPermissions.includes('android.permission.READ_EXTERNAL_STORAGE') && blockedPermissions.includes('android.permission.WRITE_EXTERNAL_STORAGE')) {
+    pass('Android blocked permissions exclude unnecessary storage and overlay access');
+  } else {
+    fail('Android blocked permissions are missing expected exclusions');
+    hasErrors = true;
+  }
 } catch (error) {
   fail(`Unable to read app.json: ${error.message}`);
+  hasErrors = true;
+}
+
+try {
+  const manifest = fs.readFileSync(path.join(root, 'android/app/src/main/AndroidManifest.xml'), 'utf8');
+
+  if (manifest.includes('android:allowBackup="false"')) {
+    pass('Android manifest disables app backup');
+  } else {
+    fail('Android manifest should disable app backup');
+    hasErrors = true;
+  }
+
+  if (manifest.includes('com.google.android.geo.API_KEY') && manifest.includes('android.permission.INTERNET')) {
+    pass('Android manifest includes Google Maps metadata and internet permission');
+  } else {
+    fail('Android manifest is missing required Google Maps metadata or internet permission');
+    hasErrors = true;
+  }
+} catch (error) {
+  fail(`Unable to read Android manifest: ${error.message}`);
   hasErrors = true;
 }
 

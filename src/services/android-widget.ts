@@ -27,13 +27,14 @@ interface WidgetSyncSettings {
 interface WidgetItemPayload {
   bus: BusLine;
   time: string;
-  departureMins: number;
+  minsUntilAtSync: number;
 }
 
 interface WidgetDirectionPayload {
   mode: WidgetMode;
   stopId: string;
   stopLabel: string;
+  syncedAtEpochMs: number;
   status: 'ready' | 'empty' | 'error';
   message: string;
   items: WidgetItemPayload[];
@@ -51,14 +52,13 @@ interface WidgetStatePayload {
   directions: Record<WidgetMode, WidgetDirectionPayload>;
 }
 
-function mapWidgetItems(departures: Departure[], now: Date): WidgetItemPayload[] {
-  const nowMins = now.getHours() * 60 + now.getMinutes();
+function mapWidgetItems(departures: Departure[]): WidgetItemPayload[] {
   return departures
     .filter(dep => dep.minsUntil >= 0)
     .map(dep => ({
       bus: dep.bus,
       time: dep.time,
-      departureMins: nowMins + dep.minsUntil,
+      minsUntilAtSync: dep.minsUntil,
     }));
 }
 
@@ -95,6 +95,7 @@ async function buildDirectionPayload(
 ): Promise<WidgetDirectionPayload> {
   const direction = mode === 'kojori' ? 'toKojori' : 'toTbilisi';
   const stopLabel = await loadStopLabel(stopId);
+  const syncedAtEpochMs = now.getTime();
 
   try {
     const [schedule380, schedule316] = await Promise.all([
@@ -103,13 +104,14 @@ async function buildDirectionPayload(
     ]);
 
     const rawDepartures = computeUpcomingDepartures(schedule380, schedule316, stopId, 24 * 60, now);
-    const items = mapWidgetItems(rawDepartures, now);
+    const items = mapWidgetItems(rawDepartures);
 
     if (items.length === 0) {
       return {
         mode,
         stopId,
         stopLabel,
+        syncedAtEpochMs,
         status: 'empty',
         message: 'No departures soon',
         items: [],
@@ -120,6 +122,7 @@ async function buildDirectionPayload(
       mode,
       stopId,
       stopLabel,
+      syncedAtEpochMs,
       status: 'ready',
       message: '',
       items,
@@ -129,6 +132,7 @@ async function buildDirectionPayload(
       mode,
       stopId,
       stopLabel,
+      syncedAtEpochMs,
       status: 'error',
       message: 'Open app to refresh',
       items: [],

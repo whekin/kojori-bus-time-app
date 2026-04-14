@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Linking, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View, ViewStyle } from 'react-native';
+import { ActivityIndicator, AppState, Linking, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View, ViewStyle } from 'react-native';
 import { useQueryClient } from '@tanstack/react-query';
 import { useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -565,9 +565,14 @@ export default function HomeScreen() {
       }, 60_000);
     }, 60_000 - (Date.now() % 60_000));
 
+    const sub = AppState.addEventListener('change', state => {
+      if (state === 'active') setNow(new Date());
+    });
+
     return () => {
       clearTimeout(timeoutId);
       if (intervalId) clearInterval(intervalId);
+      sub.remove();
     };
   }, []);
 

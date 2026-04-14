@@ -2,37 +2,50 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
   android:layout_width="match_parent"
   android:layout_height="wrap_content"
-  android:gravity="center_vertical"
-  android:orientation="horizontal"
-  android:paddingVertical="4dp">
+  android:orientation="vertical">
 
-  <TextView
-    android:id="@+id/item_bus"
-    android:layout_width="wrap_content"
+  <LinearLayout
+    android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:minWidth="42dp"
-    android:background="@drawable/widget_bus_chip"
-    android:gravity="center"
-    android:paddingHorizontal="8dp"
-    android:paddingVertical="4dp"
-    android:textColor="@color/widget_text"
-    android:textSize="13sp"
-    android:textStyle="bold" />
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:paddingVertical="8dp"
+    android:paddingHorizontal="2dp">
 
-  <TextView
-    android:id="@+id/item_time"
-    android:layout_marginStart="6dp"
-    android:layout_width="0dp"
-    android:layout_height="wrap_content"
-    android:layout_weight="1"
-    android:textColor="@color/widget_text"
-    android:textSize="16sp"
-    android:textStyle="bold" />
+    <TextView
+      android:id="@+id/item_bus"
+      android:layout_width="wrap_content"
+      android:layout_height="wrap_content"
+      android:minWidth="44dp"
+      android:background="@drawable/widget_bus_chip"
+      android:gravity="center"
+      android:paddingHorizontal="8dp"
+      android:paddingVertical="5dp"
+      android:textColor="@color/widget_text"
+      android:textSize="13sp"
+      android:textStyle="bold"
+      android:fontFamily="monospace" />
 
-  <TextView
-    android:id="@+id/item_countdown"
-    android:layout_width="wrap_content"
-    android:layout_height="wrap_content"
-    android:textColor="@color/widget_text_dim"
-    android:textSize="12sp" />
+    <TextView
+      android:id="@+id/item_time"
+      android:layout_marginStart="10dp"
+      android:layout_width="0dp"
+      android:layout_height="wrap_content"
+      android:layout_weight="1"
+      android:gravity="end"
+      android:textColor="@color/widget_text"
+      android:textSize="18sp"
+      android:textStyle="bold"
+      android:fontFamily="monospace"
+      android:letterSpacing="0.04" />
+  </LinearLayout>
+
+  <ImageView
+    android:id="@+id/item_divider"
+    android:layout_width="match_parent"
+    android:layout_height="1dp"
+    android:layout_marginStart="54dp"
+    android:background="@color/widget_border"
+    android:importantForAccessibility="no" />
+
 </LinearLayout>

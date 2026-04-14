@@ -65,6 +65,12 @@ const PALETTE_IDS = Object.keys(APP_PALETTES) as AppPaletteId[];
 const PALETTE_CARD_WIDTH = 250;
 const PALETTE_CARD_GAP = 12;
 const PROJECT_GITHUB_URL = 'https://github.com/whekin/kojori-bus-time-app';
+const LEGAL_BASE_URL = 'https://github.com/whekin/kojori-bus-time-app/blob/main/release/google-play';
+const LEGAL_URLS = {
+  privacyPolicy: Constants.expoConfig?.extra?.legal?.privacyPolicyUrl ?? `${LEGAL_BASE_URL}/privacy-policy.md`,
+  support: Constants.expoConfig?.extra?.legal?.supportUrl ?? 'https://github.com/whekin/kojori-bus-time-app/issues',
+  termsOfService: Constants.expoConfig?.extra?.legal?.termsOfServiceUrl ?? `${LEGAL_BASE_URL}/terms-of-service.md`,
+} as const;
 const LEGAL_DOC_MODULES = {
   privacy: require('../../assets/legal/privacy-policy.md'),
   terms: require('../../assets/legal/terms-of-service.md'),
@@ -804,8 +810,20 @@ export default function SettingsScreen() {
             <Text style={[styles.manageBtnText, { color: colors.text }]}>Privacy Policy</Text>
           </Pressable>
           <View style={styles.itemDivider} />
+          <Pressable style={styles.manageBtn} onPress={() => Linking.openURL(LEGAL_URLS.privacyPolicy)}>
+            <Text style={[styles.manageBtnText, { color: colors.primary }]}>Open privacy policy online</Text>
+          </Pressable>
+          <View style={styles.itemDivider} />
           <Pressable style={styles.manageBtn} onPress={() => setLegalModal('terms')}>
             <Text style={[styles.manageBtnText, { color: colors.text }]}>Terms of Service</Text>
+          </Pressable>
+          <View style={styles.itemDivider} />
+          <Pressable style={styles.manageBtn} onPress={() => Linking.openURL(LEGAL_URLS.termsOfService)}>
+            <Text style={[styles.manageBtnText, { color: colors.primary }]}>Open terms online</Text>
+          </Pressable>
+          <View style={styles.itemDivider} />
+          <Pressable style={styles.manageBtn} onPress={() => Linking.openURL(LEGAL_URLS.support)}>
+            <Text style={[styles.manageBtnText, { color: colors.primary }]}>Project support</Text>
           </Pressable>
           <View style={styles.itemDivider} />
           <Pressable style={styles.manageBtn} onPress={() => Linking.openURL(PROJECT_GITHUB_URL)}>

@@ -468,9 +468,9 @@ export function computeUpcomingDepartures(
       // Wrap only clearly next-day trips; slightly past departures should disappear.
       let minsUntil = mins - nowMins;
       if (minsUntil < -midnightWrapThresholdMins) minsUntil += 24 * 60;
-      // Allow up to 15 min past scheduled time — a late bus can still be coming;
+      // Allow up to 5 min past scheduled time — a late bus can still be coming;
       // mergeArrivalsIntoSchedule will drop unmatched past departures.
-      if (minsUntil < -15 || minsUntil > horizonMins) continue;
+      if (minsUntil < -5 || minsUntil > horizonMins) continue;
       result.push({ bus, time: formatTime(mins), minsUntil });
     }
   }
@@ -495,11 +495,19 @@ export function mergeArrivalsIntoSchedule(
 
   return departures
     .map(dep => {
-      const match = arrivals.find(
-        a => a.shortName === dep.bus && Math.abs(a.realtimeArrivalMinutes - dep.minsUntil) <= 20,
-      );
-      if (!match) return dep;
-      if (!match.realtime) {
+      // Only match arrivals whose adjusted ETA is still plausibly close to this departure
+      const adjustedMatch = arrivals.find(a => {
+        if (a.shortName !== dep.bus) return false;
+        const adjustedEta = a.realtimeArrivalMinutes - elapsedLiveMinutes;
+        return Math.abs(adjustedEta - dep.minsUntil) <= 20;
+      });
+      if (!adjustedMatch) {
+        // No live data — drop if already past scheduled time
+        if (dep.minsUntil < 0) return null;
+        return dep;
+      }
+      if (!adjustedMatch.realtime) {
+        if (dep.minsUntil < 0) return null;
         return {
           ...dep,
           live: false,
@@ -507,7 +515,7 @@ export function mergeArrivalsIntoSchedule(
         };
       }
 
-      const liveMinutes = Math.max(0, match.realtimeArrivalMinutes - elapsedLiveMinutes);
+      const liveMinutes = Math.max(0, adjustedMatch.realtimeArrivalMinutes - elapsedLiveMinutes);
 
       return {
         ...dep,
@@ -519,6 +527,6 @@ export function mergeArrivalsIntoSchedule(
         minsUntil: liveMinutes,
       };
     })
-    .filter(dep => dep.minsUntil >= 0)
+    .filter((dep): dep is Departure => dep != null && dep.minsUntil >= 0)
     .sort((a, b) => a.minsUntil - b.minsUntil);
 }
