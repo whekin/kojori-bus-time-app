@@ -1,11 +1,12 @@
 import { useSyncExternalStore } from 'react';
 
-export type TtcHealthStatus = 'healthy' | 'degraded' | 'offline';
+export type TtcHealthStatus = 'healthy' | 'degraded' | 'offline' | 'rate-limited';
 
 interface TtcHealthState {
   lastSuccessAt: number | null;
   lastFailureAt: number | null;
   consecutiveFailures: number;
+  isRateLimited: boolean;
 }
 
 interface TtcHealthSnapshot extends TtcHealthState {
@@ -18,6 +19,7 @@ const state: TtcHealthState = {
   lastSuccessAt: null,
   lastFailureAt: null,
   consecutiveFailures: 0,
+  isRateLimited: false,
 };
 
 const OFFLINE_THRESHOLD_MS = 2 * 60 * 1000;
@@ -27,6 +29,7 @@ let currentSnapshot: TtcHealthSnapshot = {
   lastSuccessAt: null,
   lastFailureAt: null,
   consecutiveFailures: 0,
+  isRateLimited: false,
 };
 
 function emit() {
@@ -39,6 +42,10 @@ function subscribe(listener: () => void) {
 }
 
 function deriveStatus(now: number): TtcHealthStatus {
+  if (state.isRateLimited) {
+    return 'rate-limited';
+  }
+
   const hasFailure = state.lastFailureAt !== null;
   const hasRecentSuccess = state.lastSuccessAt !== null && now - state.lastSuccessAt < OFFLINE_THRESHOLD_MS;
 
@@ -58,6 +65,7 @@ function updateSnapshot(now = Date.now()) {
     lastSuccessAt: state.lastSuccessAt,
     lastFailureAt: state.lastFailureAt,
     consecutiveFailures: state.consecutiveFailures,
+    isRateLimited: state.isRateLimited,
   };
 
   const changed =
@@ -106,13 +114,15 @@ function getServerSnapshot() {
 export function reportTtcSuccess() {
   state.lastSuccessAt = Date.now();
   state.consecutiveFailures = 0;
+  state.isRateLimited = false;
   updateSnapshot(state.lastSuccessAt);
   scheduleStatusTransition();
 }
 
-export function reportTtcFailure() {
+export function reportTtcFailure(isRateLimited = false) {
   state.lastFailureAt = Date.now();
   state.consecutiveFailures += 1;
+  state.isRateLimited = isRateLimited;
   updateSnapshot(state.lastFailureAt);
   scheduleStatusTransition();
 }

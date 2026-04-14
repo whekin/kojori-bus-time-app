@@ -146,6 +146,8 @@ export type BusLine = keyof typeof ROUTES;
 export interface StopInfo {
   id: string;
   label: string;
+  lat?: number;
+  lon?: number;
 }
 
 /**
@@ -155,7 +157,7 @@ export interface StopInfo {
  */
 export const ALL_TBILISI_STOPS: StopInfo[] = [
   { id: '1:3932', label: 'Nikoloz Baratashvili Street' }, // starting stop — most accurate schedule
-  { id: '1:853',  label: 'Sulkhan-Saba Street' },
+  { id: '1:853', label: 'Sulkhan-Saba Street' },
 ];
 
 export const ALL_KOJORI_STOPS: StopInfo[] = [
@@ -166,7 +168,7 @@ export const ALL_KOJORI_STOPS: StopInfo[] = [
 
 /** Default favourite stop IDs shown as chips on home screen */
 export const DEFAULT_TBILISI_FAVORITES = ALL_TBILISI_STOPS.map(s => s.id);
-export const DEFAULT_KOJORI_FAVORITES  = ALL_KOJORI_STOPS.map(s => s.id);
+export const DEFAULT_KOJORI_FAVORITES = ALL_KOJORI_STOPS.map(s => s.id);
 
 // Convenience: look up a StopInfo by ID from the full known set
 export function findStop(id: string): StopInfo | undefined {
@@ -194,11 +196,17 @@ export async function fetchArrivalTimes(stopId: string): Promise<ArrivalTime[]> 
       `${BASE}/v2/stops/${stopId}/arrival-times?locale=en&ignoreScheduledArrivalTimes=false`,
       { headers },
     );
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    if (!res.ok) {
+      const isRateLimited = res.status === 520;
+      reportTtcFailure(isRateLimited);
+      throw new Error(`HTTP ${res.status}`);
+    }
     reportTtcSuccess();
     return res.json();
   } catch (error) {
-    reportTtcFailure();
+    if (error instanceof Error && !error.message.startsWith('HTTP')) {
+      reportTtcFailure();
+    }
     throw error;
   }
 }
@@ -212,11 +220,17 @@ export async function fetchSchedule(
       `${BASE}/v3/routes/${routeId}/schedule?patternSuffix=${patternSuffix}&locale=en`,
       { headers },
     );
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    if (!res.ok) {
+      const isRateLimited = res.status === 520;
+      reportTtcFailure(isRateLimited);
+      throw new Error(`HTTP ${res.status}`);
+    }
     reportTtcSuccess();
     return res.json();
   } catch (error) {
-    reportTtcFailure();
+    if (error instanceof Error && !error.message.startsWith('HTTP')) {
+      reportTtcFailure();
+    }
     throw error;
   }
 }
@@ -225,12 +239,18 @@ export async function fetchSchedule(
 export async function fetchStopDetails(stopId: string): Promise<{ id: string; name: string }> {
   try {
     const res = await fetch(`${BASE}/v2/stops/${stopId}?locale=en`, { headers });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    if (!res.ok) {
+      const isRateLimited = res.status === 520;
+      reportTtcFailure(isRateLimited);
+      throw new Error(`HTTP ${res.status}`);
+    }
     const data = await res.json();
     reportTtcSuccess();
     return { id: data.id ?? stopId, name: data.name };
   } catch (error) {
-    reportTtcFailure();
+    if (error instanceof Error && !error.message.startsWith('HTTP')) {
+      reportTtcFailure();
+    }
     throw error;
   }
 }
@@ -242,13 +262,19 @@ export async function fetchRouteStops(routeId: string, patternSuffix: string): P
       `${BASE}/v3/routes/${routeId}/stops-of-patterns?patternSuffixes=${patternSuffix}&locale=en`,
       { headers },
     );
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    // Response: [{ stop: { id, name, ... }, patternSuffixes: [...] }]
-    const raw: { stop: { id: string; name: string } }[] = await res.json();
+    if (!res.ok) {
+      const isRateLimited = res.status === 520;
+      reportTtcFailure(isRateLimited);
+      throw new Error(`HTTP ${res.status}`);
+    }
+    // Response: [{ stop: { id, name, lat, lon, ... }, patternSuffixes: [...] }]
+    const raw: { stop: { id: string; name: string; lat?: number; lon?: number } }[] = await res.json();
     reportTtcSuccess();
-    return raw.map(s => ({ id: s.stop.id, label: s.stop.name }));
+    return raw.map(s => ({ id: s.stop.id, label: s.stop.name, lat: s.stop.lat, lon: s.stop.lon }));
   } catch (error) {
-    reportTtcFailure();
+    if (error instanceof Error && !error.message.startsWith('HTTP')) {
+      reportTtcFailure();
+    }
     throw error;
   }
 }
@@ -262,7 +288,11 @@ export async function fetchRoutePolyline(
       `${BASE}/v3/routes/${routeId}/polylines?patternSuffixes=${patternSuffix}`,
       { headers },
     );
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    if (!res.ok) {
+      const isRateLimited = res.status === 520;
+      reportTtcFailure(isRateLimited);
+      throw new Error(`HTTP ${res.status}`);
+    }
 
     const raw: Record<string, { encodedValue?: string }> = await res.json();
     reportTtcSuccess();
@@ -277,7 +307,9 @@ export async function fetchRoutePolyline(
       source: 'google-directions',
     };
   } catch (error) {
-    reportTtcFailure();
+    if (error instanceof Error && !error.message.startsWith('HTTP')) {
+      reportTtcFailure();
+    }
     throw error;
   }
 }
@@ -292,7 +324,11 @@ export async function fetchRoutePolylineFromStops(
       `${BASE}/v3/routes/${routeId}/stops-of-patterns?patternSuffixes=${patternSuffix}&locale=en`,
       { headers },
     );
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    if (!res.ok) {
+      const isRateLimited = res.status === 520;
+      reportTtcFailure(isRateLimited);
+      throw new Error(`HTTP ${res.status}`);
+    }
 
     const raw: { stop: { lat?: number; lon?: number } }[] = await res.json();
     reportTtcSuccess();
@@ -314,7 +350,9 @@ export async function fetchRoutePolylineFromStops(
       source: 'stops-fallback',
     };
   } catch (error) {
-    reportTtcFailure();
+    if (error instanceof Error && !error.message.startsWith('HTTP')) {
+      reportTtcFailure();
+    }
     throw error;
   }
 }
@@ -328,11 +366,17 @@ export async function fetchVehiclePositions(
       `${BASE}/v3/routes/${routeId}/positions?patternSuffixes=${patternSuffix}`,
       { headers },
     );
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    if (!res.ok) {
+      const isRateLimited = res.status === 520;
+      reportTtcFailure(isRateLimited);
+      throw new Error(`HTTP ${res.status}`);
+    }
     reportTtcSuccess();
     return res.json();
   } catch (error) {
-    reportTtcFailure();
+    if (error instanceof Error && !error.message.startsWith('HTTP')) {
+      reportTtcFailure();
+    }
     throw error;
   }
 }

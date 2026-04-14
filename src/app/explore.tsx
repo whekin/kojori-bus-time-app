@@ -113,7 +113,9 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
   const subtitle = direction === 'toKojori'
     ? 'Tracking live TTC vehicles heading uphill.'
     : 'Tracking live TTC vehicles heading back into the city.';
-  const serviceNote = ttcStatus === 'offline'
+  const serviceNote = ttcStatus === 'rate-limited'
+    ? 'TTC rate limiter hit. Auto-refresh is slowed down while the map stays available.'
+    : ttcStatus === 'offline'
     ? 'TTC is offline right now. Auto-refresh is slowed down while the map stays available.'
     : ttcStatus === 'degraded'
       ? 'TTC is unstable right now. Vehicle markers may lag until the feed settles.'

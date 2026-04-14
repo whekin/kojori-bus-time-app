@@ -42,12 +42,16 @@ function TtcStatusBannerBase({
 
   if (status === 'healthy') return null;
 
+
   const isOffline = status === 'offline';
-  const accent = isOffline ? C.red : C.amber;
-  const textColor = isOffline ? C.rose : C.sand;
-  const label = isOffline ? 'TTC offline' : 'TTC unstable';
-  const message = isOffline
-    ? 'Can’t reach TTC right now. Showing cached data when available.'
+  const isRateLimited = status === 'rate-limited';
+  const accent = isOffline || isRateLimited ? C.red : C.amber;
+  const textColor = isOffline || isRateLimited ? C.rose : C.sand;
+  const label = isRateLimited ? 'Rate limited' : isOffline ? 'TTC offline' : 'TTC unstable';
+  const message = isRateLimited
+    ? 'TTC rate limiter hit. Requests are being throttled. Showing cached data when available.'
+    : isOffline
+    ? 'Cannot reach TTC right now. Showing cached data when available.'
     : 'TTC requests are failing intermittently. Some data may be stale.';
 
   const freshness = lastSuccessAt
