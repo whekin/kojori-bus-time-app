@@ -1,7 +1,7 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import * as Location from 'expo-location';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Animated, Easing, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import MapView, { Marker, Polyline, type Region } from 'react-native-maps';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -27,6 +27,13 @@ const DEFAULT_REGION: Region = {
   longitude: 44.76,
   latitudeDelta: 0.12,
   longitudeDelta: 0.1,
+};
+
+const MAP_BOUNDS = {
+  latMin: 41.55,
+  latMax: 41.75,
+  lonMin: 44.65,
+  lonMax: 44.87,
 };
 
 type Direction = 'toKojori' | 'toTbilisi';
@@ -72,8 +79,31 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
   }, [mapReady]);
 
   const { data: routeData } = useRoutePolylines(direction);
-  const { data: livePositions = [], refetch } = useVehiclePositions(direction, isActive);
+  const { data: livePositions = [], refetch, isFetching } = useVehiclePositions(direction, isActive);
   const { status: ttcStatus, lastSuccessAt } = useTtcHealth();
+
+  const spinAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (isFetching) {
+      spinAnim.setValue(0);
+      Animated.loop(
+        Animated.timing(spinAnim, {
+          toValue: 1,
+          duration: 800,
+          easing: Easing.linear,
+          useNativeDriver: true,
+        }),
+      ).start();
+    } else {
+      spinAnim.stopAnimation();
+    }
+  }, [isFetching, spinAnim]);
+
+  const spinRotation = spinAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '360deg'],
+  });
 
   const positions = livePositions;
   const routePolylines = routeData?.polylines;
@@ -115,6 +145,28 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
   const showMarkers = useMemo(() => {
     return currentRegion.latitudeDelta < 0.5;
   }, [currentRegion.latitudeDelta]);
+
+  function handleCenterOnBus(bus: '380' | '316') {
+    const busPositions = positions.filter(p => p.bus === bus);
+    if (busPositions.length === 0) return;
+
+    if (busPositions.length === 1) {
+      mapRef.current?.animateToRegion({
+        latitude: busPositions[0].lat,
+        longitude: busPositions[0].lon,
+        latitudeDelta: 0.05,
+        longitudeDelta: 0.04,
+      }, 500);
+    } else {
+      mapRef.current?.fitToCoordinates(
+        busPositions.map(p => ({ latitude: p.lat, longitude: p.lon })),
+        {
+          edgePadding: { top: 100, right: 60, bottom: 160, left: 60 },
+          animated: true,
+        },
+      );
+    }
+  }
 
   useEffect(() => {
     if (!isActive || positions.length === 0) return;
@@ -180,6 +232,24 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
     }
   }
 
+  function handleRegionChange(region: Region) {
+    const clampedRegion = {
+      latitude: Math.max(MAP_BOUNDS.latMin, Math.min(MAP_BOUNDS.latMax, region.latitude)),
+      longitude: Math.max(MAP_BOUNDS.lonMin, Math.min(MAP_BOUNDS.lonMax, region.longitude)),
+      latitudeDelta: region.latitudeDelta,
+      longitudeDelta: region.longitudeDelta,
+    };
+    
+    if (
+      clampedRegion.latitude !== region.latitude ||
+      clampedRegion.longitude !== region.longitude
+    ) {
+      mapRef.current?.animateToRegion(clampedRegion, 300);
+    }
+    
+    setCurrentRegion(clampedRegion);
+  }
+
   return (
     <View style={styles.screen}>
       <MapView
@@ -189,11 +259,17 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
         userInterfaceStyle="dark"
         showsUserLocation={hasUserLocation}
         showsMyLocationButton={false}
+        showsPointsOfInterests={false}
+        showsCompass={false}
+        showsScale={false}
+        showsBuildings={false}
+        showsIndoors={false}
+        showsTraffic={false}
         onMapReady={() => {
           setMapReady(true);
           setMapTimedOut(false);
         }}
-        onRegionChangeComplete={setCurrentRegion}>
+        onRegionChangeComplete={handleRegionChange}>
         {splitPolylines
           ? (['316', '380'] as const).map((bus) => {
               const segments = splitPolylines[bus];
@@ -277,17 +353,25 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
         <View style={styles.legendRow}>
           {(['380', '316'] as const).map(bus => {
             const accent = routeAccent(bus, colors);
+            const count = groupedCounts[bus];
+            const hasActiveBuses = count > 0;
             return (
-              <View key={bus} style={styles.legendChip}>
+              <Pressable 
+                key={bus} 
+                style={[styles.legendChip, hasActiveBuses && styles.legendChipClickable]}
+                onPress={() => hasActiveBuses && handleCenterOnBus(bus)}
+                disabled={!hasActiveBuses}>
                 <View style={[styles.legendDot, { backgroundColor: accent }]} />
                 <Text style={styles.legendLabel}>{bus}</Text>
-                <Text style={styles.legendCount}>{groupedCounts[bus]}</Text>
-              </View>
+                <Text style={styles.legendCount}>{count}</Text>
+              </Pressable>
             );
           })}
           <TtcStatusChip />
-          <Pressable style={styles.refreshChip} onPress={() => refetch()}>
-            <MaterialCommunityIcons name="refresh" size={14} color={C.textDim} />
+          <Pressable style={styles.refreshChip} onPress={() => refetch()} disabled={isFetching}>
+            <Animated.View style={{ transform: [{ rotate: spinRotation }] }}>
+              <MaterialCommunityIcons name="refresh" size={14} color={isFetching ? C.teal : C.textDim} />
+            </Animated.View>
           </Pressable>
         </View>
       </View>
@@ -354,6 +438,10 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(14,17,23,0.85)',
     borderWidth: 1,
     borderColor: C.border,
+    opacity: 0.5,
+  },
+  legendChipClickable: {
+    opacity: 1,
   },
   legendDot: { width: 8, height: 8, borderRadius: 4 },
   legendLabel: { color: C.text, fontSize: 12, fontWeight: '700' },
