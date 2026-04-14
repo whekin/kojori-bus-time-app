@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { DirectionToggle } from '@/components/direction-toggle';
 import { StopSelector } from '@/components/stop-selector';
-import { useTabNav } from '@/components/app-tabs';
+import { useTabNav } from '@/hooks/use-tab-nav';
 import { TtcStatusHeaderBadge } from '@/components/ttc-status-banner';
 import { BottomTabInset, alpha } from '@/constants/theme';
 import { useArrivals } from '@/hooks/use-arrivals';
@@ -234,7 +234,7 @@ function NextCard({
             <View
               style={[
                 styles.nextRouteBadge,
-                { backgroundColor: alpha(busColor, '18'), borderColor: alpha(busColor, '55') },
+                { borderColor: busColor },
               ]}>
               <Text style={[styles.nextRouteBadgeText, { color: busColor, fontFamily: MONO }]}>
                 {dep.bus}
@@ -846,8 +846,8 @@ const styles = StyleSheet.create({
     minWidth: 54,
     paddingHorizontal: 9,
     paddingVertical: 6,
-    borderRadius: 999,
-    borderWidth: 1,
+    borderRadius: 6,
+    borderWidth: 1.5,
     alignItems: 'center',
   },
   nextRouteBadgeText: { fontSize: 14, fontWeight: '800', letterSpacing: 0.8 },
