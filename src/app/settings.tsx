@@ -787,68 +787,76 @@ export default function SettingsScreen() {
               </View>
             </View>
           </View>
-          <View style={styles.itemDivider} />
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Offline cache</Text>
-            <Text style={styles.infoValue}>{formatOfflineStatus(offlineStatus)}</Text>
-          </View>
-          <View style={styles.itemDivider} />
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Saved datasets</Text>
-            <Text style={styles.infoValue}>{offlineStatus.availableDatasets}/{offlineStatus.totalDatasets}</Text>
-          </View>
-          <View style={styles.itemDivider} />
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Last offline sync</Text>
-            <Text style={styles.infoValue}>{formatLastSync(offlineStatus.lastSyncAt)}</Text>
-          </View>
-          <View style={styles.itemDivider} />
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Timetables</Text>
-            <Text style={styles.infoValue}>{formatTtl(SCHEDULE_CACHE_TTL)}</Text>
-          </View>
-          <View style={styles.itemDivider} />
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Stops + names</Text>
-            <Text style={styles.infoValue}>{formatTtl(Math.max(ROUTE_STOPS_CACHE_TTL, STOP_NAMES_CACHE_TTL))}</Text>
-          </View>
-          <View style={styles.itemDivider} />
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Polylines</Text>
-            <Text style={styles.infoValue}>{formatTtl(ROUTE_POLYLINES_CACHE_TTL)}</Text>
-          </View>
-          <View style={styles.itemDivider} />
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Real-time refresh</Text>
-            <Text style={styles.infoValue}>Every 30 s</Text>
-          </View>
-          {offlineStatus.error ? (
+          {settings.debugOptionsUnlocked ? (
             <>
               <View style={styles.itemDivider} />
               <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Offline sync note</Text>
-                <Text style={[styles.infoValue, styles.infoValueWrap]}>{offlineStatus.error}</Text>
+                <Text style={styles.infoLabel}>Offline cache</Text>
+                <Text style={styles.infoValue}>{formatOfflineStatus(offlineStatus)}</Text>
               </View>
+              <View style={styles.itemDivider} />
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Saved datasets</Text>
+                <Text style={styles.infoValue}>{offlineStatus.availableDatasets}/{offlineStatus.totalDatasets}</Text>
+              </View>
+              <View style={styles.itemDivider} />
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Last offline sync</Text>
+                <Text style={styles.infoValue}>{formatLastSync(offlineStatus.lastSyncAt)}</Text>
+              </View>
+              <View style={styles.itemDivider} />
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Timetables</Text>
+                <Text style={styles.infoValue}>{formatTtl(SCHEDULE_CACHE_TTL)}</Text>
+              </View>
+              <View style={styles.itemDivider} />
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Stops + names</Text>
+                <Text style={styles.infoValue}>{formatTtl(Math.max(ROUTE_STOPS_CACHE_TTL, STOP_NAMES_CACHE_TTL))}</Text>
+              </View>
+              <View style={styles.itemDivider} />
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Polylines</Text>
+                <Text style={styles.infoValue}>{formatTtl(ROUTE_POLYLINES_CACHE_TTL)}</Text>
+              </View>
+              <View style={styles.itemDivider} />
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Real-time refresh</Text>
+                <Text style={styles.infoValue}>Every 30 s</Text>
+              </View>
+              {offlineStatus.error ? (
+                <>
+                  <View style={styles.itemDivider} />
+                  <View style={styles.infoRow}>
+                    <Text style={styles.infoLabel}>Offline sync note</Text>
+                    <Text style={[styles.infoValue, styles.infoValueWrap]}>{offlineStatus.error}</Text>
+                  </View>
+                </>
+              ) : null}
             </>
           ) : null}
-          <View style={styles.itemDivider} />
-          <Pressable
-            style={styles.manageBtn}
-            onPress={handleRefreshTimetables}
-            disabled={isRefreshing}>
-            {isRefreshing
-              ? <View style={styles.refreshingRow}>
-                  <ActivityIndicator size="small" color={colors.route316} />
-                  <Text style={[styles.refreshingText, { color: colors.textDim }]}>Refreshing slowly to avoid rate limits…</Text>
-                </View>
-              : <Text style={[styles.manageBtnText, { color: colors.route316 }]}>Refresh timetables</Text>}
-          </Pressable>
-          <View style={styles.itemDivider} />
-          <Pressable
-            style={styles.manageBtn}
-            onPress={handleClearCache}>
-            <Text style={[styles.manageBtnText, { color: colors.textDim }]}>Clear cache</Text>
-          </Pressable>
+          {settings.debugOptionsUnlocked ? (
+            <>
+              <View style={styles.itemDivider} />
+              <Pressable
+                style={styles.manageBtn}
+                onPress={handleRefreshTimetables}
+                disabled={isRefreshing}>
+                {isRefreshing
+                  ? <View style={styles.refreshingRow}>
+                      <ActivityIndicator size="small" color={colors.route316} />
+                      <Text style={[styles.refreshingText, { color: colors.textDim }]}>Refreshing slowly to avoid rate limits…</Text>
+                    </View>
+                  : <Text style={[styles.manageBtnText, { color: colors.route316 }]}>Refresh timetables</Text>}
+              </Pressable>
+              <View style={styles.itemDivider} />
+              <Pressable
+                style={styles.manageBtn}
+                onPress={handleClearCache}>
+                <Text style={[styles.manageBtnText, { color: colors.textDim }]}>Clear cache</Text>
+              </Pressable>
+            </>
+          ) : null}
         </View>
 
         <View style={styles.sectionMeta}>
