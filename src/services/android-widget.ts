@@ -27,13 +27,11 @@ interface WidgetSyncSettings {
 interface WidgetItemPayload {
   bus: BusLine;
   time: string;
-  countdown: string;
-  live?: boolean;
+  departureMins: number;
 }
 
 interface WidgetDirectionPayload {
   mode: WidgetMode;
-  title: string;
   stopId: string;
   stopLabel: string;
   status: 'ready' | 'empty' | 'error';
@@ -42,7 +40,6 @@ interface WidgetDirectionPayload {
 }
 
 interface WidgetStatePayload {
-  generatedAt: number;
   palette: {
     text: string;
     textDim: string;
@@ -54,21 +51,14 @@ interface WidgetStatePayload {
   directions: Record<WidgetMode, WidgetDirectionPayload>;
 }
 
-function formatCountdown(minsUntil: number) {
-  if (minsUntil < 1) return 'now';
-  if (minsUntil < 60) return `${minsUntil} min`;
-  const h = Math.floor(minsUntil / 60);
-  const m = minsUntil % 60;
-  return m > 0 ? `${h}h ${m}m` : `${h}h`;
-}
-
-function mapWidgetItems(departures: Departure[]): WidgetItemPayload[] {
+function mapWidgetItems(departures: Departure[], now: Date): WidgetItemPayload[] {
+  const nowMins = now.getHours() * 60 + now.getMinutes();
   return departures
     .filter(dep => dep.minsUntil >= 0)
     .map(dep => ({
       bus: dep.bus,
       time: dep.time,
-      countdown: formatCountdown(dep.minsUntil),
+      departureMins: nowMins + dep.minsUntil,
     }));
 }
 
@@ -103,7 +93,6 @@ async function buildDirectionPayload(
   stopId: string,
   now: Date,
 ): Promise<WidgetDirectionPayload> {
-  const title = mode === 'kojori' ? '→ Kojori' : '→ Tbilisi';
   const direction = mode === 'kojori' ? 'toKojori' : 'toTbilisi';
   const stopLabel = await loadStopLabel(stopId);
 
@@ -114,12 +103,11 @@ async function buildDirectionPayload(
     ]);
 
     const rawDepartures = computeUpcomingDepartures(schedule380, schedule316, stopId, 24 * 60, now);
-    const items = mapWidgetItems(rawDepartures);
+    const items = mapWidgetItems(rawDepartures, now);
 
     if (items.length === 0) {
       return {
         mode,
-        title,
         stopId,
         stopLabel,
         status: 'empty',
@@ -130,17 +118,15 @@ async function buildDirectionPayload(
 
     return {
       mode,
-      title,
       stopId,
       stopLabel,
       status: 'ready',
-      message: 'Schedule data',
+      message: '',
       items,
     };
   } catch {
     return {
       mode,
-      title,
       stopId,
       stopLabel,
       status: 'error',
@@ -161,7 +147,6 @@ export async function syncAndroidWidgetState(settings: WidgetSyncSettings) {
   ]);
 
   const payload: WidgetStatePayload = {
-    generatedAt: now.getTime(),
     palette: {
       text: palette.text,
       textDim: palette.textDim,

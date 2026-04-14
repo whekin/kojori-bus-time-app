@@ -7,6 +7,7 @@ import android.widget.RemoteViews
 import android.widget.RemoteViewsService
 import androidx.core.content.ContextCompat
 import org.json.JSONObject
+import java.util.Calendar
 
 class WidgetListService : RemoteViewsService() {
   override fun onGetViewFactory(intent: Intent): RemoteViewsFactory {
@@ -15,10 +16,11 @@ class WidgetListService : RemoteViewsService() {
 }
 
 class WidgetListFactory(private val context: Context) : RemoteViewsService.RemoteViewsFactory {
-  private data class Row(val bus: String, val time: String, val countdown: String)
+  private data class DepartureRow(val bus: String, val time: String, val departureMins: Int)
   private data class Palette(val text: Int, val textDim: Int, val route380: Int, val route316: Int)
 
-  private var rows: List<Row> = emptyList()
+  private var stopLabel: String = ""
+  private var rows: List<DepartureRow> = emptyList()
   private var palette = defaultPalette()
 
   override fun onCreate() {}
@@ -31,12 +33,13 @@ class WidgetListFactory(private val context: Context) : RemoteViewsService.Remot
     val items = snapshot.optJSONArray("items") ?: return
 
     palette = readPalette(root)
+    stopLabel = snapshot.optString("stopLabel", "")
     rows = (0 until items.length()).mapNotNull { i ->
       val item = items.optJSONObject(i) ?: return@mapNotNull null
-      Row(
+      DepartureRow(
         bus = item.optString("bus", "--"),
         time = item.optString("time", "--:--"),
-        countdown = item.optString("countdown", ""),
+        departureMins = item.optInt("departureMins", 0),
       )
     }
   }
@@ -45,10 +48,19 @@ class WidgetListFactory(private val context: Context) : RemoteViewsService.Remot
     rows = emptyList()
   }
 
-  override fun getCount(): Int = rows.size
+  // Position 0 = stop header, rest = departure rows
+  override fun getCount(): Int = if (rows.isEmpty()) 0 else rows.size + 1
 
   override fun getViewAt(position: Int): RemoteViews {
-    val row = rows[position]
+    // Header row: stop label
+    if (position == 0) {
+      val views = RemoteViews(context.packageName, R.layout.widget_list_header)
+      views.setTextViewText(R.id.header_stop, stopLabel)
+      views.setTextColor(R.id.header_stop, palette.textDim)
+      return views
+    }
+
+    val row = rows[position - 1]
     val views = RemoteViews(context.packageName, R.layout.widget_list_item)
     val busColor = if (row.bus == "380") palette.route380 else palette.route316
 
@@ -56,16 +68,34 @@ class WidgetListFactory(private val context: Context) : RemoteViewsService.Remot
     views.setTextColor(R.id.item_bus, busColor)
     views.setTextViewText(R.id.item_time, row.time)
     views.setTextColor(R.id.item_time, palette.text)
-    views.setTextViewText(R.id.item_countdown, row.countdown)
-    views.setTextColor(R.id.item_countdown, if (position == 0) busColor else palette.textDim)
+
+    val countdown = formatCountdown(row.departureMins)
+    views.setTextViewText(R.id.item_countdown, countdown)
+    views.setTextColor(R.id.item_countdown, if (position == 1) busColor else palette.textDim)
 
     return views
   }
 
   override fun getLoadingView(): RemoteViews? = null
-  override fun getViewTypeCount(): Int = 1
+  override fun getViewTypeCount(): Int = 2
   override fun getItemId(position: Int): Long = position.toLong()
   override fun hasStableIds(): Boolean = false
+
+  private fun formatCountdown(departureMins: Int): String {
+    val cal = Calendar.getInstance()
+    val nowMins = cal.get(Calendar.HOUR_OF_DAY) * 60 + cal.get(Calendar.MINUTE)
+    var diff = departureMins - nowMins
+    if (diff < 0) diff += 24 * 60
+    return when {
+      diff < 1 -> "now"
+      diff < 60 -> "${diff} min"
+      else -> {
+        val h = diff / 60
+        val m = diff % 60
+        if (m > 0) "${h}h ${m}m" else "${h}h"
+      }
+    }
+  }
 
   private fun readPalette(root: JSONObject): Palette {
     val p = root.optJSONObject("palette")
