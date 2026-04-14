@@ -174,7 +174,7 @@ class KojoriBusWidgetProvider : AppWidgetProvider() {
       direction: String,
       stopId: String,
     ) {
-      val uri = Uri.parse("kojoribs://widget?widgetMode=$direction&widgetStopId=$stopId")
+      val uri = Uri.parse("kojoribs://?widgetMode=$direction&widgetStopId=$stopId")
       val intent = Intent(Intent.ACTION_VIEW, uri).apply {
         setPackage(context.packageName)
         flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
