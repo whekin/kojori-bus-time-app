@@ -30,6 +30,7 @@ type TabItem = {
 
 const NAV_GAP = 10;
 const NAV_PADDING = 10;
+const NAV_HIGHLIGHT_EXTRA = 8;
 
 const AnimatedIcon = Animated.createAnimatedComponent(MaterialCommunityIcons);
 const AnimatedPagerView = Animated.createAnimatedComponent(PagerView);
@@ -133,7 +134,7 @@ export default function AppTabs() {
   const highlightStyle = useAnimatedStyle(() => ({
     transform: [
       {
-        translateX: NAV_PADDING + pagerProgress.value * (tabWidth + NAV_GAP),
+        translateX: NAV_PADDING - NAV_HIGHLIGHT_EXTRA / 2 + pagerProgress.value * (tabWidth + NAV_GAP),
       },
     ],
   }));
@@ -174,7 +175,7 @@ export default function AppTabs() {
               style={[
                 styles.navHighlight,
                 {
-                  width: tabWidth,
+                  width: tabWidth + NAV_HIGHLIGHT_EXTRA,
                 },
                 highlightStyle,
               ]}
