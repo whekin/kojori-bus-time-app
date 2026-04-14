@@ -157,8 +157,8 @@ export async function syncAndroidWidgetState(settings: WidgetSyncSettings) {
   const now = new Date();
   const palette = getAppColors(settings.paletteId);
   const [kojori, tbilisi] = await Promise.all([
-    buildDirectionPayload('kojori', settings.activeKojoriStopId, now),
-    buildDirectionPayload('tbilisi', settings.activeTbilisiStopId, now),
+    buildDirectionPayload('kojori', settings.activeTbilisiStopId, now),
+    buildDirectionPayload('tbilisi', settings.activeKojoriStopId, now),
   ]);
 
   const payload: WidgetStatePayload = {
