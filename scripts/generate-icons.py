@@ -1,121 +1,107 @@
 """
-Generate all app icons for Kojori Bus.
-Design: two route-number chips (380 amber, 316 teal) on a near-black bg.
+Generate app icons for Kojori Bus from a master PNG illustration.
+
+Source of truth:
+- assets/images/icon-master.png
 """
-from PIL import Image, ImageDraw, ImageFont
-import os, math
+from __future__ import annotations
 
-BG     = (9,   9,  11, 255)   # #09090B
-AMBER  = (245, 162, 10)       # #F5A20A
-TEAL   = (16,  184, 163)      # #10B8A3
-DARK   = (9,   9,  11)        # text on chips
-WHITE  = (255, 255, 255)
+import os
+from pathlib import Path
 
-FONT_PATH = '/System/Library/Fonts/Supplemental/Arial Black.ttf'
+from PIL import Image, ImageEnhance, ImageFilter, ImageOps
 
-def load_font(size):
-    try:
-        return ImageFont.truetype(FONT_PATH, size)
-    except Exception:
-        return ImageFont.load_default(size=size)
-
-def draw_chips(draw, size, include_bg=True):
-    """Draw the two route chips centred in `size`×`size`."""
-    chip_w = int(size * 0.60)
-    chip_h = int(size * 0.185)
-    radius = chip_h // 2
-    cx     = size // 2
-    gap    = int(size * 0.048)
-
-    total_h = chip_h * 2 + gap
-    y0 = (size - total_h) // 2
-
-    # 380 – amber
-    x1 = cx - chip_w // 2
-    draw.rounded_rectangle([x1, y0, x1 + chip_w, y0 + chip_h],
-                            radius=radius, fill=AMBER)
-    # 316 – teal
-    y2 = y0 + chip_h + gap
-    draw.rounded_rectangle([x1, y2, x1 + chip_w, y2 + chip_h],
-                            radius=radius, fill=TEAL)
-
-    font = load_font(int(chip_h * 0.52))
-    for text, y_chip, fg in [('380', y0, DARK), ('316', y2, DARK)]:
-        bb = draw.textbbox((0, 0), text, font=font)
-        tw, th = bb[2] - bb[0], bb[3] - bb[1]
-        tx = cx - tw // 2 - bb[0]
-        ty = y_chip + (chip_h - th) // 2 - bb[1]
-        draw.text((tx, ty), text, fill=fg, font=font)
-
-    # small connector dot between chips
-    dot_r = int(size * 0.018)
-    dot_x, dot_y = cx, y0 + chip_h + gap // 2
-    draw.ellipse([dot_x - dot_r, dot_y - dot_r,
-                  dot_x + dot_r, dot_y + dot_r], fill=(255, 255, 255, 60))
+ROOT = Path(__file__).resolve().parent.parent
+IMAGES = ROOT / "assets" / "images"
+MASTER_PATH = IMAGES / "icon-master.png"
+BG = (8, 25, 45, 255)
 
 
-def make_main_icon(size=1024):
-    img  = Image.new('RGBA', (size, size), BG)
-    draw = ImageDraw.Draw(img, 'RGBA')
-    draw_chips(draw, size)
-    return img.convert('RGB')
+def load_master() -> Image.Image:
+    if not MASTER_PATH.exists():
+        raise FileNotFoundError(f"Missing master icon: {MASTER_PATH}")
+    return Image.open(MASTER_PATH).convert("RGBA")
 
 
-def make_foreground(size=1024):
-    """Android adaptive icon foreground – transparent bg, chips centred in safe zone."""
-    img  = Image.new('RGBA', (size, size), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(img, 'RGBA')
+def fit_master(size: int, *, inset: float = 0.0, rounded: bool = False) -> Image.Image:
+    master = load_master()
+    inner_size = max(1, int(size * (1.0 - inset * 2)))
 
-    # Safe zone is inner 66 %; scale chips to fit
-    safe  = int(size * 0.66)
-    offset= (size - safe) // 2
-    inner = Image.new('RGBA', (safe, safe), (0, 0, 0, 0))
-    d2    = ImageDraw.Draw(inner, 'RGBA')
-    draw_chips(d2, safe)
-    img.paste(inner, (offset, offset), inner)
-    return img
+    # Cover square output while preserving the original composition.
+    fitted = ImageOps.fit(master, (inner_size, inner_size), method=Image.Resampling.LANCZOS, centering=(0.5, 0.5))
+    fitted = ImageEnhance.Sharpness(fitted).enhance(1.08)
 
+    canvas = Image.new("RGBA", (size, size), BG)
+    x = (size - inner_size) // 2
+    y = (size - inner_size) // 2
 
-def make_background(size=1024):
-    """Android adaptive icon background – solid dark."""
-    return Image.new('RGB', (size, size), BG[:3])
+    if rounded:
+        mask = Image.new("L", (inner_size, inner_size), 0)
+        mask_draw = ImageDrawProxy(mask)
+        radius = max(12, inner_size // 7)
+        mask_draw.rounded_rectangle((0, 0, inner_size, inner_size), radius=radius, fill=255)
+        canvas.paste(fitted, (x, y), mask)
+    else:
+        canvas.paste(fitted, (x, y), fitted)
 
-
-def make_monochrome(size=1024):
-    """Android monochrome icon – white shapes on black."""
-    img  = Image.new('L', (size, size), 0)
-    draw = ImageDraw.Draw(img)
-    chip_w = int(size * 0.60)
-    chip_h = int(size * 0.185)
-    radius = chip_h // 2
-    cx     = size // 2
-    gap    = int(size * 0.048)
-    total_h = chip_h * 2 + gap
-    y0 = (size - total_h) // 2
-    x1 = cx - chip_w // 2
-
-    draw.rounded_rectangle([x1, y0, x1 + chip_w, y0 + chip_h], radius=radius, fill=255)
-    y2 = y0 + chip_h + gap
-    draw.rounded_rectangle([x1, y2, x1 + chip_w, y2 + chip_h], radius=radius, fill=255)
-    return img
+    return canvas
 
 
-def make_splash(size=256):
-    """Splash screen icon – same design, transparent bg."""
-    img  = Image.new('RGBA', (size, size), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(img, 'RGBA')
-    draw_chips(draw, size)
-    return img
+class ImageDrawProxy:
+    def __init__(self, image: Image.Image) -> None:
+        from PIL import ImageDraw
+
+        self.draw = ImageDraw.Draw(image)
+
+    def rounded_rectangle(self, *args, **kwargs):
+        return self.draw.rounded_rectangle(*args, **kwargs)
 
 
-OUT = os.path.join(os.path.dirname(__file__), '..', 'assets', 'images')
-os.makedirs(OUT, exist_ok=True)
+def make_main_icon(size: int = 1024) -> Image.Image:
+    return fit_master(size).convert("RGB")
 
-make_main_icon(1024).save(f'{OUT}/icon.png')
-make_foreground(1024).save(f'{OUT}/android-icon-foreground.png')
-make_background(1024).save(f'{OUT}/android-icon-background.png')
-make_monochrome(1024).save(f'{OUT}/android-icon-monochrome.png')
-make_splash(256).save(f'{OUT}/splash-icon.png')
-make_main_icon(48).save(f'{OUT}/favicon.png')
 
-print('Done — icons written to assets/images/')
+def make_master_preview(size: int = 1024) -> Image.Image:
+    return make_main_icon(size)
+
+
+def make_foreground(size: int = 1024) -> Image.Image:
+    # Derived from the full master art, inset so Android masks do not clip key details.
+    return fit_master(size, inset=0.08)
+
+
+def make_background(size: int = 1024) -> Image.Image:
+    master = ImageOps.fit(load_master(), (size, size), method=Image.Resampling.LANCZOS, centering=(0.5, 0.5))
+    background = master.filter(ImageFilter.GaussianBlur(radius=max(8, size // 48)))
+    background = ImageEnhance.Brightness(background).enhance(0.48)
+    background = ImageEnhance.Color(background).enhance(0.78)
+    overlay = Image.new("RGBA", (size, size), BG)
+    return Image.blend(background, overlay, 0.32).convert("RGB")
+
+
+def make_monochrome(size: int = 1024) -> Image.Image:
+    return make_foreground(size).convert("L")
+
+
+def make_splash(size: int = 256) -> Image.Image:
+    return fit_master(size, inset=0.14)
+
+
+def make_favicon(size: int = 48) -> Image.Image:
+    return make_main_icon(256).resize((size, size), Image.Resampling.LANCZOS)
+
+
+def export_all(output_dir: str | os.PathLike[str]) -> None:
+    output = Path(output_dir)
+    output.mkdir(parents=True, exist_ok=True)
+    make_main_icon(1024).save(output / "icon.png")
+    make_foreground(1024).save(output / "android-icon-foreground.png")
+    make_background(1024).save(output / "android-icon-background.png")
+    make_monochrome(1024).save(output / "android-icon-monochrome.png")
+    make_splash(256).save(output / "splash-icon.png")
+    make_favicon(48).save(output / "favicon.png")
+
+
+if __name__ == "__main__":
+    export_all(IMAGES)
+    print("Done - icons written to assets/images/")
