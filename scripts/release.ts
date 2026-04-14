@@ -236,7 +236,7 @@ if (!isDone(state, 'stamp')) {
 step('4/7  Prebuild');
 
 if (!isDone(state, 'prebuild')) {
-  run('bunx expo prebuild --clean');
+  run('bunx expo prebuild --platform android');
   console.log('Fresh native project ✓');
   markDone(state, 'prebuild');
 } else {
