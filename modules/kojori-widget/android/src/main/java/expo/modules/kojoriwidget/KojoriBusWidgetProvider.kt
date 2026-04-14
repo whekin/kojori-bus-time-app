@@ -257,7 +257,7 @@ class KojoriBusWidgetProvider : AppWidgetProvider() {
 
     private fun scheduleRefreshAnimationClear(context: Context) {
       val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-      alarmManager.setExact(
+      alarmManager.set(
         AlarmManager.ELAPSED_REALTIME,
         SystemClock.elapsedRealtime() + REFRESH_ANIMATION_MS,
         clearRefreshAnimationPendingIntent(context),

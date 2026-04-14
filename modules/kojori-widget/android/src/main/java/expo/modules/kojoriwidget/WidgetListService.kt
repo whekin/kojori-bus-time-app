@@ -122,8 +122,7 @@ class WidgetListFactory(
     views.setTextViewText(R.id.title_text, baseCity)
     views.setTextColor(R.id.title_text, palette.text)
     views.setTextColor(R.id.title_dot, dotColor)
-    views.setTextColor(R.id.title_refresh, palette.textDim)
-    views.setViewVisibility(R.id.title_refresh, if (isRefreshing) View.GONE else View.VISIBLE)
+    views.setTextColor(R.id.title_refresh_text, palette.textDim)
     views.setViewVisibility(R.id.title_refresh_spinner, if (isRefreshing) View.VISIBLE else View.GONE)
     views.setOnClickFillInIntent(R.id.title_refresh, baseActionIntent(KojoriBusWidgetProvider::class.java.name).apply {
       action = "expo.modules.kojoriwidget.REFRESH"
