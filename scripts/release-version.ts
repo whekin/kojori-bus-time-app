@@ -63,7 +63,12 @@ writeFileSync(pkgJsonPath, JSON.stringify(pkgJson, null, 2) + '\n');
 
 // Commit and tag
 execSync(`git add app.json package.json`, { cwd: root, stdio: 'inherit' });
-execSync(`git commit -m "Release ${tag}"`, { cwd: root, stdio: 'inherit' });
+const diff = execSync('git diff --cached --quiet || echo changed', { cwd: root, encoding: 'utf-8' }).trim();
+if (diff === 'changed') {
+  execSync(`git commit -m "Release ${tag}"`, { cwd: root, stdio: 'inherit' });
+} else {
+  console.log('\nVersion already up to date, skipping commit.');
+}
 execSync(`git tag -a ${tag} -m "Release ${tag}"`, { cwd: root, stdio: 'inherit' });
 
 console.log(`\nDone! Push with: git push && git push origin ${tag}`);
