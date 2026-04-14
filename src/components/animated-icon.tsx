@@ -87,9 +87,10 @@ export function AnimatedIcon() {
         <Image style={styles.glow} source={require('@/assets/images/logo-glow.png')} />
       </Animated.View>
 
-      <Animated.View entering={keyframe.duration(DURATION)} style={styles.background} />
       <Animated.View style={styles.imageContainer} entering={logoKeyframe.duration(DURATION)}>
-        <Image style={styles.image} source={require('@/assets/images/expo-logo.png')} />
+        <Animated.View entering={keyframe.duration(DURATION)} style={styles.imageBackdrop}>
+          <Image style={styles.image} source={require('@/assets/images/splash-icon.png')} contentFit="contain" />
+        </Animated.View>
       </Animated.View>
     </View>
   );
@@ -112,17 +113,15 @@ const styles = StyleSheet.create({
     height: 128,
     zIndex: 100,
   },
-  image: {
-    position: 'absolute',
-    width: 76,
-    height: 71,
-  },
-  background: {
-    borderRadius: 40,
-    experimental_backgroundImage: `linear-gradient(180deg, #3C9FFE, #0274DF)`,
+  imageBackdrop: {
+    justifyContent: 'center',
+    alignItems: 'center',
     width: 128,
     height: 128,
-    position: 'absolute',
+  },
+  image: {
+    width: 128,
+    height: 128,
   },
   backgroundSolidColor: {
     ...StyleSheet.absoluteFillObject,
