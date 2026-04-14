@@ -14,6 +14,34 @@
         android:resource="@xml/kojori_bus_widget_info" />
     </receiver>
 
+    <receiver
+      android:name="expo.modules.kojoriwidget.KojoriBusWidget2x2"
+      android:exported="true">
+      <intent-filter>
+        <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+        <action android:name="expo.modules.kojoriwidget.SET_DIRECTION" />
+        <action android:name="expo.modules.kojoriwidget.REFRESH" />
+        <action android:name="expo.modules.kojoriwidget.TICK" />
+      </intent-filter>
+      <meta-data
+        android:name="android.appwidget.provider"
+        android:resource="@xml/kojori_bus_widget_info_2x2" />
+    </receiver>
+
+    <receiver
+      android:name="expo.modules.kojoriwidget.KojoriBusWidget3x3"
+      android:exported="true">
+      <intent-filter>
+        <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+        <action android:name="expo.modules.kojoriwidget.SET_DIRECTION" />
+        <action android:name="expo.modules.kojoriwidget.REFRESH" />
+        <action android:name="expo.modules.kojoriwidget.TICK" />
+      </intent-filter>
+      <meta-data
+        android:name="android.appwidget.provider"
+        android:resource="@xml/kojori_bus_widget_info_3x3" />
+    </receiver>
+
     <service
       android:name="expo.modules.kojoriwidget.WidgetListService"
       android:exported="false"

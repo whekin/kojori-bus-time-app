@@ -15,7 +15,7 @@ import android.widget.RemoteViews
 import androidx.core.content.ContextCompat
 import org.json.JSONObject
 
-class KojoriBusWidgetProvider : AppWidgetProvider() {
+open class KojoriBusWidgetProvider : AppWidgetProvider() {
   override fun onReceive(context: Context, intent: Intent) {
     super.onReceive(context, intent)
 
@@ -108,13 +108,22 @@ class KojoriBusWidgetProvider : AppWidgetProvider() {
       val route316: Int,
     )
 
+    private val PROVIDER_CLASSES: Array<Class<out KojoriBusWidgetProvider>> = arrayOf(
+      KojoriBusWidgetProvider::class.java,
+      KojoriBusWidget2x2::class.java,
+      KojoriBusWidget3x3::class.java,
+    )
+
     fun refreshAll(context: Context) {
       val appWidgetManager = AppWidgetManager.getInstance(context)
-      val component = ComponentName(context, KojoriBusWidgetProvider::class.java)
-      val appWidgetIds = appWidgetManager.getAppWidgetIds(component)
-      appWidgetManager.notifyAppWidgetViewDataChanged(appWidgetIds, R.id.widget_list)
-      appWidgetIds.forEach { appWidgetId ->
-        updateWidget(context, appWidgetManager, appWidgetId)
+      for (cls in PROVIDER_CLASSES) {
+        val component = ComponentName(context, cls)
+        val appWidgetIds = appWidgetManager.getAppWidgetIds(component)
+        if (appWidgetIds.isEmpty()) continue
+        appWidgetManager.notifyAppWidgetViewDataChanged(appWidgetIds, R.id.widget_list)
+        appWidgetIds.forEach { appWidgetId ->
+          updateWidget(context, appWidgetManager, appWidgetId)
+        }
       }
     }
 

@@ -29,6 +29,7 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { useQueryClient } from '@tanstack/react-query';
+import KojoriWidget from '../../modules/kojori-widget';
 import { APP_PALETTES, BottomTabInset, alpha, type AppPaletteId, type AppColors } from '@/constants/theme';
 import { useAppColors } from '@/hooks/use-app-colors';
 import { useRouteStops } from '@/hooks/use-route-stops';
@@ -704,7 +705,26 @@ export default function SettingsScreen() {
           <>
             <View style={styles.sectionMeta}>
               <Text style={styles.sectionHeader}>ANDROID WIDGET</Text>
-              <Text style={styles.sectionNote}>Used by home-screen widget as default stop for each direction.</Text>
+              <Text style={styles.sectionNote}>See upcoming departures right from your home screen.</Text>
+            </View>
+            {KojoriWidget?.canPinWidget() ? (
+              <View style={styles.card}>
+                {(['2x3', '3x3', '2x2'] as const).map((size, i) => {
+                  const label = size === '2x3' ? '2×3 Tall (recommended)' : size === '3x3' ? '3×3 Large' : '2×2 Compact';
+                  return (
+                    <React.Fragment key={size}>
+                      {i > 0 ? <View style={styles.itemDivider} /> : null}
+                      <Pressable style={styles.manageBtn} onPress={() => KojoriWidget?.requestPinWidget(size)}>
+                        <Text style={[styles.manageBtnText, { color: i === 0 ? colors.primary : colors.textDim }]}>{label}</Text>
+                      </Pressable>
+                    </React.Fragment>
+                  );
+                })}
+              </View>
+            ) : null}
+            <View style={styles.sectionMeta}>
+              <Text style={styles.sectionHeader}>WIDGET STOPS</Text>
+              <Text style={styles.sectionNote}>Default stop for each direction on the widget.</Text>
             </View>
             <WidgetStopCard
               title="→ Kojori default stop"
