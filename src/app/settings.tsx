@@ -1,7 +1,10 @@
+import Constants from 'expo-constants';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
+  Linking,
   Modal,
   Platform,
   Pressable,
@@ -41,6 +44,20 @@ import {
 
 const MONO = Platform.select({ android: 'monospace', ios: 'Menlo', default: 'monospace' });
 const DISPLAY = Platform.select({ android: 'serif', ios: 'Georgia', default: 'serif' });
+const APP_VERSION = Constants.expoConfig?.version ?? '1.0.0';
+const BUILD_NUMBER = Platform.select({
+  android: String(Constants.expoConfig?.android?.versionCode ?? 1),
+  ios: Constants.expoConfig?.ios?.buildNumber ?? '1',
+  default: '1',
+});
+const EASTER_EGG_TAPS = 7;
+const EASTER_EGG_MESSAGES = [
+  'You found it! This app was made with love for Kojori commuters.',
+  'Fun fact: Kojori is 1,340m above sea level.',
+  'The bus drivers are the real heroes.',
+  'Did you know? Route 380 has been running since Soviet times.',
+  'Sakartvelos gaumarjos!',
+];
 const PALETTE_IDS = Object.keys(APP_PALETTES) as AppPaletteId[];
 const PALETTE_CARD_WIDTH = 250;
 const PALETTE_CARD_GAP = 12;
@@ -449,6 +466,8 @@ export default function SettingsScreen() {
   const queryClient = useQueryClient();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [modal, setModal] = useState<'kojori' | 'tbilisi' | 'widget-kojori' | 'widget-tbilisi' | null>(null);
+  const [easterEggTaps, setEasterEggTaps] = useState(0);
+  const easterEggTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const paletteCarouselRef = useRef<ICarouselInstance>(null);
   const paletteIndex = Math.max(0, PALETTE_IDS.indexOf(settings.paletteId));
   const paletteCarouselWidth = Math.max(windowWidth, PALETTE_CARD_WIDTH + 40);
@@ -464,6 +483,19 @@ export default function SettingsScreen() {
       await warmTtcOfflineData(queryClient);
     } finally {
       setIsRefreshing(false);
+    }
+  }
+
+  function handleBuildTap() {
+    if (easterEggTimerRef.current) clearTimeout(easterEggTimerRef.current);
+    const next = easterEggTaps + 1;
+    if (next >= EASTER_EGG_TAPS) {
+      const msg = EASTER_EGG_MESSAGES[Math.floor(Math.random() * EASTER_EGG_MESSAGES.length)];
+      Alert.alert('🚌', msg);
+      setEasterEggTaps(0);
+    } else {
+      setEasterEggTaps(next);
+      easterEggTimerRef.current = setTimeout(() => setEasterEggTaps(0), 2000);
     }
   }
 
@@ -667,14 +699,26 @@ export default function SettingsScreen() {
           ) : null}
           <View style={styles.itemDivider} />
           <Pressable
-            style={[styles.manageBtn, isRefreshing && { opacity: 0.5 }]}
+            style={styles.manageBtn}
             onPress={handleRefreshTimetables}
             disabled={isRefreshing}>
             {isRefreshing
-              ? <ActivityIndicator size="small" color={colors.route316} />
+              ? <View style={styles.refreshingRow}>
+                  <ActivityIndicator size="small" color={colors.route316} />
+                  <Text style={[styles.refreshingText, { color: colors.textDim }]}>Refreshing slowly to avoid rate limits…</Text>
+                </View>
               : <Text style={[styles.manageBtnText, { color: colors.route316 }]}>Refresh timetables</Text>}
           </Pressable>
         </View>
+
+        <Pressable style={styles.buildFooter} onPress={handleBuildTap}>
+          <Text style={styles.buildText}>v{APP_VERSION} ({BUILD_NUMBER})</Text>
+          <Text
+            style={styles.buildAuthor}
+            onPress={() => Linking.openURL('https://github.com/whekin')}>
+            developed by <Text style={styles.buildLink}>whekin</Text>
+          </Text>
+        </Pressable>
       </ScrollView>
 
       <StopPickerModal
@@ -825,6 +869,13 @@ function createStyles(C: AppColors) {
     infoTags: { flexDirection: 'row', gap: 6 },
     miniTag: { borderWidth: 1.5, borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2 },
     miniTagText: { fontSize: 12, fontWeight: '700' },
+
+    refreshingRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    refreshingText: { fontSize: 12 },
+    buildFooter: { alignItems: 'flex-end', paddingTop: 28, paddingBottom: 8 },
+    buildText: { color: C.textFaint, fontSize: 12, fontFamily: MONO },
+    buildAuthor: { color: C.textFaint, fontSize: 11, marginTop: 2 },
+    buildLink: { textDecorationLine: 'underline' },
   });
 }
 
