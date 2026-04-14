@@ -1,13 +1,8 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View, ViewStyle } from 'react-native';
 
-const C = {
-  surface: '#111316',
-  surfaceHigh: '#18191E',
-  border: '#1E2128',
-  borderStrong: '#2A2F3A',
-  textDim: '#565C6B',
-} as const;
+import { type AppColors } from '@/constants/theme';
+import { useAppColors } from '@/hooks/use-app-colors';
 
 interface DirectionOption<T extends string> {
   value: T;
@@ -26,6 +21,9 @@ export function DirectionToggle<T extends string>({
   onChange: (value: T) => void;
   style?: ViewStyle;
 }) {
+  const C = useAppColors();
+  const styles = React.useMemo(() => createStyles(C), [C]);
+
   return (
     <View style={[styles.toggle, style]}>
       {options.map(option => {
@@ -45,30 +43,32 @@ export function DirectionToggle<T extends string>({
   );
 }
 
-const styles = StyleSheet.create({
-  toggle: {
-    flexDirection: 'row',
-    backgroundColor: C.surface,
-    borderRadius: 12,
-    padding: 3,
-    borderWidth: 1,
-    borderColor: C.border,
-  },
-  toggleSeg: {
-    flex: 1,
-    paddingVertical: 11,
-    alignItems: 'center',
-    borderRadius: 9,
-  },
-  toggleSegOn: {
-    backgroundColor: C.surfaceHigh,
-    borderWidth: 1,
-    borderColor: C.borderStrong,
-  },
-  toggleText: {
-    color: C.textDim,
-    fontSize: 14,
-    fontWeight: '600',
-    letterSpacing: 0.3,
-  },
-});
+function createStyles(C: AppColors) {
+  return StyleSheet.create({
+    toggle: {
+      flexDirection: 'row',
+      backgroundColor: C.surface,
+      borderRadius: 12,
+      padding: 3,
+      borderWidth: 1,
+      borderColor: C.border,
+    },
+    toggleSeg: {
+      flex: 1,
+      paddingVertical: 11,
+      alignItems: 'center',
+      borderRadius: 9,
+    },
+    toggleSegOn: {
+      backgroundColor: C.surfaceHigh,
+      borderWidth: 1,
+      borderColor: C.borderStrong,
+    },
+    toggleText: {
+      color: C.textDim,
+      fontSize: 14,
+      fontWeight: '600',
+      letterSpacing: 0.3,
+    },
+  });
+}

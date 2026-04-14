@@ -7,15 +7,15 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { DirectionToggle } from '@/components/direction-toggle';
 import { StopSelector } from '@/components/stop-selector';
 import { TtcStatusHeaderBadge } from '@/components/ttc-status-banner';
-import { BottomTabInset } from '@/constants/theme';
+import { BottomTabInset, alpha } from '@/constants/theme';
 import { useArrivals } from '@/hooks/use-arrivals';
+import { useAppColors } from '@/hooks/use-app-colors';
 import { useLocation } from '@/hooks/use-location';
 import { useSchedule } from '@/hooks/use-schedule';
 import { useSettings } from '@/hooks/use-settings';
 import { useStopNames } from '@/hooks/use-stop-names';
 import {
   BusLine,
-  BUS_COLORS,
   computeUpcomingDepartures,
   Departure,
   findStop,
@@ -33,8 +33,8 @@ const C = {
   text: '#EDEAE4',
   textDim: '#565C6B',
   textFaint: '#2C3040',
-  amber: BUS_COLORS['380'],
-  teal: BUS_COLORS['316'],
+  amber: '#F5A20A',
+  teal: '#10B8A3',
   live: '#22C55E',
   warning: '#F59E0B',
   error: '#EF4444',
@@ -94,9 +94,14 @@ function getRealtimeStatus(dep: Departure) {
   };
 }
 
+function routeColor(bus: BusLine, colors: ReturnType<typeof useAppColors>) {
+  return bus === '380' ? colors.route380 : colors.route316;
+}
+
 // ── Atoms ─────────────────────────────────────────────────────────────────────
 function BusTag({ bus }: { bus: BusLine }) {
-  const color = BUS_COLORS[bus];
+  const colors = useAppColors();
+  const color = routeColor(bus, colors);
   return (
     <View style={[styles.busTag, { borderColor: color }]}>
       <Text style={[styles.busTagText, { color, fontFamily: MONO }]}>{bus}</Text>
@@ -203,6 +208,7 @@ function NextCard({
   accentColor: string;
   isLoading: boolean;
 }) {
+  const colors = useAppColors();
   if (isLoading && !dep) {
     return (
       <View style={[styles.nextCard, styles.centered]}>
@@ -216,20 +222,25 @@ function NextCard({
   const minsLabel = dep.minsUntil < 1 ? 'now' : `in ${dep.minsUntil} min`;
   const realtimeStatus = getRealtimeStatus(dep);
   return (
-    <View style={[styles.nextCard, { borderColor: accentColor + '30' }]}>
+    <View style={[styles.nextCard, { borderColor: alpha(accentColor, '30') }]}>
       <View style={[styles.nextAccentBar, { backgroundColor: accentColor }]} />
       <View style={styles.nextContent}>
         <View style={styles.nextHeaderRow}>
           <View style={styles.nextHeaderLeft}>
+            {(() => {
+              const busColor = routeColor(dep.bus, colors);
+              return (
             <View
               style={[
                 styles.nextRouteBadge,
-                { backgroundColor: BUS_COLORS[dep.bus] + '18', borderColor: BUS_COLORS[dep.bus] + '55' },
+                { backgroundColor: alpha(busColor, '18'), borderColor: alpha(busColor, '55') },
               ]}>
-              <Text style={[styles.nextRouteBadgeText, { color: BUS_COLORS[dep.bus], fontFamily: MONO }]}>
+              <Text style={[styles.nextRouteBadgeText, { color: busColor, fontFamily: MONO }]}>
                 {dep.bus}
               </Text>
             </View>
+              );
+            })()}
             <Text style={styles.nextEyebrow}>NEXT DEPARTURE</Text>
           </View>
 
@@ -262,16 +273,21 @@ function NextCard({
             </Text>
           </View>
 
+          {(() => {
+            const busColor = routeColor(dep.bus, colors);
+            return (
           <View
             style={[
               styles.nextCountdownBadge,
-              { backgroundColor: BUS_COLORS[dep.bus] + '16', borderColor: BUS_COLORS[dep.bus] + '45' },
+              { backgroundColor: alpha(busColor, '16'), borderColor: alpha(busColor, '45') },
             ]}>
             <Text style={styles.nextCountdownLabel}>ARRIVES</Text>
-            <Text style={[styles.nextCountdownValue, { color: BUS_COLORS[dep.bus], fontFamily: MONO }]}>
+            <Text style={[styles.nextCountdownValue, { color: busColor, fontFamily: MONO }]}>
               {minsLabel}
             </Text>
           </View>
+            );
+          })()}
         </View>
       </View>
     </View>
@@ -296,6 +312,7 @@ function ToKojoriView({
   onRefresh: () => void;
   now: Date;
 }) {
+  const colors = useAppColors();
   const stopNames = useStopNames();
   const favoriteStops = favoriteIds.map(id => {
     const base = findStop(id) ?? { id, label: `Stop #${id.split(':')[1]}` };
@@ -340,14 +357,14 @@ function ToKojoriView({
           <StopSelector
             stops={favoriteStops}
             activeStopId={activeStopId}
-            accentColor={C.amber}
+            accentColor={colors.route380}
             onSelectStop={onSelectStop}
           />
 
           {isError && <ErrorBanner message="Could not load schedule. Showing cached data." />}
 
           <SectionDivider label="NEXT" style={styles.nextDivider} />
-          <NextCard dep={next} accentColor={C.amber} isLoading={isLoading} />
+          <NextCard dep={next} accentColor={colors.route380} isLoading={isLoading} />
         </View>
 
         <SectionDivider label="UPCOMING" style={styles.dividerPadded} />
@@ -388,6 +405,7 @@ function ToTbilisiView({
   onRefresh: () => void;
   now: Date;
 }) {
+  const colors = useAppColors();
   const stopNames = useStopNames();
   const favoriteStops = favoriteIds.map(id => {
     const base = findStop(id) ?? { id, label: `Stop #${id.split(':')[1]}` };
@@ -432,14 +450,14 @@ function ToTbilisiView({
           <StopSelector
             stops={favoriteStops}
             activeStopId={activeStopId}
-            accentColor={C.teal}
+            accentColor={colors.route316}
             onSelectStop={onSelectStop}
           />
 
           {isError && <ErrorBanner message="Could not load schedule. Showing cached data." />}
 
           <SectionDivider label="NEXT" style={styles.nextDivider} />
-          <NextCard dep={next} accentColor={C.teal} isLoading={isLoading} />
+          <NextCard dep={next} accentColor={colors.route316} isLoading={isLoading} />
         </View>
 
         <SectionDivider label="UPCOMING" style={styles.dividerPadded} />
@@ -464,6 +482,7 @@ function ToTbilisiView({
 
 // ── Root ──────────────────────────────────────────────────────────────────────
 export default function HomeScreen() {
+  const colors = useAppColors();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const { settings, update, setSharedDirection, hasManualDirectionOverride, isLoaded } = useSettings();
@@ -545,7 +564,7 @@ export default function HomeScreen() {
     };
   }, []);
 
-  const accentColor = mode === 'kojori' ? C.amber : C.teal;
+  const accentColor = mode === 'kojori' ? colors.route380 : colors.route316;
   const activeDirection = settings.sharedDirection;
   const activeStopId = mode === 'kojori' ? settings.activeTbilisiStopId : settings.activeKojoriStopId;
   const showLocationCard =
@@ -689,8 +708,8 @@ export default function HomeScreen() {
           value={mode}
           onChange={handleModeToggle}
           options={[
-            { value: 'kojori', label: '→ Kojori', accentColor: C.amber },
-            { value: 'tbilisi', label: '→ Tbilisi', accentColor: C.teal },
+            { value: 'kojori', label: '→ Kojori', accentColor: colors.route380 },
+            { value: 'tbilisi', label: '→ Tbilisi', accentColor: colors.route316 },
           ]}
         />
       </View>

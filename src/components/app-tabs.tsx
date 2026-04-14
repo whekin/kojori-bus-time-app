@@ -12,23 +12,21 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { type AppColors } from '@/constants/theme';
 import ExploreScreen from '@/app/explore';
 import HomeScreen from '@/app/index';
 import SettingsScreen from '@/app/settings';
 import TimetableScreen from '@/app/timetable';
+import { useAppColors } from '@/hooks/use-app-colors';
 
 type TabRoute = 'index' | 'explore' | 'timetable' | 'settings';
-
-const C = {
-  bg: '#09090B',
-  surface: '#111316',
-  surfaceHigh: '#18191E',
-  border: '#1E2128',
-  text: '#EDEAE4',
-  textDim: '#565C6B',
-  amber: '#F5A20A',
-  teal: '#10B8A3',
-} as const;
+type TabItem = {
+  route: TabRoute;
+  title: string;
+  icon: React.ComponentProps<typeof MaterialCommunityIcons>['name'];
+  accent: string;
+  render: (isActive: boolean) => React.ReactNode;
+};
 
 const NAV_GAP = 10;
 const NAV_PADDING = 10;
@@ -59,12 +57,14 @@ function TabButton({
   pagerProgress,
   onPress,
 }: {
-  tab: (typeof TABS)[number];
+  tab: TabItem;
   index: number;
   activeIndex: number;
   pagerProgress: SharedValue<number>;
   onPress: () => void;
 }) {
+  const C = useAppColors();
+  const styles = React.useMemo(() => createStyles(C), [C]);
   const iconStyle = useAnimatedStyle(() => {
     const distance = Math.min(Math.abs(pagerProgress.value - index), 1);
     const color = interpolateColor(distance, [0, 1], [tab.accent, C.textDim]);
@@ -106,25 +106,20 @@ function TabButton({
   );
 }
 
-const TABS: Array<{
-  route: TabRoute;
-  title: string;
-  icon: React.ComponentProps<typeof MaterialCommunityIcons>['name'];
-  accent: string;
-  render: (isActive: boolean) => React.ReactNode;
-}> = [
-  { route: 'index', title: 'Departures', icon: 'bus-clock', accent: C.amber, render: () => <HomeScreen /> },
-  { route: 'explore', title: 'Map', icon: 'map-marker-radius', accent: '#7DD3FC', render: isActive => <ExploreScreen isActive={isActive} /> },
-  { route: 'timetable', title: 'Timetable', icon: 'table-clock', accent: C.teal, render: () => <TimetableScreen /> },
-  { route: 'settings', title: 'Settings', icon: 'cog', accent: C.text, render: () => <SettingsScreen /> },
-];
-
 export default function AppTabs() {
+  const C = useAppColors();
+  const styles = React.useMemo(() => createStyles(C), [C]);
   const insets = useSafeAreaInsets();
   const pagerRef = useRef<PagerView>(null);
   const [activeIndex, setActiveIndex] = useState(0);
   const [navWidth, setNavWidth] = useState(0);
   const pagerProgress = useSharedValue(0);
+  const tabs: TabItem[] = [
+    { route: 'index', title: 'Departures', icon: 'bus-clock', accent: C.route380, render: () => <HomeScreen /> },
+    { route: 'explore', title: 'Map', icon: 'map-marker-radius', accent: C.map, render: isActive => <ExploreScreen isActive={isActive} /> },
+    { route: 'timetable', title: 'Timetable', icon: 'table-clock', accent: C.route316, render: () => <TimetableScreen /> },
+    { route: 'settings', title: 'Settings', icon: 'cog', accent: C.primary, render: () => <SettingsScreen /> },
+  ];
 
   const pageScrollHandler = usePagerScrollHandler(event => {
     'worklet';
@@ -132,7 +127,7 @@ export default function AppTabs() {
   });
 
   const tabWidth = navWidth > 0
-    ? (navWidth - NAV_PADDING * 2 - NAV_GAP * (TABS.length - 1)) / TABS.length
+    ? (navWidth - NAV_PADDING * 2 - NAV_GAP * (tabs.length - 1)) / tabs.length
     : 0;
 
   const highlightStyle = useAnimatedStyle(() => ({
@@ -158,7 +153,7 @@ export default function AppTabs() {
           if (nextIndex === activeIndex) return;
           setActiveIndex(nextIndex);
         }}>
-        {TABS.map((tab, index) => {
+        {tabs.map((tab, index) => {
           return (
             <View key={tab.route} style={styles.page}>
               {tab.render(activeIndex === index)}
@@ -185,7 +180,7 @@ export default function AppTabs() {
               ]}
             />
           ) : null}
-          {TABS.map((tab, index) => {
+          {tabs.map((tab, index) => {
             return (
               <TabButton
                 key={tab.route}
@@ -205,47 +200,49 @@ export default function AppTabs() {
   );
 }
 
-const styles = StyleSheet.create({
-  shell: { flex: 1, backgroundColor: C.bg },
-  pager: { flex: 1 },
-  page: { flex: 1 },
-  navWrap: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    paddingHorizontal: 16,
-    backgroundColor: C.bg,
-  },
-  navBar: {
-    position: 'relative',
-    flexDirection: 'row',
-    gap: 10,
-    padding: 10,
-    borderTopWidth: 1,
-    borderTopColor: C.border,
-    backgroundColor: C.bg,
-  },
-  navHighlight: {
-    position: 'absolute',
-    top: NAV_PADDING,
-    bottom: NAV_PADDING,
-    borderRadius: 18,
-    backgroundColor: C.surface,
-    borderWidth: 1,
-    borderColor: C.surfaceHigh,
-  },
-  navButton: {
-    flex: 1,
-    minHeight: 58,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 4,
-    zIndex: 1,
-  },
-  navLabel: {
-    fontSize: 12,
-    fontWeight: '700',
-    letterSpacing: 0.2,
-  },
-});
+function createStyles(C: AppColors) {
+  return StyleSheet.create({
+    shell: { flex: 1, backgroundColor: C.bg },
+    pager: { flex: 1 },
+    page: { flex: 1 },
+    navWrap: {
+      position: 'absolute',
+      left: 0,
+      right: 0,
+      bottom: 0,
+      paddingHorizontal: 16,
+      backgroundColor: C.bg,
+    },
+    navBar: {
+      position: 'relative',
+      flexDirection: 'row',
+      gap: 10,
+      padding: 10,
+      borderTopWidth: 1,
+      borderTopColor: C.border,
+      backgroundColor: C.bg,
+    },
+    navHighlight: {
+      position: 'absolute',
+      top: NAV_PADDING,
+      bottom: NAV_PADDING,
+      borderRadius: 18,
+      backgroundColor: C.surface,
+      borderWidth: 1,
+      borderColor: C.surfaceHigh,
+    },
+    navButton: {
+      flex: 1,
+      minHeight: 58,
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 4,
+      zIndex: 1,
+    },
+    navLabel: {
+      fontSize: 12,
+      fontWeight: '700',
+      letterSpacing: 0.2,
+    },
+  });
+}

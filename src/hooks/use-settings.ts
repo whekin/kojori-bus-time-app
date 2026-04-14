@@ -2,11 +2,12 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { AppState, Platform } from 'react-native';
 
+import { DEFAULT_APP_PALETTE, type AppPaletteId } from '@/constants/theme';
+import { syncAndroidWidgetState } from '@/services/android-widget';
 import {
   DEFAULT_KOJORI_FAVORITES,
   DEFAULT_TBILISI_FAVORITES,
 } from '@/services/ttc';
-import { syncAndroidWidgetState } from '@/services/android-widget';
 
 const STORAGE_KEY = '@kojori_settings_v2';
 export type SharedDirection = 'toKojori' | 'toTbilisi';
@@ -28,6 +29,8 @@ export interface Settings {
   sharedDirection: SharedDirection;
   /** Use the v3 encoded polyline endpoint instead of stop-coordinate interpolation */
   useEncodedPolylines: boolean;
+  /** Selected visual palette for chrome + route accents */
+  paletteId: AppPaletteId;
 }
 
 const DEFAULTS: Settings = {
@@ -39,6 +42,7 @@ const DEFAULTS: Settings = {
   widgetTbilisiStopId: DEFAULT_TBILISI_FAVORITES[0],
   sharedDirection: 'toKojori',
   useEncodedPolylines: true,
+  paletteId: DEFAULT_APP_PALETTE,
 };
 
 interface SettingsCtx {
@@ -55,11 +59,11 @@ interface SettingsCtx {
 
 const Context = createContext<SettingsCtx>({
   settings: DEFAULTS,
-  update: () => {},
-  setSharedDirection: () => {},
+  update: () => { },
+  setSharedDirection: () => { },
   hasManualDirectionOverride: false,
-  toggleKojoriFavorite: () => {},
-  toggleTbilisiFavorite: () => {},
+  toggleKojoriFavorite: () => { },
+  toggleTbilisiFavorite: () => { },
   isLoaded: false,
 });
 
@@ -73,7 +77,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
       .then(raw => {
         if (raw) setSettings({ ...DEFAULTS, ...JSON.parse(raw) });
       })
-      .catch(() => {})
+      .catch(() => { })
       .finally(() => setIsLoaded(true));
   }, []);
 
@@ -82,9 +86,9 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
 
     function syncWidget() {
       return syncAndroidWidgetState({
-        widgetKojoriStopId: settings.widgetKojoriStopId,
-        widgetTbilisiStopId: settings.widgetTbilisiStopId,
-      }).catch(() => {});
+        activeKojoriStopId: settings.widgetKojoriStopId,
+        activeTbilisiStopId: settings.widgetTbilisiStopId,
+      }).catch(() => { });
     }
 
     void syncWidget();
@@ -97,7 +101,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
 
     const intervalId = setInterval(() => {
       void syncWidget();
-    }, 5 * 60_000);
+    }, 60_000); // Update every minute to refresh countdown timers
 
     return () => {
       appState.remove();
@@ -110,7 +114,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   ]);
 
   const persist = (next: Settings) => {
-    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(next)).catch(() => {});
+    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(next)).catch(() => { });
     return next;
   };
 

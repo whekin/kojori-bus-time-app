@@ -13,12 +13,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { DirectionToggle } from '@/components/direction-toggle';
 import { StopSelector } from '@/components/stop-selector';
 import { TtcStatusHeaderBadge } from '@/components/ttc-status-banner';
-import { BottomTabInset } from '@/constants/theme';
+import { BottomTabInset, alpha } from '@/constants/theme';
+import { useAppColors } from '@/hooks/use-app-colors';
 import { useSchedule } from '@/hooks/use-schedule';
 import { useSettings } from '@/hooks/use-settings';
 import {
   BusLine,
-  BUS_COLORS,
   extractStopTimes,
   findStop,
   getTodayPeriod,
@@ -35,8 +35,8 @@ const C = {
   text: '#EDEAE4',
   textDim: '#565C6B',
   textFaint: '#2C3040',
-  amber: BUS_COLORS['380'],
-  teal: BUS_COLORS['316'],
+  amber: '#F5A20A',
+  teal: '#10B8A3',
 } as const;
 
 const MONO = Platform.select({ android: 'monospace', ios: 'Menlo', default: 'monospace' });
@@ -67,7 +67,8 @@ function groupByPeriod(entries: TimetableEntry[]): TimetableSection[] {
 }
 
 function BusTag({ bus }: { bus: BusLine }) {
-  const color = BUS_COLORS[bus];
+  const colors = useAppColors();
+  const color = bus === '380' ? colors.route380 : colors.route316;
   return (
     <View style={[styles.busTag, { borderColor: color }]}>
       <Text style={[styles.busTagText, { color, fontFamily: MONO }]}>{bus}</Text>
@@ -76,6 +77,7 @@ function BusTag({ bus }: { bus: BusLine }) {
 }
 
 export default function TimetableScreen() {
+  const colors = useAppColors();
   const insets = useSafeAreaInsets();
   const { settings, setSharedDirection, update } = useSettings();
   const [filter, setFilter] = useState<Filter>('all');
@@ -103,7 +105,7 @@ export default function TimetableScreen() {
   );
 
   const isLoading = l380 || l316;
-  const accentColor = direction === 'toKojori' ? C.amber : C.teal;
+  const accentColor = direction === 'toKojori' ? colors.route380 : colors.route316;
 
   const sections = useMemo<TimetableSection[]>(() => {
     const buses: BusLine[] = filter === 'all' ? ['380', '316'] : [filter];
@@ -148,8 +150,8 @@ export default function TimetableScreen() {
           value={direction}
           onChange={setSharedDirection}
           options={[
-            { value: 'toKojori', label: '→ Kojori', accentColor: C.amber },
-            { value: 'toTbilisi', label: '→ Tbilisi', accentColor: C.teal },
+            { value: 'toKojori', label: '→ Kojori', accentColor: colors.route380 },
+            { value: 'toTbilisi', label: '→ Tbilisi', accentColor: colors.route316 },
           ]}
         />
       </View>
@@ -178,11 +180,11 @@ export default function TimetableScreen() {
             <View style={styles.filterRow}>
               {(['all', '380', '316'] as Filter[]).map(f => {
                 const isActive = filter === f;
-                const chipColor = f === '380' ? C.amber : f === '316' ? C.teal : accentColor;
+                const chipColor = f === '380' ? colors.route380 : f === '316' ? colors.route316 : accentColor;
                 return (
                   <Pressable
                     key={f}
-                    style={[styles.filterChip, isActive && { borderColor: chipColor, backgroundColor: chipColor + '14' }]}
+                    style={[styles.filterChip, isActive && { borderColor: chipColor, backgroundColor: alpha(chipColor, '14') }]}
                     onPress={() => setFilter(f)}>
                     <Text style={[styles.filterChipText, isActive && { color: chipColor, fontWeight: '600' }]}>
                       {f === 'all' ? 'All buses' : f}

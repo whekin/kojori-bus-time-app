@@ -6,6 +6,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
 import AppTabs from '@/components/app-tabs';
+import { AppColorsProvider } from '@/hooks/use-app-colors';
 import { SettingsProvider } from '@/hooks/use-settings';
 import {
   hydrateTtcOfflineData,
@@ -56,11 +57,13 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <QueryClientProvider client={queryClient}>
         <SettingsProvider>
-          <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-            <CachePrefiller />
-            <AnimatedSplashOverlay />
-            <AppTabs />
-          </ThemeProvider>
+          <AppColorsProvider>
+            <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+              <CachePrefiller />
+              <AnimatedSplashOverlay />
+              <AppTabs />
+            </ThemeProvider>
+          </AppColorsProvider>
         </SettingsProvider>
       </QueryClientProvider>
     </GestureHandlerRootView>

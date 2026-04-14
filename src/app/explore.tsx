@@ -7,10 +7,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { DirectionToggle } from '@/components/direction-toggle';
 import { BottomTabInset } from '@/constants/theme';
+import { useAppColors } from '@/hooks/use-app-colors';
 import { useRoutePolylines } from '@/hooks/use-route-polylines';
 import { useTtcHealth } from '@/hooks/use-ttc-health';
 import { useVehiclePositions } from '@/hooks/use-vehicle-positions';
-import { BUS_COLORS } from '@/services/ttc';
 import { splitPolylinesByOverlap } from '@/utils/polyline-offset';
 
 const C = {
@@ -21,8 +21,8 @@ const C = {
   text: '#EDEAE4',
   textDim: '#98A0AE',
   textFaint: '#586070',
-  amber: BUS_COLORS['380'],
-  teal: BUS_COLORS['316'],
+  amber: '#F5A20A',
+  teal: '#10B8A3',
 } as const;
 
 const DEFAULT_REGION: Region = {
@@ -38,8 +38,8 @@ type ExploreScreenProps = {
   isActive?: boolean;
 };
 
-function routeAccent(bus: '380' | '316') {
-  return bus === '380' ? C.amber : C.teal;
+function routeAccent(bus: '380' | '316', colors: ReturnType<typeof useAppColors>) {
+  return bus === '380' ? colors.route380 : colors.route316;
 }
 
 const MARKER_BADGE_IMAGES: Record<'380' | '316', number> = {
@@ -55,6 +55,7 @@ const MARKER_HEADING_IMAGES: Record<'380' | '316', number> = {
 const MARKER_ANCHOR = { x: 0.5, y: 54 / 84 };
 
 export default function ExploreScreen({ isActive = false }: ExploreScreenProps) {
+  const colors = useAppColors();
   const insets = useSafeAreaInsets();
   const mapRef = useRef<MapView>(null);
   const [direction, setDirection] = useState<Direction>('toKojori');
@@ -207,7 +208,7 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
         {splitPolylines
           ? (['316', '380'] as const).map((bus) => {
               const segments = splitPolylines[bus];
-              const color = routeAccent(bus);
+              const color = routeAccent(bus, colors);
               
               return (
                 <React.Fragment key={`route-${bus}`}>
@@ -293,15 +294,15 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
           value={direction}
           onChange={setDirection}
           options={[
-            { value: 'toKojori', label: '→ Kojori', accentColor: C.amber },
-            { value: 'toTbilisi', label: '→ Tbilisi', accentColor: C.teal },
+            { value: 'toKojori', label: '→ Kojori', accentColor: colors.route380 },
+            { value: 'toTbilisi', label: '→ Tbilisi', accentColor: colors.route316 },
           ]}
           style={styles.directionToggle}
         />
 
         <View style={styles.legendRow}>
           {(['380', '316'] as const).map(bus => {
-            const accent = routeAccent(bus);
+            const accent = routeAccent(bus, colors);
             return (
               <View key={bus} style={styles.legendCard}>
                 <View style={[styles.legendSwatch, { backgroundColor: accent }]} />
