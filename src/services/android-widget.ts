@@ -1,15 +1,12 @@
 import { Platform } from 'react-native';
 
-import KojoriWidget from '../../modules/kojori-widget';
 import {
   BusLine,
   computeUpcomingDepartures,
   Departure,
-  fetchArrivalTimes,
   fetchSchedule,
   fetchStopDetails,
   findStop,
-  mergeArrivalsIntoSchedule,
   ROUTES,
   SchedulePeriod,
 } from '@/services/ttc';
@@ -19,6 +16,7 @@ import {
   writeScheduleCache,
   writeStopName,
 } from '@/services/ttc-offline';
+import KojoriWidget from '../../modules/kojori-widget';
 
 type WidgetMode = 'kojori' | 'tbilisi';
 
@@ -31,7 +29,6 @@ interface WidgetItemPayload {
   bus: BusLine;
   time: string;
   countdown: string;
-  live: boolean;
 }
 
 interface WidgetDirectionPayload {
@@ -59,7 +56,6 @@ function mapWidgetItems(departures: Departure[]): WidgetItemPayload[] {
     bus: dep.bus,
     time: dep.time,
     countdown: formatCountdown(dep.minsUntil),
-    live: Boolean(dep.live),
   }));
 }
 
@@ -86,18 +82,7 @@ async function loadStopLabel(stopId: string) {
   }
 }
 
-function filterArrivalsForMode(
-  mode: WidgetMode,
-  arrivals: Awaited<ReturnType<typeof fetchArrivalTimes>>,
-) {
-  const direction = mode === 'kojori' ? 'toKojori' : 'toTbilisi';
-  return arrivals
-    .filter(arrival => {
-      const route = ROUTES[arrival.shortName as BusLine];
-      return Boolean(route) && arrival.patternSuffix === route[direction];
-    })
-    .sort((a, b) => a.realtimeArrivalMinutes - b.realtimeArrivalMinutes);
-}
+
 
 async function buildDirectionPayload(
   mode: WidgetMode,
@@ -109,22 +94,13 @@ async function buildDirectionPayload(
   const stopLabel = await loadStopLabel(stopId);
 
   try {
-    const [[schedule380, schedule316], arrivals] = await Promise.all([
-      Promise.all([
-        loadSchedule(ROUTES['380'].id, ROUTES['380'][direction]),
-        loadSchedule(ROUTES['316'].id, ROUTES['316'][direction]),
-      ]),
-      fetchArrivalTimes(stopId).catch(() => []),
+    const [schedule380, schedule316] = await Promise.all([
+      loadSchedule(ROUTES['380'].id, ROUTES['380'][direction]),
+      loadSchedule(ROUTES['316'].id, ROUTES['316'][direction]),
     ]);
 
-    const baseDepartures = computeUpcomingDepartures(schedule380, schedule316, stopId, 180, now);
-    const mergedDepartures = mergeArrivalsIntoSchedule(
-      baseDepartures,
-      filterArrivalsForMode(mode, arrivals),
-      now,
-      arrivals.length ? now.getTime() : undefined,
-    );
-    const items = mapWidgetItems(mergedDepartures);
+    const departures = computeUpcomingDepartures(schedule380, schedule316, stopId, 180, now);
+    const items = mapWidgetItems(departures);
 
     if (items.length === 0) {
       return {
@@ -144,7 +120,7 @@ async function buildDirectionPayload(
       stopId,
       stopLabel,
       status: 'ready',
-      message: items[0].live ? 'Live when available' : 'Schedule data',
+      message: 'Schedule data',
       items,
     };
   } catch {
