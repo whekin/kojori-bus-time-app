@@ -12,9 +12,20 @@ bun web                # Start on web
 bun lint               # Run ESLint via expo lint
 bun add <pkg>          # Add dependency (use instead of npm install)
 bun scripts/bake-ttc.ts  # Re-fetch static TTC data and write src/assets/ttc-baked.ts
+bun release            # Full release pipeline (see Releasing below)
 ```
 
 No test suite configured yet.
+
+## Releasing
+
+Full pipeline: `bun release` (or `bun release 2026.5.1` for explicit version).
+
+Steps: preflight → changelog check → stamp version → prebuild → build APK → commit → tag → push → GitHub release with APK.
+
+**Versioning**: Date-based `YYYY.M.D` (e.g. `2026.4.15`). Build number is `YYYYMMDD00` — last two digits for same-day re-releases. In dev, `app.config.ts` auto-computes version from today's date. Production builds use stamped values from `app.json`.
+
+**CHANGELOG.md**: Must have a `## vX.Y.Z` section matching the release version. The release script extracts this section for GitHub release notes. Always update CHANGELOG.md when making user-facing changes — group under `### New`, `### Improved`, `### Fixed`, `### Infra` as appropriate.
 
 ## Architecture
 
@@ -54,12 +65,6 @@ Endpoints used:
 
 Response field notes: `realtimeArrivalMinutes` = GPS-tracked ETA; `scheduledArrivalMinutes` = timetable. Starting stop schedule is reliable; middle/end stops arrive ~5–10 min early.
 
-## Planned Features (not yet built)
+## Android Widget
 
-- **Home screen**: Direction toggle (To Kojori / To Tbilisi). Auto-detected via GPS (Kojori bounding box ~41.55–41.60 lat, 44.77–44.82 lon).
-  - To Kojori: combined 380+316 schedule from selected Tbilisi stop, sorted chronologically
-  - To Tbilisi: real-time arrivals at nearest Kojori stop, auto-refreshed every 30s
-- **Map screen**: Live vehicle positions for 380/316, route polyline, user location. 5s refresh. Filter by route.
-- **Settings**: Preferred Kojori stop override, preferred Tbilisi departure stop.
-- **Caching**: Schedule + stops + polylines prefetched into AsyncStorage on app open; shown offline with stale indicator.
-- **Dependencies to install**: `bun add @tanstack/react-query dayjs` + `bunx expo install @react-native-async-storage/async-storage expo-location react-native-maps` (use `bunx expo install` for Expo-managed packages to get compatible versions)
+Native Expo module at `modules/kojori-widget/`. Three size variants (2x2, 2x3, 3x3) sharing the same provider logic via subclassing (`KojoriBusWidgetProvider` → `KojoriBusWidget2x2`, `KojoriBusWidget3x3`). All registered in `AndroidManifest.xml` with separate widget info XMLs. `refreshAll()` iterates all provider classes. Widget data synced from JS via `KojoriWidget.syncWidgetState()`. Users can pin widgets from Settings.
