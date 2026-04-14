@@ -41,6 +41,17 @@ class KojoriBusWidgetProvider : AppWidgetProvider() {
         WidgetPrefs.clearRefreshing(context)
         refreshAll(context)
       }
+      ACTION_OPEN_APP -> {
+        if (!isTrustedWidgetAction(context, intent)) return
+        val direction = intent.getStringExtra(EXTRA_DIRECTION) ?: WidgetPrefs.getDirection(context)
+        val stopId = intent.getStringExtra(EXTRA_STOP_ID) ?: ""
+        val uri = Uri.parse("kojoribs://?widgetMode=$direction&widgetStopId=$stopId")
+        val openIntent = Intent(Intent.ACTION_VIEW, uri).apply {
+          setPackage(context.packageName)
+          flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        context.startActivity(openIntent)
+      }
     }
   }
 
@@ -80,7 +91,9 @@ class KojoriBusWidgetProvider : AppWidgetProvider() {
     private const val ACTION_REFRESH = "expo.modules.kojoriwidget.REFRESH"
     private const val ACTION_TICK = "expo.modules.kojoriwidget.TICK"
     private const val ACTION_CLEAR_REFRESH_ANIMATION = "expo.modules.kojoriwidget.CLEAR_REFRESH_ANIMATION"
+    private const val ACTION_OPEN_APP = "expo.modules.kojoriwidget.OPEN_APP"
     private const val EXTRA_DIRECTION = "direction"
+    private const val EXTRA_STOP_ID = "stop_id"
     private const val EXTRA_ACTION_TOKEN = "action_token"
     private const val TICK_INTERVAL_MS = 60_000L
     private const val TICK_REQUEST_CODE = 9999
@@ -126,18 +139,15 @@ class KojoriBusWidgetProvider : AppWidgetProvider() {
       val narrow = isNarrow(appWidgetManager, appWidgetId)
       val isRefreshing = WidgetPrefs.getRefreshingUntil(context) > System.currentTimeMillis()
 
-      bindDirectionButtons(views, appWidgetId, currentDirection, context, palette, narrow)
-      bindRefreshButton(views, appWidgetId, context, palette, isRefreshing)
-
       val listIntent = Intent(context, WidgetListService::class.java).apply {
         putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
         data = Uri.parse(toUri(Intent.URI_INTENT_SCHEME))
       }
       views.setRemoteAdapter(R.id.widget_list, listIntent)
+      views.setPendingIntentTemplate(R.id.widget_list, widgetCollectionPendingIntent(context, appWidgetId))
 
       if (stateJson.isNullOrBlank()) {
         bindEmptyState(views, currentDirection, palette)
-        bindOpenIntent(context, views, appWidgetId, currentDirection, "")
         appWidgetManager.updateAppWidget(appWidgetId, views)
         return
       }
@@ -148,7 +158,6 @@ class KojoriBusWidgetProvider : AppWidgetProvider() {
 
       if (snapshot == null) {
         bindEmptyState(views, currentDirection, palette)
-        bindOpenIntent(context, views, appWidgetId, currentDirection, "")
         appWidgetManager.updateAppWidget(appWidgetId, views)
         return
       }
@@ -157,13 +166,6 @@ class KojoriBusWidgetProvider : AppWidgetProvider() {
       val message = snapshot.optString("message", "")
       val items = snapshot.optJSONArray("items")
       val hasItems = items != null && items.length() > 0
-
-      // Title: base city name (where departures are FROM)
-      val baseCity = if (currentDirection == "kojori") "Tbilisi" else "Kojori"
-      val dotColor = if (currentDirection == "kojori") palette.route380 else palette.route316
-      views.setTextViewText(R.id.widget_title, baseCity)
-      views.setTextColor(R.id.widget_title, palette.text)
-      views.setTextColor(R.id.widget_dot, dotColor)
 
       views.setTextViewText(R.id.widget_message, message)
       views.setTextColor(
@@ -177,94 +179,29 @@ class KojoriBusWidgetProvider : AppWidgetProvider() {
 
       views.setViewVisibility(R.id.widget_message, if (hasItems) View.GONE else View.VISIBLE)
       views.setViewVisibility(R.id.widget_list, if (hasItems) View.VISIBLE else View.GONE)
-
-      bindOpenIntent(context, views, appWidgetId, currentDirection, stopId)
       appWidgetManager.updateAppWidget(appWidgetId, views)
-    }
-
-    private fun bindDirectionButtons(
-      views: RemoteViews, appWidgetId: Int,
-      currentDirection: String, context: Context, palette: WidgetPalette,
-      narrow: Boolean,
-    ) {
-      // Toggle visibility of horizontal vs vertical container
-      views.setViewVisibility(R.id.widget_toggle_row_h, if (narrow) View.GONE else View.VISIBLE)
-      views.setViewVisibility(R.id.widget_toggle_row_v, if (narrow) View.VISIBLE else View.GONE)
-
-      val kojoriPI = directionPendingIntent(context, appWidgetId, "kojori")
-      val tbilisiPI = directionPendingIntent(context, appWidgetId, "tbilisi")
-
-      // Horizontal buttons
-      styleDirectionButton(views, R.id.widget_toggle_kojori, "Kojori",
-        currentDirection == "kojori", palette.route380, palette.textDim)
-      styleDirectionButton(views, R.id.widget_toggle_tbilisi, "Tbilisi",
-        currentDirection == "tbilisi", palette.route316, palette.textDim)
-      views.setOnClickPendingIntent(R.id.widget_toggle_kojori, kojoriPI)
-      views.setOnClickPendingIntent(R.id.widget_toggle_tbilisi, tbilisiPI)
-
-      // Vertical buttons
-      styleDirectionButton(views, R.id.widget_toggle_kojori_v, "→ Kojori",
-        currentDirection == "kojori", palette.route380, palette.textDim)
-      styleDirectionButton(views, R.id.widget_toggle_tbilisi_v, "→ Tbilisi",
-        currentDirection == "tbilisi", palette.route316, palette.textDim)
-      views.setOnClickPendingIntent(R.id.widget_toggle_kojori_v, kojoriPI)
-      views.setOnClickPendingIntent(R.id.widget_toggle_tbilisi_v, tbilisiPI)
-    }
-
-    private fun styleDirectionButton(
-      views: RemoteViews, viewId: Int, label: String,
-      isActive: Boolean, activeColor: Int, idleColor: Int,
-    ) {
-      views.setTextViewText(viewId, label)
-      views.setTextColor(viewId, if (isActive) activeColor else idleColor)
-      views.setInt(viewId, "setBackgroundResource", R.drawable.widget_chip_idle)
-    }
-
-    private fun bindRefreshButton(
-      views: RemoteViews, appWidgetId: Int, context: Context, palette: WidgetPalette, isRefreshing: Boolean,
-    ) {
-      views.setTextColor(R.id.widget_refresh, palette.textDim)
-      views.setViewVisibility(R.id.widget_refresh, if (isRefreshing) View.GONE else View.VISIBLE)
-      views.setViewVisibility(R.id.widget_refresh_spinner, if (isRefreshing) View.VISIBLE else View.GONE)
-      val intent = Intent(context, KojoriBusWidgetProvider::class.java).apply {
-        action = ACTION_REFRESH
-        putExtra(EXTRA_ACTION_TOKEN, WidgetPrefs.getActionToken(context))
-      }
-      val pendingIntent = PendingIntent.getBroadcast(
-        context, appWidgetId + 300, intent,
-        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-      )
-      views.setOnClickPendingIntent(R.id.widget_refresh, pendingIntent)
-    }
-
-    private fun bindOpenIntent(
-      context: Context, views: RemoteViews, appWidgetId: Int,
-      direction: String, stopId: String,
-    ) {
-      val uri = Uri.parse("kojoribs://?widgetMode=$direction&widgetStopId=$stopId")
-      val intent = Intent(Intent.ACTION_VIEW, uri).apply {
-        setPackage(context.packageName)
-        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-      }
-      val pendingIntent = PendingIntent.getActivity(
-        context, appWidgetId + 5000, intent,
-        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-      )
-      views.setOnClickPendingIntent(R.id.widget_body, pendingIntent)
     }
 
     private fun bindEmptyState(
       views: RemoteViews, direction: String, palette: WidgetPalette,
     ) {
-      val baseCity = if (direction == "kojori") "Tbilisi" else "Kojori"
-      val dotColor = if (direction == "kojori") palette.route380 else palette.route316
-      views.setTextViewText(R.id.widget_title, baseCity)
-      views.setTextColor(R.id.widget_title, palette.text)
-      views.setTextColor(R.id.widget_dot, dotColor)
       views.setTextViewText(R.id.widget_message, "Open app to load")
       views.setTextColor(R.id.widget_message, palette.textDim)
       views.setViewVisibility(R.id.widget_list, View.GONE)
       views.setViewVisibility(R.id.widget_message, View.VISIBLE)
+    }
+
+    private fun widgetCollectionPendingIntent(context: Context, appWidgetId: Int): PendingIntent {
+      val intent = Intent(context, KojoriBusWidgetProvider::class.java).apply {
+        putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
+        putExtra(EXTRA_ACTION_TOKEN, WidgetPrefs.getActionToken(context))
+      }
+      return PendingIntent.getBroadcast(
+        context,
+        appWidgetId + 7000,
+        intent,
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE,
+      )
     }
 
     private fun directionPendingIntent(
