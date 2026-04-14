@@ -2,7 +2,7 @@ import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import * as Location from 'expo-location';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import MapView, { Marker, Polyline, Region } from 'react-native-maps';
+import MapView, { Marker, Polyline, type Region } from 'react-native-maps';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { DirectionToggle } from '@/components/direction-toggle';
@@ -15,13 +15,9 @@ import { splitPolylinesByOverlap } from '@/utils/polyline-offset';
 
 const C = {
   bg: '#09090B',
-  panel: '#0E1117',
-  panelHigh: '#151922',
   border: '#1E2430',
   text: '#EDEAE4',
   textDim: '#98A0AE',
-  textFaint: '#586070',
-  amber: '#F5A20A',
   teal: '#10B8A3',
 } as const;
 
@@ -76,51 +72,38 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
   const { data: routeData } = useRoutePolylines(direction);
   const { data: livePositions = [], refetch } = useVehiclePositions(direction, isActive);
 
-  // Preview fallback, kept for quick local debugging:
-  // const MOCK_POSITIONS: typeof livePositions = [
-  //   { bus: '380', vehicleId: 'mock-1', lat: 41.6585, lon: 44.7835, heading: 210, nextStopId: '' },
-  //   { bus: '380', vehicleId: 'mock-2', lat: 41.6780, lon: 44.7720, heading: 195, nextStopId: '' },
-  //   { bus: '316', vehicleId: 'mock-3', lat: 41.6680, lon: 44.7780, heading: 25, nextStopId: '' },
-  //   { bus: '316', vehicleId: 'mock-4', lat: 41.6920, lon: 44.7650, heading: 40, nextStopId: '' },
-  //   { bus: '380', vehicleId: 'mock-5', lat: 41.7050, lon: 44.7590, heading: 185, nextStopId: '' },
-  // ];
   const positions = livePositions;
   const { status: ttcStatus } = useTtcHealth();
   const routePolylines = routeData?.polylines;
 
-  // Split polylines into overlapping and non-overlapping segments
   const splitPolylines = useMemo(() => {
     if (!routePolylines) return null;
-    
+
     const polyline380 = routePolylines['380'] ?? [];
     const polyline316 = routePolylines['316'] ?? [];
-    
+
     if (polyline380.length < 2 || polyline316.length < 2) {
       return {
         '380': { only: polyline380, shared: [] },
         '316': { only: polyline316, shared: [] },
       };
     }
-    
+
     const split = splitPolylinesByOverlap(polyline380, polyline316, 2);
-    
+
     return {
       '380': { only: split.polyline1Only, shared: split.polyline1Shared },
       '316': { only: split.polyline2Only, shared: split.polyline2Shared },
     };
   }, [routePolylines]);
 
-  const title = direction === 'toKojori' ? 'Inbound to Kojori' : 'Inbound to Tbilisi';
-  const subtitle = direction === 'toKojori'
-    ? 'Tracking live TTC vehicles heading uphill.'
-    : 'Tracking live TTC vehicles heading back into the city.';
   const serviceNote = ttcStatus === 'rate-limited'
-    ? 'TTC rate limiter hit. Auto-refresh is slowed down while the map stays available.'
+    ? 'Rate limited — refresh slowed'
     : ttcStatus === 'offline'
-    ? 'TTC is offline right now. Auto-refresh is slowed down while the map stays available.'
+    ? 'TTC offline — refresh slowed'
     : ttcStatus === 'degraded'
-      ? 'TTC is unstable right now. Vehicle markers may lag until the feed settles.'
-      : 'Updated every 3 seconds while this screen is visible.';
+      ? 'TTC unstable — markers may lag'
+      : null;
   const bottomNote = locationMessage ?? serviceNote;
 
   const groupedCounts = useMemo(() => ({
@@ -143,9 +126,9 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
         })),
         {
           edgePadding: {
-            top: 170,
+            top: 100,
             right: 60,
-            bottom: 220,
+            bottom: 160,
             left: 60,
           },
           animated: true,
@@ -167,7 +150,7 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
     try {
       const permission = await Location.requestForegroundPermissionsAsync();
       if (permission.status !== 'granted') {
-        setLocationMessage('Location permission is off. Enable it to jump to your position.');
+        setLocationMessage('Location permission required');
         return;
       }
 
@@ -185,22 +168,22 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
         },
         450,
       );
-      setLocationMessage('Centered on your current location.');
     } catch {
-      setLocationMessage('Could not get your location right now.');
+      setLocationMessage('Location unavailable');
     } finally {
       setIsLocating(false);
     }
   }
 
   return (
-    <View style={[styles.screen, { paddingTop: insets.top }]}>
+    <View style={styles.screen}>
       <MapView
         ref={mapRef}
-        style={{ flex: 1 }}
+        style={StyleSheet.absoluteFill}
         initialRegion={DEFAULT_REGION}
         userInterfaceStyle="dark"
         showsUserLocation={hasUserLocation}
+        showsMyLocationButton={false}
         onMapReady={() => {
           setMapReady(true);
           setMapTimedOut(false);
@@ -209,10 +192,9 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
           ? (['316', '380'] as const).map((bus) => {
               const segments = splitPolylines[bus];
               const color = routeAccent(bus, colors);
-              
+
               return (
                 <React.Fragment key={`route-${bus}`}>
-                  {/* Non-overlapping segments - full width */}
                   {segments.only.length >= 2 && (
                     <Polyline
                       key={`route-${bus}-only`}
@@ -224,7 +206,6 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
                       lineJoin="round"
                     />
                   )}
-                  {/* Overlapping segments - half width, offset */}
                   {segments.shared.length >= 2 && (
                     <Polyline
                       key={`route-${bus}-shared`}
@@ -264,32 +245,8 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
         })}
       </MapView>
 
-      <View style={styles.mapShadeTop} pointerEvents="none" />
-
+      {/* Top controls */}
       <View style={[styles.topPanel, { top: insets.top + 12 }]}>
-        <View style={styles.headerRow}>
-          <View>
-            <Text style={styles.headerEyebrow}>LIVE MAP</Text>
-            <Text style={styles.headerTitle}>{title}</Text>
-            <Text style={styles.headerSubtitle}>{subtitle}</Text>
-          </View>
-          <View style={styles.headerActions}>
-            <Pressable
-              style={[styles.actionButton, isLocating && styles.actionButtonDisabled]}
-              onPress={handleLocateMe}
-              disabled={isLocating}>
-              <MaterialCommunityIcons
-                name={isLocating ? 'crosshairs-question' : 'crosshairs-gps'}
-                size={18}
-                color={C.text}
-              />
-            </Pressable>
-            <Pressable style={styles.actionButton} onPress={() => refetch()}>
-              <MaterialCommunityIcons name="refresh" size={18} color={C.text} />
-            </Pressable>
-          </View>
-        </View>
-
         <DirectionToggle
           value={direction}
           onChange={setDirection}
@@ -304,22 +261,41 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
           {(['380', '316'] as const).map(bus => {
             const accent = routeAccent(bus, colors);
             return (
-              <View key={bus} style={styles.legendCard}>
-                <View style={[styles.legendSwatch, { backgroundColor: accent }]} />
-                <Text style={styles.legendText}>{bus}</Text>
+              <View key={bus} style={styles.legendChip}>
+                <View style={[styles.legendDot, { backgroundColor: accent }]} />
+                <Text style={styles.legendLabel}>{bus}</Text>
                 <Text style={styles.legendCount}>{groupedCounts[bus]}</Text>
               </View>
             );
           })}
+          <Pressable style={styles.refreshChip} onPress={() => refetch()}>
+            <MaterialCommunityIcons name="refresh" size={14} color={C.textDim} />
+          </Pressable>
         </View>
       </View>
 
-      <View style={[styles.bottomPanel, { bottom: insets.bottom + BottomTabInset + 18 }]}>
-        <Text style={styles.bottomMeta}>{positions.length} buses visible</Text>
-        <Text style={styles.bottomNote}>
-          {bottomNote}
-        </Text>
-      </View>
+      {/* Locate me — bottom right */}
+      <Pressable
+        style={[
+          styles.locateButton,
+          { bottom: insets.bottom + BottomTabInset + (bottomNote ? 64 : 24) },
+          isLocating && styles.locateButtonActive,
+        ]}
+        onPress={handleLocateMe}
+        disabled={isLocating}>
+        <MaterialCommunityIcons
+          name={isLocating ? 'crosshairs-question' : 'crosshairs-gps'}
+          size={20}
+          color={isLocating ? C.teal : C.text}
+        />
+      </Pressable>
+
+      {/* Bottom status — only when there's something to say */}
+      {bottomNote ? (
+        <View style={[styles.bottomPill, { bottom: insets.bottom + BottomTabInset + 18 }]}>
+          <Text style={styles.bottomPillText}>{bottomNote}</Text>
+        </View>
+      ) : null}
 
       {mapTimedOut ? (
         <View style={styles.configOverlay} pointerEvents="none">
@@ -336,86 +312,68 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: C.bg },
-  mapShadeTop: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 140,
-    backgroundColor: 'rgba(9,9,11,0.34)',
-  },
   topPanel: {
     position: 'absolute',
     left: 16,
     right: 16,
-    gap: 12,
-  },
-  headerRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    backgroundColor: 'rgba(14,17,23,0.90)',
-    borderWidth: 1,
-    borderColor: C.border,
-    borderRadius: 22,
-  },
-  headerEyebrow: { color: C.textFaint, fontSize: 10, fontWeight: '800', letterSpacing: 2 },
-  headerTitle: { color: C.text, fontSize: 24, fontWeight: '700', marginTop: 4, letterSpacing: -0.6 },
-  headerSubtitle: { color: C.textDim, fontSize: 13, marginTop: 3, lineHeight: 18 },
-  headerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
     gap: 8,
-    alignSelf: 'center',
   },
-  actionButton: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    borderWidth: 1,
-    borderColor: C.border,
-    backgroundColor: C.panelHigh,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  actionButtonDisabled: { opacity: 0.72 },
   directionToggle: {
-    backgroundColor: 'rgba(14,17,23,0.92)',
+    backgroundColor: 'rgba(14,17,23,0.88)',
   },
   legendRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
+    gap: 6,
   },
-  legendCard: {
+  legendChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 14,
+    backgroundColor: 'rgba(14,17,23,0.85)',
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+  legendDot: { width: 8, height: 8, borderRadius: 4 },
+  legendLabel: { color: C.text, fontSize: 12, fontWeight: '700' },
+  legendCount: { color: C.textDim, fontSize: 11, fontWeight: '700' },
+  refreshChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 14,
+    backgroundColor: 'rgba(14,17,23,0.85)',
+    borderWidth: 1,
+    borderColor: C.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  locateButton: {
+    position: 'absolute',
+    right: 16,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(14,17,23,0.90)',
+    borderWidth: 1,
+    borderColor: C.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  locateButtonActive: { borderColor: C.teal },
+  bottomPill: {
+    position: 'absolute',
+    left: 16,
+    right: 76,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
     borderRadius: 16,
     backgroundColor: 'rgba(14,17,23,0.88)',
     borderWidth: 1,
     borderColor: C.border,
   },
-  legendSwatch: { width: 9, height: 9, borderRadius: 4.5 },
-  legendText: { color: C.text, fontSize: 13, fontWeight: '700', letterSpacing: 0.3 },
-  legendCount: { color: C.textDim, fontSize: 12, fontWeight: '700' },
-  bottomPanel: {
-    position: 'absolute',
-    left: 16,
-    right: 16,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    borderRadius: 20,
-    backgroundColor: 'rgba(14,17,23,0.92)',
-    borderWidth: 1,
-    borderColor: C.border,
-  },
-  bottomMeta: { color: C.text, fontSize: 13, fontWeight: '700' },
-  bottomNote: { color: C.textDim, fontSize: 12, lineHeight: 17, marginTop: 4 },
+  bottomPillText: { color: C.textDim, fontSize: 12 },
   configOverlay: {
     position: 'absolute',
     left: 24,
@@ -431,5 +389,4 @@ const styles = StyleSheet.create({
   },
   configTitle: { color: C.text, fontSize: 16, fontWeight: '700' },
   configText: { color: C.textDim, fontSize: 13, textAlign: 'center', lineHeight: 18, marginTop: 6 },
-  configCode: { color: C.text, fontFamily: 'monospace', fontSize: 12 },
 });
