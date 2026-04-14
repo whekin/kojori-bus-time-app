@@ -10,6 +10,7 @@
     "android:clean": "cd android && ./gradlew clean",
     "android:bundle": "NODE_ENV=production sh -c 'cd android && ./gradlew bundleRelease'",
     "android:apk": "NODE_ENV=development sh -c 'cd android && ./gradlew assembleDebug'",
+    "android:apk:release": "NODE_ENV=production sh -c 'cd android && ./gradlew assembleRelease'",
     "ios": "NODE_ENV=development expo run:ios",
     "web": "NODE_ENV=development expo start --web",
     "lint": "NODE_ENV=development expo lint",
