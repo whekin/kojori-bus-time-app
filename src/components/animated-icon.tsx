@@ -10,6 +10,7 @@ const INITIAL_SCALE_FACTOR = Dimensions.get('screen').height / 90;
 const SPLASH_DELAY = 400;
 const FADE_DURATION = 500;
 const TOTAL_DURATION = SPLASH_DELAY + FADE_DURATION;
+const DURATION = TOTAL_DURATION;
 
 export function AnimatedSplashOverlay() {
   const [visible, setVisible] = useState(true);

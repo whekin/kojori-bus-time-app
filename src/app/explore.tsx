@@ -405,7 +405,7 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
           <Text style={styles.configTitle}>Map not loading</Text>
           <Text style={styles.configText}>
             The API key may be invalid or Maps SDK for Android is not enabled.{'\n'}
-            Enable it at console.cloud.google.com → APIs &amp; Services → Library → "Maps SDK for Android".
+            Enable it at console.cloud.google.com → APIs &amp; Services → Library → &quot;Maps SDK for Android&quot;.
           </Text>
         </View>
       ) : null}

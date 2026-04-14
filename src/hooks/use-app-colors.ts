@@ -116,7 +116,7 @@ export function AppColorsProvider({ children }: { children: React.ReactNode }) {
       const elapsed = Date.now() - start;
       const progress = Math.min(1, elapsed / TRANSITION_MS);
       const eased = 1 - Math.pow(1 - progress, 3);
-      const next = mixPalette(fromRef.current, to, eased);
+      const next = mixPalette(fromRef.current ?? to, to, eased);
 
       setAnimatedColors(next);
       currentRef.current = next;

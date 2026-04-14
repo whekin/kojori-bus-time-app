@@ -70,6 +70,10 @@ bun run android:bundle
 bun run ios
 bun run web
 bun run typecheck
+bun run release:android:preflight
+bun run release:android:doctor
+bun run release:android:build
+bun run release:android:submit
 ```
 
 What they do:
@@ -78,6 +82,10 @@ What they do:
 - `bun run android:apk`: builds debug APK at `android/app/build/outputs/apk/debug/app-debug.apk`
 - `bun run android:bundle`: builds release AAB at `android/app/build/outputs/bundle/release/app-release.aab`
 - `bun run typecheck`: runs TypeScript without emitting files
+- `bun run release:android:preflight`: runs lint + typecheck before production build
+- `bun run release:android:doctor`: checks the EAS release environment
+- `bun run release:android:build`: builds the Android production AAB with EAS
+- `bun run release:android:submit`: submits the latest production build to Play Console
 
 ## Widget testing
 
@@ -108,6 +116,7 @@ assets/                  Baked TTC data + images
 
 - Offline and baked data matter a lot in this app. They keep the experience usable even when TTC is slow or rate-limited.
 - Widget and palette work depend on native rebuilds for full verification.
+- Google Play release files live in `release/google-play/`.
 
 ## License
 
