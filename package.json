@@ -1,7 +1,7 @@
 {
   "name": "kojori-bus-time-app",
   "main": "expo-router/entry",
-  "version": "1.0.0",
+  "version": "2026.4.15",
   "scripts": {
     "start": "NODE_ENV=development expo start",
     "dev": "NODE_ENV=development expo start",
@@ -19,7 +19,8 @@
     "release:android:build": "NODE_ENV=production bunx eas build --platform android --profile production",
     "release:android:build:apk": "NODE_ENV=production bunx eas build --platform android --profile production-apk",
     "release:android:submit": "NODE_ENV=production bunx eas submit --platform android --profile production",
-    "release:android:doctor": "NODE_ENV=production node ./scripts/release-android-doctor.js"
+    "release:android:doctor": "NODE_ENV=production node ./scripts/release-android-doctor.js",
+    "release:version": "bun scripts/release-version.ts"
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "2.2.0",

@@ -48,7 +48,7 @@ import {
 
 const MONO = Platform.select({ android: 'monospace', ios: 'Menlo', default: 'monospace' });
 const DISPLAY = Platform.select({ android: 'serif', ios: 'Georgia', default: 'serif' });
-const APP_VERSION = Constants.expoConfig?.version ?? '1.0.0';
+const APP_VERSION = Constants.expoConfig?.version ?? '2026.4.15';
 const BUILD_NUMBER = Platform.select({
   android: String(Constants.expoConfig?.android?.versionCode ?? 1),
   ios: Constants.expoConfig?.ios?.buildNumber ?? '1',
@@ -878,14 +878,18 @@ export default function SettingsScreen() {
           </Pressable>
         </View>
 
-        <Pressable style={styles.buildFooter} onPress={handleBuildTap}>
-          <Text style={styles.buildText}>v{APP_VERSION} ({BUILD_NUMBER})</Text>
-          <Text
-            style={styles.buildAuthor}
-            onPress={() => Linking.openURL('https://github.com/whekin')}>
-            developed by <Text style={styles.buildLink}>whekin</Text>
-          </Text>
-        </Pressable>
+        <View style={styles.buildFooter}>
+          <View style={styles.buildDivider} />
+          <Pressable onPress={handleBuildTap} style={styles.buildTapArea}>
+            <Text style={styles.buildAppName}>Kojoring Time</Text>
+            <Text style={styles.buildVersion}>v{APP_VERSION} · build {BUILD_NUMBER}</Text>
+          </Pressable>
+          <Pressable onPress={() => Linking.openURL('https://github.com/whekin')} hitSlop={8}>
+            <Text style={styles.buildAuthor}>
+              made with ♥ by <Text style={styles.buildLink}>whekin</Text>
+            </Text>
+          </Pressable>
+        </View>
       </ScrollView>
 
       <StopPickerModal
@@ -1094,8 +1098,11 @@ function createStyles(C: AppColors) {
 
     refreshingRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
     refreshingText: { fontSize: 12 },
-    buildFooter: { alignItems: 'flex-end', paddingTop: 28, paddingBottom: 8 },
-    buildText: { color: C.textFaint, fontSize: 12, fontFamily: MONO },
+    buildFooter: { alignItems: 'center', paddingTop: 32, paddingBottom: 12, gap: 10 },
+    buildDivider: { width: 40, height: 1, backgroundColor: C.border, marginBottom: 6 },
+    buildTapArea: { alignItems: 'center', gap: 2 },
+    buildAppName: { color: C.textDim, fontSize: 13, fontWeight: '600', letterSpacing: 0.5 },
+    buildVersion: { color: C.textFaint, fontSize: 11, fontFamily: MONO },
     buildAuthor: { color: C.textFaint, fontSize: 11, marginTop: 2 },
     buildLink: { textDecorationLine: 'underline' },
   });
