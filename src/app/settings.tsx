@@ -1,4 +1,6 @@
 import Constants from 'expo-constants';
+import { Asset } from 'expo-asset';
+import { File } from 'expo-file-system';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -62,6 +64,41 @@ const EASTER_EGG_MESSAGES = [
 const PALETTE_IDS = Object.keys(APP_PALETTES) as AppPaletteId[];
 const PALETTE_CARD_WIDTH = 250;
 const PALETTE_CARD_GAP = 12;
+const PROJECT_GITHUB_URL = 'https://github.com/whekin/kojori-bus-time-app';
+const LEGAL_DOC_MODULES = {
+  privacy: require('../../assets/legal/privacy-policy.md'),
+  terms: require('../../assets/legal/terms-of-service.md'),
+} as const;
+
+type LegalDocument = keyof typeof LEGAL_DOC_MODULES;
+
+async function readBundledTextAsset(moduleId: number) {
+  const asset = Asset.fromModule(moduleId);
+
+  if (!asset.downloaded) {
+    await asset.downloadAsync();
+  }
+
+  const uri = asset.localUri ?? asset.uri;
+
+  if (!uri) {
+    throw new Error('Missing bundled asset URI');
+  }
+
+  if (Platform.OS === 'web' || uri.startsWith('http://') || uri.startsWith('https://')) {
+    const response = await fetch(uri);
+    return response.text();
+  }
+
+  return new File(uri).text();
+}
+
+function formatLegalMarkdown(markdown: string) {
+  return markdown
+    .replace(/^#{1,6}\s+/gm, '')
+    .replace(/\*\*(.*?)\*\*/g, '$1')
+    .trim();
+}
 
 function useStyles() {
   const colors = useAppColors();
@@ -472,6 +509,40 @@ export default function SettingsScreen() {
   const paletteCarouselRef = useRef<ICarouselInstance>(null);
   const paletteIndex = Math.max(0, PALETTE_IDS.indexOf(settings.paletteId));
   const paletteCarouselWidth = Math.max(windowWidth, PALETTE_CARD_WIDTH + 40);
+  
+  const [legalModal, setLegalModal] = useState<LegalDocument | null>(null);
+  const [legalContent, setLegalContent] = useState<Record<LegalDocument, string>>({
+    privacy: '',
+    terms: '',
+  });
+  const [legalLoadError, setLegalLoadError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadLegalDocs() {
+      try {
+        const [privacy, terms] = await Promise.all([
+          readBundledTextAsset(LEGAL_DOC_MODULES.privacy),
+          readBundledTextAsset(LEGAL_DOC_MODULES.terms),
+        ]);
+
+        if (cancelled) return;
+
+        setLegalContent({ privacy, terms });
+        setLegalLoadError(null);
+      } catch {
+        if (cancelled) return;
+        setLegalLoadError('Failed to load this document.');
+      }
+    }
+
+    void loadLegalDocs();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     paletteCarouselRef.current?.scrollTo({ index: paletteIndex, animated: true });
@@ -725,6 +796,23 @@ export default function SettingsScreen() {
           </Pressable>
         </View>
 
+        <View style={styles.sectionMeta}>
+          <Text style={styles.sectionHeader}>LEGAL</Text>
+        </View>
+        <View style={styles.card}>
+          <Pressable style={styles.manageBtn} onPress={() => setLegalModal('privacy')}>
+            <Text style={[styles.manageBtnText, { color: colors.text }]}>Privacy Policy</Text>
+          </Pressable>
+          <View style={styles.itemDivider} />
+          <Pressable style={styles.manageBtn} onPress={() => setLegalModal('terms')}>
+            <Text style={[styles.manageBtnText, { color: colors.text }]}>Terms of Service</Text>
+          </Pressable>
+          <View style={styles.itemDivider} />
+          <Pressable style={styles.manageBtn} onPress={() => Linking.openURL(PROJECT_GITHUB_URL)}>
+            <Text style={[styles.manageBtnText, { color: colors.primary }]}>Project GitHub</Text>
+          </Pressable>
+        </View>
+
         <Pressable style={styles.buildFooter} onPress={handleBuildTap}>
           <Text style={styles.buildText}>v{APP_VERSION} ({BUILD_NUMBER})</Text>
           <Text
@@ -775,7 +863,62 @@ export default function SettingsScreen() {
         onSelect={id => update({ widgetKojoriStopId: id })}
         onClose={() => setModal(null)}
       />
+      <LegalModal
+        visible={legalModal !== null}
+        title={legalModal === 'privacy' ? 'Privacy Policy' : 'Terms of Service'}
+        content={legalModal ? legalContent[legalModal] : ''}
+        isLoading={legalModal !== null && !legalLoadError && !legalContent[legalModal]}
+        error={legalLoadError}
+        colors={colors}
+        onClose={() => setLegalModal(null)}
+      />
     </View>
+  );
+}
+
+function LegalModal({
+  visible,
+  title,
+  content,
+  isLoading,
+  error,
+  colors,
+  onClose,
+}: {
+  visible: boolean;
+  title: string;
+  content: string;
+  isLoading: boolean;
+  error: string | null;
+  colors: AppColors;
+  onClose: () => void;
+}) {
+  const insets = useSafeAreaInsets();
+  const modalStyles = createModalStyles(colors);
+
+  return (
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+      <View style={[modalStyles.screen, { paddingTop: insets.top }]}>
+        <View style={modalStyles.header}>
+          <Pressable style={modalStyles.backBtn} onPress={onClose}>
+            <Text style={modalStyles.backText}>←</Text>
+          </Pressable>
+          <Text style={modalStyles.headerTitle}>{title}</Text>
+          <View style={{ width: 40 }} />
+        </View>
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={{ padding: 20, paddingBottom: insets.bottom + 40 }}>
+          {isLoading ? (
+            <ActivityIndicator color={colors.primary} size="small" />
+          ) : (
+            <Text style={{ color: colors.text, fontSize: 14, lineHeight: 22 }}>
+              {error ?? formatLegalMarkdown(content)}
+            </Text>
+          )}
+        </ScrollView>
+      </View>
+    </Modal>
   );
 }
 
