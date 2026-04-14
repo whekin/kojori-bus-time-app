@@ -149,6 +149,12 @@ function dedupeStops(stops: StopInfo[]) {
   });
 }
 
+const THROTTLE_MS = 30_000;
+
+function delay(ms: number) {
+  return new Promise<void>(resolve => setTimeout(resolve, ms));
+}
+
 async function refreshStep(
   dataset: OfflineDataset,
   run: () => Promise<boolean>,
@@ -433,7 +439,20 @@ export async function hydrateTtcOfflineData(client: QueryClient) {
   });
 }
 
+/**
+ * Gradually refreshes all offline datasets, throttling API calls to avoid
+ * TTC rate limiting. Each network request is separated by THROTTLE_MS.
+ * Cached data is used without delay; only actual fetches incur the wait.
+ */
 export async function warmTtcOfflineData(client: QueryClient) {
+  let apiCallsMade = 0;
+
+  async function throttledFetch<T>(fn: () => Promise<T>): Promise<T> {
+    if (apiCallsMade > 0) await delay(THROTTLE_MS);
+    apiCallsMade++;
+    return fn();
+  }
+
   updateSnapshot({
     status: 'warming',
     completedSteps: 0,
@@ -441,6 +460,7 @@ export async function warmTtcOfflineData(client: QueryClient) {
     error: null,
   });
 
+  // Step 1: Schedules (4 route/pattern pairs, each may need 1 API call)
   await refreshStep(
     'schedules',
     async () => {
@@ -454,7 +474,7 @@ export async function warmTtcOfflineData(client: QueryClient) {
             continue;
           }
 
-          const data = await fetchSchedule(pair.routeId, pair.patternSuffix);
+          const data = await throttledFetch(() => fetchSchedule(pair.routeId, pair.patternSuffix));
           await writeScheduleCache(pair.routeId, pair.patternSuffix, data);
           client.setQueryData(['schedule', pair.routeId, pair.patternSuffix], data);
           anySucceeded = true;
@@ -467,6 +487,7 @@ export async function warmTtcOfflineData(client: QueryClient) {
     1,
   );
 
+  // Step 2: Route stops (2 directions, each fetches 2 routes internally)
   await refreshStep(
     'routeStops',
     async () => {
@@ -480,7 +501,7 @@ export async function warmTtcOfflineData(client: QueryClient) {
             continue;
           }
 
-          const data = await fetchRouteStopsForDirection(direction);
+          const data = await throttledFetch(() => fetchRouteStopsForDirection(direction));
           await writeRouteStopsCache(direction, data);
           client.setQueryData(['route-stops', direction], data);
           anySucceeded = true;
@@ -493,6 +514,7 @@ export async function warmTtcOfflineData(client: QueryClient) {
     2,
   );
 
+  // Step 3: Polylines (2 directions, each fetches 2 routes internally)
   await refreshStep(
     'polylines',
     async () => {
@@ -506,7 +528,7 @@ export async function warmTtcOfflineData(client: QueryClient) {
             continue;
           }
 
-          const data = await fetchRoutePolylinesForDirection(direction);
+          const data = await throttledFetch(() => fetchRoutePolylinesForDirection(direction));
           await writeRoutePolylinesCache(direction, {
             version: 3,
             polylines: data.polylines,
@@ -527,6 +549,7 @@ export async function warmTtcOfflineData(client: QueryClient) {
     3,
   );
 
+  // Step 4: Stop names (batch, but throttled per call)
   await refreshStep(
     'stopNames',
     async () => {
@@ -540,21 +563,23 @@ export async function warmTtcOfflineData(client: QueryClient) {
         return true;
       }
 
-      const results = await Promise.allSettled(missingStopIds.map(id => fetchStopDetails(id)));
       const nextNames = { ...freshNames };
+      let anyFetched = false;
 
-      results.forEach(result => {
-        if (result.status === 'fulfilled') {
-          nextNames[result.value.id] = result.value.name;
-          client.setQueryData(['stop', result.value.id], result.value);
-        }
-      });
+      for (const id of missingStopIds) {
+        try {
+          const data = await throttledFetch(() => fetchStopDetails(id));
+          nextNames[data.id] = data.name;
+          client.setQueryData(['stop', data.id], data);
+          anyFetched = true;
+        } catch {}
+      }
 
-      if (Object.keys(nextNames).length > Object.keys(freshNames).length) {
+      if (anyFetched) {
         await writeStopNameCache(nextNames);
       }
 
-      if (results.length > 0 && results.every(result => result.status === 'rejected')) {
+      if (!anyFetched && missingStopIds.length > 0) {
         throw new Error('Could not refresh stop names');
       }
 
