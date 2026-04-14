@@ -1,7 +1,7 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import * as Location from 'expo-location';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import MapView, { Marker, Polyline, Region } from 'react-native-maps';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -41,6 +41,18 @@ function routeAccent(bus: '380' | '316') {
   return bus === '380' ? C.amber : C.teal;
 }
 
+const MARKER_BADGE_IMAGES: Record<'380' | '316', number> = {
+  '380': require('../../assets/images/map-marker-380.png'),
+  '316': require('../../assets/images/map-marker-316.png'),
+};
+
+const MARKER_HEADING_IMAGES: Record<'380' | '316', number> = {
+  '380': require('../../assets/images/map-heading-380.png'),
+  '316': require('../../assets/images/map-heading-316.png'),
+};
+
+const MARKER_ANCHOR = { x: 0.5, y: 54 / 84 };
+
 export default function ExploreScreen({ isActive = false }: ExploreScreenProps) {
   const insets = useSafeAreaInsets();
   const mapRef = useRef<MapView>(null);
@@ -60,10 +72,19 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
   }, [mapReady]);
 
   const { data: routeData } = useRoutePolylines(direction);
-  const { data: positions = [], refetch } = useVehiclePositions(direction, isActive);
+  const { data: livePositions = [], refetch } = useVehiclePositions(direction, isActive);
+
+  // Preview fallback, kept for quick local debugging:
+  // const MOCK_POSITIONS: typeof livePositions = [
+  //   { bus: '380', vehicleId: 'mock-1', lat: 41.6585, lon: 44.7835, heading: 210, nextStopId: '' },
+  //   { bus: '380', vehicleId: 'mock-2', lat: 41.6780, lon: 44.7720, heading: 195, nextStopId: '' },
+  //   { bus: '316', vehicleId: 'mock-3', lat: 41.6680, lon: 44.7780, heading: 25, nextStopId: '' },
+  //   { bus: '316', vehicleId: 'mock-4', lat: 41.6920, lon: 44.7650, heading: 40, nextStopId: '' },
+  //   { bus: '380', vehicleId: 'mock-5', lat: 41.7050, lon: 44.7590, heading: 185, nextStopId: '' },
+  // ];
+  const positions = livePositions;
   const { status: ttcStatus } = useTtcHealth();
   const routePolylines = routeData?.polylines;
-  const routeSource = routeData?.source ?? 'stops-fallback';
 
   const title = direction === 'toKojori' ? 'Inbound to Kojori' : 'Inbound to Tbilisi';
   const subtitle = direction === 'toKojori'
@@ -177,37 +198,25 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
             })
           : null}
         {positions.map(position => {
-          const accent = routeAccent(position.bus);
           return (
-            <Marker
-              key={`${position.bus}-${position.vehicleId}`}
-              coordinate={{ latitude: position.lat, longitude: position.lon }}
-              anchor={{ x: 0.5, y: 0.5 }}
-              title={`${position.bus} to ${direction === 'toKojori' ? 'Kojori' : 'Tbilisi'}`}
-              description={`Vehicle ${position.vehicleId}`}>
-              <View style={styles.markerWrap}>
-                <View style={[styles.markerGlow, { backgroundColor: accent + '24' }]} />
-                <View style={styles.markerHeadingWrap}>
-                  <View style={[styles.markerHeadingStem, { backgroundColor: accent + '66' }]} />
-                  <View style={[styles.markerHeadingBadge, { backgroundColor: accent, shadowColor: accent + '66' }]}>
-                    <MaterialCommunityIcons
-                      name="navigation-variant"
-                      size={14}
-                      color="#09090B"
-                      style={{ transform: [{ rotate: `${position.heading}deg` }] }}
-                    />
-                  </View>
-                </View>
-                <View style={[styles.markerCircle, { borderColor: accent, shadowColor: accent }]}>
-                  <View style={[styles.markerCircleInner, { backgroundColor: accent + '18' }]}>
-                    <MaterialCommunityIcons name="bus-side" size={18} color={accent} />
-                  </View>
-                  <View style={[styles.markerRouteChip, { backgroundColor: accent }]}>
-                    <Text style={styles.markerRouteChipText}>{position.bus}</Text>
-                  </View>
-                </View>
-              </View>
-            </Marker>
+            <React.Fragment key={`${position.bus}-${position.vehicleId}`}>
+              <Marker
+                coordinate={{ latitude: position.lat, longitude: position.lon }}
+                anchor={MARKER_ANCHOR}
+                image={MARKER_BADGE_IMAGES[position.bus]}
+                tracksViewChanges={false}
+                title={`${position.bus} to ${direction === 'toKojori' ? 'Kojori' : 'Tbilisi'}`}
+                description={`Vehicle ${position.vehicleId}`}
+              />
+              <Marker
+                coordinate={{ latitude: position.lat, longitude: position.lon }}
+                anchor={MARKER_ANCHOR}
+                image={MARKER_HEADING_IMAGES[position.bus]}
+                flat
+                rotation={position.heading}
+                tracksViewChanges={false}
+              />
+            </React.Fragment>
           );
         })}
       </MapView>
@@ -249,23 +258,6 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
         />
 
         <View style={styles.legendRow}>
-          <View
-            style={[
-              styles.geometryBadge,
-              routeSource === 'google-directions'
-                ? styles.geometryBadgeOn
-                : routeSource === 'hybrid-connected'
-                  ? styles.geometryBadgeHybrid
-                  : styles.geometryBadgeOff,
-            ]}>
-            <Text style={styles.geometryBadgeText}>
-              {routeSource === 'google-directions'
-                ? 'Google road'
-                : routeSource === 'hybrid-connected'
-                  ? 'Hybrid route'
-                  : 'Stops fallback'}
-            </Text>
-          </View>
           {(['380', '316'] as const).map(bus => {
             const accent = routeAccent(bus);
             return (
@@ -354,30 +346,6 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 10,
   },
-  geometryBadge: {
-    paddingHorizontal: 11,
-    paddingVertical: 8,
-    borderRadius: 999,
-    borderWidth: 1,
-  },
-  geometryBadgeOn: {
-    backgroundColor: '#173222',
-    borderColor: '#28573a',
-  },
-  geometryBadgeHybrid: {
-    backgroundColor: '#34280f',
-    borderColor: '#6b521c',
-  },
-  geometryBadgeOff: {
-    backgroundColor: 'rgba(14,17,23,0.88)',
-    borderColor: C.border,
-  },
-  geometryBadgeText: {
-    color: C.text,
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 0.25,
-  },
   legendCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -392,70 +360,6 @@ const styles = StyleSheet.create({
   legendSwatch: { width: 9, height: 9, borderRadius: 4.5 },
   legendText: { color: C.text, fontSize: 13, fontWeight: '700', letterSpacing: 0.3 },
   legendCount: { color: C.textDim, fontSize: 12, fontWeight: '700' },
-  markerWrap: { alignItems: 'center', justifyContent: 'center' },
-  markerGlow: {
-    position: 'absolute',
-    width: 54,
-    height: 54,
-    borderRadius: 27,
-  },
-  markerHeadingWrap: {
-    position: 'absolute',
-    top: -20,
-    right: -10,
-    alignItems: 'center',
-  },
-  markerHeadingStem: {
-    width: 2,
-    height: 10,
-    borderRadius: 999,
-    marginBottom: -1,
-  },
-  markerHeadingBadge: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    shadowColor: '#000',
-    shadowOpacity: 0.32,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 7,
-    zIndex: 2,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  markerCircle: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    borderWidth: 1.5,
-    backgroundColor: 'rgba(14,17,23,0.96)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.35,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 8,
-  },
-  markerCircleInner: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  markerRouteChip: {
-    position: 'absolute',
-    bottom: -7,
-    minWidth: 24,
-    paddingHorizontal: 6,
-    height: 15,
-    borderRadius: 999,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  markerRouteChipText: { color: '#09090B', fontSize: 9, fontWeight: '900', letterSpacing: 0.3 },
   bottomPanel: {
     position: 'absolute',
     left: 16,
