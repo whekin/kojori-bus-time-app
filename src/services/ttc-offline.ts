@@ -258,6 +258,10 @@ export function loadBakedData(client: QueryClient) {
       ...stopsForDir380.map(s => ({ id: s.stop.id, label: s.stop.name })),
       ...stopsForDir316.map(s => ({ id: s.stop.id, label: s.stop.name })),
     ]);
+    // TTC omits the actual first Tbilisi stop — prepend it
+    if (direction === 'toKojori' && !merged.some(s => s.id === '1:2994')) {
+      merged.unshift({ id: '1:2994', label: 'Elene Akhvlediani Street' });
+    }
     client.setQueryData(['route-stops', direction], merged);
   }
 
@@ -279,7 +283,12 @@ export async function writeScheduleCache(routeId: string, patternSuffix: string,
 export async function fetchRouteStopsForDirection(direction: Direction): Promise<StopInfo[]> {
   const stops380 = await fetchRouteStops(ROUTES['380'].id, ROUTES['380'][direction]);
   const stops316 = await fetchRouteStops(ROUTES['316'].id, ROUTES['316'][direction]);
-  return dedupeStops([...stops380, ...stops316]);
+  const merged = dedupeStops([...stops380, ...stops316]);
+  // TTC omits the actual first Tbilisi stop (Elene Akhvlediani) — prepend it
+  if (direction === 'toKojori' && !merged.some(s => s.id === '1:2994')) {
+    merged.unshift({ id: '1:2994', label: 'Elene Akhvlediani Street' });
+  }
+  return merged;
 }
 
 export async function readRouteStopsCache(

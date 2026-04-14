@@ -41,7 +41,7 @@ Key routes:
 - Bus 380: route `1:R97505`, Tbilisi→Kojori pattern `0:01`, Kojori→Tbilisi `1:01`
 - Bus 316: route `1:R98445`, Tbilisi→Kojori pattern `1:01`, Kojori→Tbilisi `0:01`
 
-Tbilisi departure stops: `1:3932` (primary), `1:853` (Liberty Square)
+Tbilisi departure stops: `1:2994` (Elene Akhvlediani — actual first stop, TTC API omits it), `1:3932` (Baratashvili), `1:853` (Sulkhan-Saba)
 
 Kojori stops: `1:2856`, `1:4181`, `1:3782`, `1:3078`
 

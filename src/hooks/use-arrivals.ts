@@ -1,15 +1,16 @@
 import { useQuery } from '@tanstack/react-query';
 
-import { ArrivalTime, BusLine, fetchArrivalTimes, ROUTES } from '@/services/ttc';
+import { ArrivalTime, BusLine, fetchArrivalTimes, ROUTES, SCHEDULE_STOP_PROXY } from '@/services/ttc';
 
 const BUSES: BusLine[] = ['380', '316'];
 
 /** Real-time + scheduled arrivals for a stop. Refreshes every 30s. */
 export function useArrivals(stopId: string, direction?: 'toKojori' | 'toTbilisi') {
+  const fetchStopId = SCHEDULE_STOP_PROXY[stopId] ?? stopId;
   const query = useQuery<ArrivalTime[]>({
     queryKey: ['arrivals', stopId],
     meta: { source: 'ttc' },
-    queryFn: () => fetchArrivalTimes(stopId),
+    queryFn: () => fetchArrivalTimes(fetchStopId),
     refetchInterval: 30_000,
     staleTime: 20_000,
     retry: 1,

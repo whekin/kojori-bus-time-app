@@ -156,9 +156,18 @@ export interface StopInfo {
  * First entry = recommended default.
  */
 export const ALL_TBILISI_STOPS: StopInfo[] = [
-  { id: '1:3932', label: 'Nikoloz Baratashvili Street' }, // starting stop — most accurate schedule
+  { id: '1:2994', label: 'Elene Akhvlediani Street' }, // actual first stop — TTC API omits it from schedule
+  { id: '1:3932', label: 'Nikoloz Baratashvili Street' },
   { id: '1:853', label: 'Sulkhan-Saba Street' },
 ];
+
+/**
+ * TTC omits stop 1:2994 from schedule data. When computing departures
+ * for it, use 1:3932 (next stop, ~1 min later) as a proxy.
+ */
+export const SCHEDULE_STOP_PROXY: Record<string, string> = {
+  '1:2994': '1:3932',
+};
 
 export const ALL_KOJORI_STOPS: StopInfo[] = [
   { id: '1:2856', label: 'Kojori, Vazha-Pshavela St #56' },
@@ -437,6 +446,7 @@ export function computeUpcomingDepartures(
   horizonMins = 23 * 60,
   now = new Date(),
 ): Departure[] {
+  const lookupStopId = SCHEDULE_STOP_PROXY[stopId] ?? stopId;
   const nowMins = now.getHours() * 60 + now.getMinutes();
   const midnightWrapThresholdMins = 12 * 60;
   const result: Departure[] = [];
@@ -450,7 +460,7 @@ export function computeUpcomingDepartures(
     if (!schedule) continue;
     const period = getTodayPeriod(schedule);
     if (!period) continue;
-    const times = extractStopTimes(period, stopId);
+    const times = extractStopTimes(period, lookupStopId);
 
     for (const t of times) {
       const mins = parseTimeToMins(t);
