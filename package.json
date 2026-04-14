@@ -20,7 +20,7 @@
     "release:android:build:apk": "NODE_ENV=production bunx eas build --platform android --profile production-apk",
     "release:android:submit": "NODE_ENV=production bunx eas submit --platform android --profile production",
     "release:android:doctor": "NODE_ENV=production node ./scripts/release-android-doctor.js",
-    "release:version": "bun scripts/release-version.ts"
+    "release": "bun scripts/release.ts"
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "2.2.0",
