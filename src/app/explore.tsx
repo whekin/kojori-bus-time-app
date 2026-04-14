@@ -86,6 +86,28 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
   const { status: ttcStatus } = useTtcHealth();
   const routePolylines = routeData?.polylines;
 
+  // Split polylines into overlapping and non-overlapping segments
+  const splitPolylines = useMemo(() => {
+    if (!routePolylines) return null;
+    
+    const polyline380 = routePolylines['380'] ?? [];
+    const polyline316 = routePolylines['316'] ?? [];
+    
+    if (polyline380.length < 2 || polyline316.length < 2) {
+      return {
+        '380': { only: polyline380, shared: [] },
+        '316': { only: polyline316, shared: [] },
+      };
+    }
+    
+    const split = splitPolylinesByOverlap(polyline380, polyline316, 2);
+    
+    return {
+      '380': { only: split.polyline1Only, shared: split.polyline1Shared },
+      '316': { only: split.polyline2Only, shared: split.polyline2Shared },
+    };
+  }, [routePolylines]);
+
   const title = direction === 'toKojori' ? 'Inbound to Kojori' : 'Inbound to Tbilisi';
   const subtitle = direction === 'toKojori'
     ? 'Tracking live TTC vehicles heading uphill.'
@@ -179,21 +201,38 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
           setMapReady(true);
           setMapTimedOut(false);
         }}>
-        {routePolylines
-          ? (['316', '380'] as const).map((bus, index) => {
-              const points = routePolylines[bus] ?? [];
-              if (points.length < 2) return null;
-
+        {splitPolylines
+          ? (['316', '380'] as const).map((bus) => {
+              const segments = splitPolylines[bus];
+              const color = routeAccent(bus);
+              
               return (
-                <Polyline
-                  key={`route-${bus}`}
-                  coordinates={points}
-                  strokeColor={routeAccent(bus)}
-                  strokeWidth={direction === 'toKojori' ? 4 : 3}
-                  zIndex={index + 1}
-                  lineCap="round"
-                  lineJoin="round"
-                />
+                <React.Fragment key={`route-${bus}`}>
+                  {/* Non-overlapping segments - full width */}
+                  {segments.only.length >= 2 && (
+                    <Polyline
+                      key={`route-${bus}-only`}
+                      coordinates={segments.only}
+                      strokeColor={color}
+                      strokeWidth={4}
+                      zIndex={2}
+                      lineCap="round"
+                      lineJoin="round"
+                    />
+                  )}
+                  {/* Overlapping segments - half width, offset */}
+                  {segments.shared.length >= 2 && (
+                    <Polyline
+                      key={`route-${bus}-shared`}
+                      coordinates={segments.shared}
+                      strokeColor={color}
+                      strokeWidth={2}
+                      zIndex={3}
+                      lineCap="butt"
+                      lineJoin="miter"
+                    />
+                  )}
+                </React.Fragment>
               );
             })
           : null}
