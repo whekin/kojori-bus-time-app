@@ -599,3 +599,17 @@ export async function warmTtcOfflineData(client: QueryClient) {
     lastSyncAt,
   });
 }
+
+export async function clearAllTtcCache(client: QueryClient) {
+  await AsyncStorage.clear();
+  client.clear();
+  updateSnapshot({
+    status: 'idle',
+    completedSteps: 0,
+    totalSteps: 0,
+    availableDatasets: 0,
+    totalDatasets: TOTAL_OFFLINE_DATASETS,
+    lastHydratedAt: null,
+    lastSyncAt: null,
+  });
+}

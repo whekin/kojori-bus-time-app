@@ -35,6 +35,7 @@ import { useStopNames } from '@/hooks/use-stop-names';
 import { useTtcOfflineStatus } from '@/hooks/use-ttc-offline';
 import { StopInfo } from '@/services/ttc';
 import {
+  clearAllTtcCache,
   ROUTE_POLYLINES_CACHE_TTL,
   ROUTE_STOPS_CACHE_TTL,
   SCHEDULE_CACHE_TTL,
@@ -486,6 +487,33 @@ export default function SettingsScreen() {
     }
   }
 
+  async function handleClearCache() {
+    Alert.alert(
+      'Clear Cache',
+      'This will remove all cached data and settings. The app will reload to apply changes.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Clear',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await clearAllTtcCache(queryClient);
+              if (Platform.OS === 'web') {
+                window.location.reload();
+              } else {
+                const Updates = require('expo-updates');
+                await Updates.reloadAsync();
+              }
+            } catch (error) {
+              Alert.alert('Error', 'Failed to clear cache.');
+            }
+          },
+        },
+      ],
+    );
+  }
+
   function handleBuildTap() {
     if (easterEggTimerRef.current) clearTimeout(easterEggTimerRef.current);
     const next = easterEggTaps + 1;
@@ -579,7 +607,6 @@ export default function SettingsScreen() {
 
         <View style={styles.sectionMeta}>
           <Text style={styles.sectionHeader}>TBILISI DEPARTURE STOPS</Text>
-          <Text style={styles.sectionNote}>Used for schedule when heading to Kojori. Most accurate at starting stop.</Text>
         </View>
         <FavoritesCard
           favoriteIds={settings.tbilisiFavorites}
@@ -708,6 +735,12 @@ export default function SettingsScreen() {
                   <Text style={[styles.refreshingText, { color: colors.textDim }]}>Refreshing slowly to avoid rate limits…</Text>
                 </View>
               : <Text style={[styles.manageBtnText, { color: colors.route316 }]}>Refresh timetables</Text>}
+          </Pressable>
+          <View style={styles.itemDivider} />
+          <Pressable
+            style={styles.manageBtn}
+            onPress={handleClearCache}>
+            <Text style={[styles.manageBtnText, { color: colors.textDim }]}>Clear cache</Text>
           </Pressable>
         </View>
 

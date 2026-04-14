@@ -1,7 +1,7 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import * as Location from 'expo-location';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import MapView, { Marker, Polyline, type Region } from 'react-native-maps';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -62,6 +62,7 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
   const [hasUserLocation, setHasUserLocation] = useState(false);
   const [isLocating, setIsLocating] = useState(false);
   const [locationMessage, setLocationMessage] = useState<string | null>(null);
+  const [currentRegion, setCurrentRegion] = useState<Region>(DEFAULT_REGION);
 
   useEffect(() => {
     if (mapReady) return;
@@ -187,7 +188,8 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
         onMapReady={() => {
           setMapReady(true);
           setMapTimedOut(false);
-        }}>
+        }}
+        onRegionChangeComplete={setCurrentRegion}>
         {splitPolylines
           ? (['316', '380'] as const).map((bus) => {
               const segments = splitPolylines[bus];

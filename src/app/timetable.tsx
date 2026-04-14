@@ -24,6 +24,7 @@ import {
   getTodayPeriod,
   parseTimeToMins,
   ROUTES,
+  SCHEDULE_STOP_PROXY,
 } from '@/services/ttc';
 
 const C = {
@@ -113,12 +114,15 @@ export default function TimetableScreen() {
 
     const schedules: Record<BusLine, typeof s380> = { '380': s380, '316': s316 };
 
+    // Apply proxy fallback for stops that TTC omits from schedule
+    const lookupStopId = SCHEDULE_STOP_PROXY[stopId] ?? stopId;
+
     for (const bus of buses) {
       const schedule = schedules[bus];
       if (!schedule) continue;
       const period = getTodayPeriod(schedule);
       if (!period) continue;
-      const times = extractStopTimes(period, stopId);
+      const times = extractStopTimes(period, lookupStopId);
 
       for (const t of times) {
         entries.push({ bus, time: t, minsFromMidnight: parseTimeToMins(t) });
@@ -194,13 +198,7 @@ export default function TimetableScreen() {
               })}
             </View>
 
-            <View style={styles.noteBanner}>
-              <Text style={styles.noteText}>
-                {direction === 'toKojori'
-                  ? 'Times from the starting stop. Intermediate stops arrive ~5–10 min earlier.'
-                  : 'Times from selected Kojori stop.'}
-              </Text>
-            </View>
+
           </View>
         }
         ListEmptyComponent={
