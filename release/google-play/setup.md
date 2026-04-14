@@ -47,6 +47,8 @@ Use the files in this folder for:
 - content rating guidance
 - reviewer access notes
 
+Make sure the privacy policy and terms URLs you enter in Play Console are publicly reachable before submission.
+
 ## 6. Common rejection checks
 
 - Privacy policy must be published at a public URL

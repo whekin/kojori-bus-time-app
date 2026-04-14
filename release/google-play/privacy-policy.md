@@ -2,44 +2,44 @@
 
 Last updated: April 14, 2026
 
-Kojori Bus (“the App”) is a transit information app for bus routes 380 and 316 between Tbilisi and Kojori, Georgia.
+Kojori Bus ("the App") is a transit app for routes 380 and 316 between Kojori and Tbilisi.
 
-## 1. Data we collect
+## 1. Information We Collect
 
-The App does not collect, store, or transmit personal data to our servers.
+The App does not collect personal information on our servers. It communicates directly with the TTC public API.
 
-## 2. Location data
+## 2. Location Data
 
-When you grant permission, the App accesses your device location only to:
+If you grant location permission, the App uses your device location only on-device to:
 
 - show your position on the map
-- auto-detect your direction of travel
+- detect whether you are traveling toward Kojori or Tbilisi
 
-Location data is processed on-device only and is not sent to us.
+Location data is not uploaded to our servers.
 
-## 3. Local storage
+## 3. Local Storage
 
-The App stores schedules, stop names, and route data on your device for offline use. This data does not contain personal information.
+The App stores timetable data, route data, stop names, and user preferences locally on your device so the App can work offline. This local data does not identify you personally.
 
-## 4. Third-party services
+## 4. Third-Party Services
 
-- **TTC API**: provides transit data used by the App
-- **Google Maps SDK**: renders map tiles and markers
+- **TTC public API**: used for bus schedules, stop data, and live vehicle data
+- **Google Maps SDK**: used for map rendering and map tiles
 
-## 5. Analytics and advertising
+These services may process their own network and device data according to their policies.
 
-The App does not include analytics, tracking, advertising, or telemetry.
+## 5. Analytics and Advertising
 
-## 6. Children’s privacy
+The App does not use analytics, advertising, tracking, or crash-reporting tools.
 
-The App is not intended to collect data from children.
+## 6. Children's Privacy
+
+The App is not intended to collect personal data from children.
 
 ## 7. Changes
 
-We may update this policy and the “Last updated” date above.
+We may update this policy from time to time. The latest version will always be reflected here.
 
 ## 8. Contact
 
-For questions, use the project issue tracker:
-
-https://github.com/whekin/kojori-bus-time-app
+Questions: https://github.com/whekin/kojori-bus-time-app

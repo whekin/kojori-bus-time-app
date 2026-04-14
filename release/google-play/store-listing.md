@@ -40,6 +40,14 @@ Transit data comes from the TTC public API and may change or become unavailable 
 
 - Feature graphic
 - 2+ phone screenshots
-- Privacy policy URL
-- Contact email
-- Support URL or website
+- Privacy policy URL: https://github.com/whekin/kojori-bus-time-app/blob/main/release/google-play/privacy-policy.md
+- Terms of service URL: https://github.com/whekin/kojori-bus-time-app/blob/main/release/google-play/terms-of-service.md
+- Contact email or support URL
+- Support URL: https://github.com/whekin/kojori-bus-time-app/issues
+
+## Compliance notes
+
+- No account required
+- No ads or analytics
+- Location access is optional and on-device only
+- Store copy should avoid promising perfect real-time accuracy

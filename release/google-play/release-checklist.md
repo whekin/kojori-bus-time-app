@@ -5,6 +5,7 @@
 - [ ] Set `GOOGLE_MAPS_API_KEY_ANDROID`
 - [ ] Verify `app.json` package name is correct
 - [ ] Confirm privacy policy and terms text are current
+- [ ] Confirm privacy policy and terms URLs are public
 - [ ] Increment version if this is a store update
 
 ## Build
@@ -20,6 +21,7 @@
 - [ ] Add store listing text
 - [ ] Add screenshots and feature graphic
 - [ ] Add privacy policy URL
+- [ ] Add terms of service URL
 - [ ] Complete Data Safety
 - [ ] Complete content rating
 - [ ] Set production release notes

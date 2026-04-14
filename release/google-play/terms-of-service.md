@@ -2,38 +2,40 @@
 
 Last updated: April 14, 2026
 
-By using Kojori Bus (“the App”), you agree to these terms.
+These Terms apply to Kojori Bus ("the App"). By using the App, you agree to them.
 
-## 1. Service description
+## 1. What the App Does
 
-The App displays schedule and real-time transit data for routes 380 and 316 between Tbilisi and Kojori.
+The App provides transit information for routes 380 and 316 between Kojori and Tbilisi. It may show live arrivals, scheduled departures, route maps, stop data, offline cache, and an optional home-screen widget.
 
-## 2. No warranty
+## 2. No Account Required
 
-The App is provided “as is” without warranty. Transit data may be inaccurate, delayed, or unavailable.
+The App does not require an account or login for core features.
 
-## 3. Limitation of liability
+## 3. Transit Data
 
-The developer is not liable for losses arising from use of the App, including missed buses or incorrect schedule information.
+Transit data comes from the TTC public API and may be delayed, incomplete, or unavailable. Do not rely on the App as your only source of travel information.
 
-## 4. Data accuracy
+## 4. Optional Location Features
 
-Transit data originates from TTC. The developer does not control or guarantee its accuracy.
+If you allow location access, the App uses it on-device only to show your position and help detect travel direction. You can deny or disable location permission and still use the App's core timetable features.
 
-## 5. Availability
+## 5. Acceptable Use
 
-The App depends on TTC and network availability.
+You agree not to misuse the App, interfere with its operation, or attempt to access systems or data that are not intended for you.
 
-## 6. Modifications
+## 6. Disclaimer
 
-We may modify the App or these terms at any time.
+The App is provided "as is" and "as available" without warranties of any kind, including accuracy, reliability, availability, or fitness for a particular purpose.
 
-## 7. Open source
+## 7. Limitation of Liability
 
-The source code license governs code reuse.
+To the fullest extent permitted by law, the developer is not liable for losses or damages arising from your use of the App, including missed trips, incorrect transit data, or service interruptions.
 
-## 8. Contact
+## 8. Changes
 
-For questions, use the project issue tracker:
+We may update the App or these Terms from time to time. Continued use after changes means you accept the updated Terms.
 
-https://github.com/whekin/kojori-bus-time-app
+## 9. Contact
+
+Questions: https://github.com/whekin/kojori-bus-time-app
