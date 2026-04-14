@@ -11,5 +11,10 @@
         android:name="android.appwidget.provider"
         android:resource="@xml/kojori_bus_widget_info" />
     </receiver>
+
+    <service
+      android:name="expo.modules.kojoriwidget.WidgetListService"
+      android:exported="false"
+      android:permission="android.permission.BIND_REMOTEVIEWS" />
   </application>
 </manifest>

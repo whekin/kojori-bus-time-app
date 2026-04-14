@@ -170,14 +170,15 @@ export const SCHEDULE_STOP_PROXY: Record<string, string> = {
 };
 
 export const ALL_KOJORI_STOPS: StopInfo[] = [
+  { id: '1:3078', label: 'Kojori Center' },
   { id: '1:2856', label: 'Kojori, Vazha-Pshavela St #56' },
   { id: '1:3782', label: 'Kojori, Alexandre Chkheidze Street' },
   { id: '1:3537', label: 'Kojori, Nikoloz Baratashvili Street' },
 ];
 
 /** Default favourite stop IDs shown as chips on home screen */
-export const DEFAULT_TBILISI_FAVORITES = ALL_TBILISI_STOPS.map(s => s.id);
-export const DEFAULT_KOJORI_FAVORITES = ALL_KOJORI_STOPS.map(s => s.id);
+export const DEFAULT_TBILISI_FAVORITES = ['1:2994'];
+export const DEFAULT_KOJORI_FAVORITES = ['1:3078'];
 
 // Convenience: look up a StopInfo by ID from the full known set
 export function findStop(id: string): StopInfo | undefined {

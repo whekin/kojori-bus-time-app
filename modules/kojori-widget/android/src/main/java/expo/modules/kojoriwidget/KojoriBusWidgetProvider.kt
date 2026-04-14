@@ -11,7 +11,6 @@ import android.net.Uri
 import android.view.View
 import android.widget.RemoteViews
 import androidx.core.content.ContextCompat
-import org.json.JSONArray
 import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -65,6 +64,8 @@ class KojoriBusWidgetProvider : AppWidgetProvider() {
       val appWidgetManager = AppWidgetManager.getInstance(context)
       val component = ComponentName(context, KojoriBusWidgetProvider::class.java)
       val appWidgetIds = appWidgetManager.getAppWidgetIds(component)
+      // Notify the list adapter to reload data
+      appWidgetManager.notifyAppWidgetViewDataChanged(appWidgetIds, R.id.widget_list)
       appWidgetIds.forEach { appWidgetId ->
         updateWidget(context, appWidgetManager, appWidgetId)
       }
@@ -77,12 +78,18 @@ class KojoriBusWidgetProvider : AppWidgetProvider() {
     ) {
       val views = RemoteViews(context.packageName, R.layout.kojori_bus_widget)
       val currentDirection = WidgetPrefs.getDirection(context)
-      val isCompact = isCompactWidget(appWidgetManager, appWidgetId)
       val stateJson = WidgetPrefs.getStateJson(context)
       val root = stateJson?.let { runCatching { JSONObject(it) }.getOrNull() }
       val palette = readPalette(context, root)
 
       bindDirectionButtons(views, appWidgetId, currentDirection, context, palette)
+
+      // Set up the ListView with RemoteViewsService
+      val listIntent = Intent(context, WidgetListService::class.java).apply {
+        putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
+        data = Uri.parse(toUri(Intent.URI_INTENT_SCHEME))
+      }
+      views.setRemoteAdapter(R.id.widget_list, listIntent)
 
       if (stateJson.isNullOrBlank()) {
         bindEmptyState(context, views, currentDirection, palette)
@@ -106,6 +113,7 @@ class KojoriBusWidgetProvider : AppWidgetProvider() {
       val stopLabel = snapshot.optString("stopLabel", "Open app to configure")
       val message = snapshot.optString("message", "")
       val items = snapshot.optJSONArray("items")
+      val hasItems = items != null && items.length() > 0
 
       views.setTextViewText(R.id.widget_title, title)
       views.setTextViewText(R.id.widget_stop, stopLabel)
@@ -123,8 +131,10 @@ class KojoriBusWidgetProvider : AppWidgetProvider() {
         },
       )
 
+      views.setViewVisibility(R.id.widget_message, if (hasItems) View.GONE else View.VISIBLE)
+      views.setViewVisibility(R.id.widget_list, if (hasItems) View.VISIBLE else View.GONE)
+
       bindOpenIntent(context, views, appWidgetId, currentDirection, stopId)
-      bindRows(views, items, isCompact, palette)
       appWidgetManager.updateAppWidget(appWidgetId, views)
     }
 
@@ -198,44 +208,6 @@ class KojoriBusWidgetProvider : AppWidgetProvider() {
       views.setOnClickPendingIntent(R.id.widget_body, pendingIntent)
     }
 
-    private fun bindRows(
-      views: RemoteViews,
-      items: JSONArray?,
-      isCompact: Boolean,
-      palette: WidgetPalette,
-    ) {
-      val rowIds = listOf(
-        Triple(R.id.widget_row_1, R.id.widget_row_bus_1, Pair(R.id.widget_row_time_1, R.id.widget_row_countdown_1)),
-        Triple(R.id.widget_row_2, R.id.widget_row_bus_2, Pair(R.id.widget_row_time_2, R.id.widget_row_countdown_2)),
-        Triple(R.id.widget_row_3, R.id.widget_row_bus_3, Pair(R.id.widget_row_time_3, R.id.widget_row_countdown_3)),
-        Triple(R.id.widget_row_4, R.id.widget_row_bus_4, Pair(R.id.widget_row_time_4, R.id.widget_row_countdown_4)),
-        Triple(R.id.widget_row_5, R.id.widget_row_bus_5, Pair(R.id.widget_row_time_5, R.id.widget_row_countdown_5)),
-        Triple(R.id.widget_row_6, R.id.widget_row_bus_6, Pair(R.id.widget_row_time_6, R.id.widget_row_countdown_6)),
-      )
-
-      var visibleRows = 0
-
-      rowIds.forEachIndexed { index, ids ->
-        val item = items?.optJSONObject(index)
-        val shouldShow = item != null && (!isCompact || index == 0)
-        views.setViewVisibility(ids.first, if (shouldShow) View.VISIBLE else View.GONE)
-
-        if (!shouldShow || item == null) return@forEachIndexed
-
-        visibleRows += 1
-        val bus = item.optString("bus", "--")
-        val busColor = if (bus == "380") palette.route380 else palette.route316
-        views.setTextViewText(ids.second, bus)
-        views.setTextColor(ids.second, busColor)
-        views.setTextViewText(ids.third.first, item.optString("time", "--:--"))
-        views.setTextColor(ids.third.first, palette.text)
-        views.setTextViewText(ids.third.second, item.optString("countdown", ""))
-        views.setTextColor(ids.third.second, if (index == 0) busColor else palette.textDim)
-      }
-
-      views.setViewVisibility(R.id.widget_message, if (visibleRows == 0) View.VISIBLE else View.GONE)
-    }
-
     private fun bindEmptyState(
       context: Context,
       views: RemoteViews,
@@ -250,12 +222,7 @@ class KojoriBusWidgetProvider : AppWidgetProvider() {
       views.setTextColor(R.id.widget_stop, palette.textDim)
       views.setTextColor(R.id.widget_updated, palette.textFaint)
       views.setTextColor(R.id.widget_message, palette.textDim)
-      views.setViewVisibility(R.id.widget_row_1, View.GONE)
-      views.setViewVisibility(R.id.widget_row_2, View.GONE)
-      views.setViewVisibility(R.id.widget_row_3, View.GONE)
-      views.setViewVisibility(R.id.widget_row_4, View.GONE)
-      views.setViewVisibility(R.id.widget_row_5, View.GONE)
-      views.setViewVisibility(R.id.widget_row_6, View.GONE)
+      views.setViewVisibility(R.id.widget_list, View.GONE)
       views.setViewVisibility(R.id.widget_message, View.VISIBLE)
       bindOpenIntent(context, views, 0, direction, "")
     }
@@ -306,15 +273,6 @@ class KojoriBusWidgetProvider : AppWidgetProvider() {
       }.getOrElse {
         ContextCompat.getColor(context, defaultRes)
       }
-    }
-
-    private fun isCompactWidget(
-      appWidgetManager: AppWidgetManager,
-      appWidgetId: Int,
-    ): Boolean {
-      val options = appWidgetManager.getAppWidgetOptions(appWidgetId)
-      val minHeight = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 110)
-      return minHeight < 150
     }
   }
 }

@@ -64,8 +64,7 @@ function formatCountdown(minsUntil: number) {
 
 function mapWidgetItems(departures: Departure[]): WidgetItemPayload[] {
   return departures
-    .filter(dep => dep.minsUntil <= 20)
-    .slice(0, 6)
+    .filter(dep => dep.minsUntil >= 0)
     .map(dep => ({
       bus: dep.bus,
       time: dep.time,
@@ -114,7 +113,7 @@ async function buildDirectionPayload(
       loadSchedule(ROUTES['316'].id, ROUTES['316'][direction]),
     ]);
 
-    const rawDepartures = computeUpcomingDepartures(schedule380, schedule316, stopId, 180, now);
+    const rawDepartures = computeUpcomingDepartures(schedule380, schedule316, stopId, 24 * 60, now);
     const items = mapWidgetItems(rawDepartures);
 
     if (items.length === 0) {
