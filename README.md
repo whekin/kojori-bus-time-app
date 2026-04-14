@@ -1,56 +1,114 @@
-# Welcome to your Expo app 👋
+# Kojori Bus
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Kojori Bus is a small, focused transit app for one very specific problem: getting between Tbilisi and Kojori without guessing when the next bus is actually coming.
 
-## Get started
+It gives you one fast place to check:
+- next departures for routes `380` and `316`
+- direction-aware stop selection
+- offline-friendly timetable data
+- live map view
+- Android home-screen widget
+- fun app themes and route color palettes
 
-1. Install dependencies
+This app is built for quick everyday use. Open it, see the next bus, move on.
 
-   ```bash
-   npm install
-   ```
+## Why it exists
 
-2. Start the app
+Generic transit apps are noisy. They try to solve every city and every route.
 
-   ```bash
-   npx expo start
-   ```
+Kojori Bus is different:
+- it focuses on Kojori <-> Tbilisi trips
+- it keeps the main screen simple and glanceable
+- it works well even when network is bad
+- it lets you keep favorite stops and a widget on your home screen
 
-In the output, you'll find options to open the app in a
+## Screens
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+- `Departures`: fastest way to see what is coming next
+- `Map`: live route view for both buses
+- `Timetable`: schedule-first view by stop
+- `Settings`: favorites, widget defaults, map options, color palette
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+## Tech
 
-## Get a fresh project
+- Expo + React Native
+- Bun for package management
+- Expo Router
+- TanStack Query
+- Android widget module
 
-When you're ready, run:
+## Quick start
+
+Install dependencies:
 
 ```bash
-npm run reset-project
+bun install
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+Start dev server:
 
-### Other setup steps
+```bash
+bun run dev
+```
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+Build and install Android app locally:
 
-## Learn more
+```bash
+bun run android
+```
 
-To learn more about developing your project with Expo, look at the following resources:
+Because this project includes native Android widget code, JS reload alone is not enough for widget changes. Rebuild the app when you touch widget Kotlin/XML.
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+## Useful commands
 
-## Join the community
+```bash
+bun run dev
+bun run android
+bun run android:clean
+bun run android:apk
+bun run android:bundle
+bun run ios
+bun run web
+bun run typecheck
+```
 
-Join our community of developers creating universal apps.
+What they do:
+- `bun run android`: runs `npx expo run:android` through Expo and installs local build
+- `bun run android:clean`: cleans Gradle build artifacts
+- `bun run android:apk`: builds debug APK at `android/app/build/outputs/apk/debug/app-debug.apk`
+- `bun run android:bundle`: builds release AAB at `android/app/build/outputs/bundle/release/app-release.aab`
+- `bun run typecheck`: runs TypeScript without emitting files
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+## Widget testing
+
+If you are working on widget code:
+
+1. Run `bun run android`
+2. Add the Kojori widget to your Android home screen
+3. Open the app once so widget state syncs
+4. Change direction / stop / palette in settings and check widget updates
+
+Current widget design goals:
+- no TTC fetches from widget sync path
+- schedule-only snapshot
+- should follow app palette
+
+## Project structure
+
+```text
+src/app/                 Main screens
+src/components/          Shared UI
+src/hooks/               App state and data hooks
+src/services/            TTC, offline cache, widget sync
+modules/kojori-widget/   Native Android widget module
+assets/                  Baked TTC data + images
+```
+
+## Notes
+
+- Offline and baked data matter a lot in this app. They keep the experience usable even when TTC is slow or rate-limited.
+- Widget and palette work depend on native rebuilds for full verification.
+
+## License
+
+Private project.
