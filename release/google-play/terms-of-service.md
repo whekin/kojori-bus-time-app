@@ -2,7 +2,7 @@
 
 Last updated: April 14, 2026
 
-These Terms apply to Kojori Bus ("the App"). By using the App, you agree to them.
+These Terms apply to Kojoring Time ("the App"). By using the App, you agree to them.
 
 ## 1. What the App Does
 

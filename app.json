@@ -48,7 +48,7 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "Allow Kojori Bus to suggest whether you're closer to Kojori or Tbilisi."
+          "locationWhenInUsePermission": "Allow Kojoring Time to suggest whether you're closer to Kojori or Tbilisi."
         }
       ],
       [

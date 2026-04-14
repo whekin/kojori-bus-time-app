@@ -1,5 +1,5 @@
 """
-Generate app icons for Kojori Bus from a master PNG illustration.
+Generate app icons for Kojoring Time from a master PNG illustration.
 
 Source of truth:
 - assets/images/icon-master.png

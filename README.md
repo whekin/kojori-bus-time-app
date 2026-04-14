@@ -1,6 +1,6 @@
-# Kojori Bus
+# Kojoring Time
 
-Kojori Bus is a small, focused transit app for one very specific problem: getting between Tbilisi and Kojori without guessing when the next bus is actually coming.
+Kojoring Time is a small, focused transit app for one very specific problem: getting between Tbilisi and Kojori without guessing when the next bus is actually coming.
 
 It gives you one fast place to check:
 - next departures for routes `380` and `316`
@@ -16,7 +16,7 @@ This app is built for quick everyday use. Open it, see the next bus, move on.
 
 Generic transit apps are noisy. They try to solve every city and every route.
 
-Kojori Bus is different:
+Kojoring Time is different:
 - it focuses on Kojori <-> Tbilisi trips
 - it keeps the main screen simple and glanceable
 - it works well even when network is bad

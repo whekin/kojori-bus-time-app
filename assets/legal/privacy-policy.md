@@ -2,7 +2,7 @@
 
 Last updated: April 14, 2026
 
-Kojori Bus ("the App") is a transit app for routes 380 and 316 between Kojori and Tbilisi.
+Kojoring Time ("the App") is a transit app for routes 380 and 316 between Kojori and Tbilisi.
 
 ## 1. Information We Collect
 

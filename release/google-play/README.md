@@ -1,4 +1,4 @@
-# Kojori Bus Google Play production package
+# Kojoring Time Google Play production package
 
 This folder collects the files needed to prepare, build, and submit the Android production release for Google Play.
 

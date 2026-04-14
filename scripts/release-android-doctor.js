@@ -86,8 +86,8 @@ for (const relative of requiredFiles) {
 try {
   const appJson = readJson(path.join(root, 'app.json'));
   const expo = appJson.expo ?? {};
-  if (expo.name === 'Kojori Bus') {
-    pass('App name is Kojori Bus');
+  if (expo.name === 'Kojoring Time') {
+    pass('App name is Kojoring Time');
   } else {
     fail(`Unexpected app name: ${expo.name}`);
     hasErrors = true;

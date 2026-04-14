@@ -4,7 +4,7 @@ Effective Date: April 14, 2026
 Last Updated: April 14, 2026
 
 1. Introduction
-Welcome to Kojori Bus Time App (“App”, “We”, “Us”, “Our”). These Terms of Service (“Terms”) govern your access to and use of our mobile application and related services (collectively, the “Services”).
+Welcome to Kojoring Time App (“App”, “We”, “Us”, “Our”). These Terms of Service (“Terms”) govern your access to and use of our mobile application and related services (collectively, the “Services”).
 
 2. Acceptance of Terms
 By downloading, accessing, or using the Services, you agree to be bound by these Terms. If you do not agree to these Terms, you must not use the Services.

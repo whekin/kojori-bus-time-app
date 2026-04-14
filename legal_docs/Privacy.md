@@ -5,7 +5,7 @@ Last Updated: April 14, 2026
 
 PRIVACY NOTICE
 
-Welcome to Kojori Bus Time App (“App”, “We”, “Us”, “Our”). Your privacy is important to us. This Privacy Notice describes our practices regarding the collection, use, and disclosure of your information when you use our Services.
+Welcome to Kojoring Time App (“App”, “We”, “Us”, “Our”). Your privacy is important to us. This Privacy Notice describes our practices regarding the collection, use, and disclosure of your information when you use our Services.
 
 1. INFORMATION WE COLLECT
 We may collect the following types of information:
