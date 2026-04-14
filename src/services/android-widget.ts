@@ -1,23 +1,18 @@
 import { Platform } from 'react-native';
 
+import { BAKED_SCHEDULES, BAKED_STOP_NAMES } from '@/assets/ttc-baked';
+import { getAppColors, type AppPaletteId } from '@/constants/theme';
 import {
-  ArrivalTime,
   BusLine,
   computeUpcomingDepartures,
   Departure,
-  fetchArrivalTimes,
-  fetchSchedule,
-  fetchStopDetails,
   findStop,
-  mergeArrivalsIntoSchedule,
   ROUTES,
   SchedulePeriod
 } from '@/services/ttc';
 import {
   readCachedStopName,
   readScheduleCache,
-  writeScheduleCache,
-  writeStopName,
 } from '@/services/ttc-offline';
 import KojoriWidget from '../../modules/kojori-widget';
 
@@ -26,6 +21,7 @@ type WidgetMode = 'kojori' | 'tbilisi';
 interface WidgetSyncSettings {
   activeKojoriStopId: string;
   activeTbilisiStopId: string;
+  paletteId: AppPaletteId;
 }
 
 interface WidgetItemPayload {
@@ -47,6 +43,14 @@ interface WidgetDirectionPayload {
 
 interface WidgetStatePayload {
   generatedAt: number;
+  palette: {
+    text: string;
+    textDim: string;
+    textFaint: string;
+    primary: string;
+    route380: string;
+    route316: string;
+  };
   directions: Record<WidgetMode, WidgetDirectionPayload>;
 }
 
@@ -59,7 +63,6 @@ function formatCountdown(minsUntil: number) {
 }
 
 function mapWidgetItems(departures: Departure[]): WidgetItemPayload[] {
-  // Show more departures (up to 20 minutes ahead)
   return departures
     .filter(dep => dep.minsUntil <= 20)
     .slice(0, 6)
@@ -67,7 +70,6 @@ function mapWidgetItems(departures: Departure[]): WidgetItemPayload[] {
       bus: dep.bus,
       time: dep.time,
       countdown: formatCountdown(dep.minsUntil),
-      live: dep.live,
     }));
 }
 
@@ -75,41 +77,26 @@ async function loadSchedule(routeId: string, patternSuffix: string): Promise<Sch
   const cached = await readScheduleCache(routeId, patternSuffix, true);
   if (cached) return cached;
 
-  const fresh = await fetchSchedule(routeId, patternSuffix);
-  await writeScheduleCache(routeId, patternSuffix, fresh);
-  return fresh;
+  const bakedKey = (() => {
+    if (routeId === ROUTES['380'].id && patternSuffix === ROUTES['380'].toKojori) return '380_toKojori';
+    if (routeId === ROUTES['380'].id && patternSuffix === ROUTES['380'].toTbilisi) return '380_toTbilisi';
+    if (routeId === ROUTES['316'].id && patternSuffix === ROUTES['316'].toKojori) return '316_toKojori';
+    if (routeId === ROUTES['316'].id && patternSuffix === ROUTES['316'].toTbilisi) return '316_toTbilisi';
+    return null;
+  })();
+
+  return bakedKey ? JSON.parse(JSON.stringify(BAKED_SCHEDULES[bakedKey])) as SchedulePeriod[] : undefined;
 }
 
 async function loadStopLabel(stopId: string) {
   const cached = await readCachedStopName(stopId, true);
   if (cached) return cached;
 
-  try {
-    const details = await fetchStopDetails(stopId);
-    await writeStopName(details.id, details.name);
-    return details.name;
-  } catch {
-    const fallback = findStop(stopId)?.label;
-    return fallback ?? `Stop #${stopId.split(':')[1] ?? stopId}`;
-  }
-}
+  const baked = BAKED_STOP_NAMES[stopId];
+  if (baked) return baked;
 
-
-
-async function loadArrivals(stopId: string, direction: 'toKojori' | 'toTbilisi'): Promise<ArrivalTime[]> {
-  try {
-    const arrivals = await fetchArrivalTimes(stopId);
-    const buses: BusLine[] = ['380', '316'];
-    return arrivals
-      .filter(a => {
-        if (!(buses as string[]).includes(a.shortName)) return false;
-        const expected = ROUTES[a.shortName as BusLine][direction];
-        return a.patternSuffix === expected;
-      })
-      .sort((a, b) => a.realtimeArrivalMinutes - b.realtimeArrivalMinutes);
-  } catch {
-    return [];
-  }
+  const fallback = findStop(stopId)?.label;
+  return fallback ?? `Stop #${stopId.split(':')[1] ?? stopId}`;
 }
 
 async function buildDirectionPayload(
@@ -122,15 +109,13 @@ async function buildDirectionPayload(
   const stopLabel = await loadStopLabel(stopId);
 
   try {
-    const [schedule380, schedule316, arrivals] = await Promise.all([
+    const [schedule380, schedule316] = await Promise.all([
       loadSchedule(ROUTES['380'].id, ROUTES['380'][direction]),
       loadSchedule(ROUTES['316'].id, ROUTES['316'][direction]),
-      loadArrivals(stopId, direction),
     ]);
 
     const rawDepartures = computeUpcomingDepartures(schedule380, schedule316, stopId, 180, now);
-    const departures = mergeArrivalsIntoSchedule(rawDepartures, arrivals, now, now.getTime());
-    const items = mapWidgetItems(departures);
+    const items = mapWidgetItems(rawDepartures);
 
     if (items.length === 0) {
       return {
@@ -170,6 +155,7 @@ export async function syncAndroidWidgetState(settings: WidgetSyncSettings) {
   if (Platform.OS !== 'android' || !KojoriWidget) return;
 
   const now = new Date();
+  const palette = getAppColors(settings.paletteId);
   const [kojori, tbilisi] = await Promise.all([
     buildDirectionPayload('kojori', settings.activeKojoriStopId, now),
     buildDirectionPayload('tbilisi', settings.activeTbilisiStopId, now),
@@ -177,6 +163,14 @@ export async function syncAndroidWidgetState(settings: WidgetSyncSettings) {
 
   const payload: WidgetStatePayload = {
     generatedAt: now.getTime(),
+    palette: {
+      text: palette.text,
+      textDim: palette.textDim,
+      textFaint: palette.textFaint,
+      primary: palette.primary,
+      route380: palette.route380,
+      route316: palette.route316,
+    },
     directions: { kojori, tbilisi },
   };
 

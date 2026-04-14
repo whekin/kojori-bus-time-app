@@ -88,6 +88,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
       return syncAndroidWidgetState({
         activeKojoriStopId: settings.widgetKojoriStopId,
         activeTbilisiStopId: settings.widgetTbilisiStopId,
+        paletteId: settings.paletteId,
       }).catch(() => { });
     }
 
@@ -109,6 +110,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     };
   }, [
     isLoaded,
+    settings.paletteId,
     settings.widgetKojoriStopId,
     settings.widgetTbilisiStopId,
   ]);

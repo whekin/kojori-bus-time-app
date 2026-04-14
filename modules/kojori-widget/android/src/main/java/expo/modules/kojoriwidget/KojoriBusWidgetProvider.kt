@@ -6,10 +6,12 @@ import android.appwidget.AppWidgetProvider
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.graphics.Color
 import android.net.Uri
 import android.view.View
 import android.widget.RemoteViews
 import androidx.core.content.ContextCompat
+import org.json.JSONArray
 import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -50,6 +52,15 @@ class KojoriBusWidgetProvider : AppWidgetProvider() {
     private const val ACTION_SET_DIRECTION = "expo.modules.kojoriwidget.SET_DIRECTION"
     private const val EXTRA_DIRECTION = "direction"
 
+    private data class WidgetPalette(
+      val text: Int,
+      val textDim: Int,
+      val textFaint: Int,
+      val primary: Int,
+      val route380: Int,
+      val route316: Int,
+    )
+
     fun refreshAll(context: Context) {
       val appWidgetManager = AppWidgetManager.getInstance(context)
       val component = ComponentName(context, KojoriBusWidgetProvider::class.java)
@@ -67,23 +78,24 @@ class KojoriBusWidgetProvider : AppWidgetProvider() {
       val views = RemoteViews(context.packageName, R.layout.kojori_bus_widget)
       val currentDirection = WidgetPrefs.getDirection(context)
       val isCompact = isCompactWidget(appWidgetManager, appWidgetId)
-
-      bindDirectionButtons(context, views, appWidgetId, currentDirection)
-
       val stateJson = WidgetPrefs.getStateJson(context)
+      val root = stateJson?.let { runCatching { JSONObject(it) }.getOrNull() }
+      val palette = readPalette(context, root)
+
+      bindDirectionButtons(views, appWidgetId, currentDirection, context, palette)
+
       if (stateJson.isNullOrBlank()) {
-        bindEmptyState(context, views, currentDirection)
+        bindEmptyState(context, views, currentDirection, palette)
         appWidgetManager.updateAppWidget(appWidgetId, views)
         return
       }
 
-      val root = runCatching { JSONObject(stateJson) }.getOrNull()
       val snapshot = root
         ?.optJSONObject("directions")
         ?.optJSONObject(currentDirection)
 
       if (snapshot == null) {
-        bindEmptyState(context, views, currentDirection)
+        bindEmptyState(context, views, currentDirection, palette)
         appWidgetManager.updateAppWidget(appWidgetId, views)
         return
       }
@@ -99,41 +111,45 @@ class KojoriBusWidgetProvider : AppWidgetProvider() {
       views.setTextViewText(R.id.widget_stop, stopLabel)
       views.setTextViewText(R.id.widget_updated, updatedLabel(generatedAt))
       views.setTextViewText(R.id.widget_message, message)
+      views.setTextColor(R.id.widget_title, palette.text)
+      views.setTextColor(R.id.widget_stop, palette.textDim)
+      views.setTextColor(R.id.widget_updated, palette.textFaint)
       views.setTextColor(
         R.id.widget_message,
         if (snapshot.optString("status") == "error") {
           ContextCompat.getColor(context, R.color.widget_warning)
         } else {
-          ContextCompat.getColor(context, R.color.widget_text_dim)
+          palette.textDim
         },
       )
 
       bindOpenIntent(context, views, appWidgetId, currentDirection, stopId)
-      bindRows(context, views, items, isCompact)
+      bindRows(views, items, isCompact, palette)
       appWidgetManager.updateAppWidget(appWidgetId, views)
     }
 
     private fun bindDirectionButtons(
-      context: Context,
       views: RemoteViews,
       appWidgetId: Int,
       currentDirection: String,
+      context: Context,
+      palette: WidgetPalette,
     ) {
       styleDirectionButton(
-        context,
         views,
         R.id.widget_toggle_kojori,
         "→ Kojori",
         currentDirection == "kojori",
-        R.drawable.widget_chip_active_amber,
+        palette.route380,
+        palette.textDim,
       )
       styleDirectionButton(
-        context,
         views,
         R.id.widget_toggle_tbilisi,
         "→ Tbilisi",
         currentDirection == "tbilisi",
-        R.drawable.widget_chip_active_teal,
+        palette.route316,
+        palette.textDim,
       )
 
       views.setOnClickPendingIntent(
@@ -147,24 +163,16 @@ class KojoriBusWidgetProvider : AppWidgetProvider() {
     }
 
     private fun styleDirectionButton(
-      context: Context,
       views: RemoteViews,
       viewId: Int,
       label: String,
       isActive: Boolean,
-      activeBackground: Int,
+      activeColor: Int,
+      idleColor: Int,
     ) {
       views.setTextViewText(viewId, label)
-      views.setTextColor(
-        viewId,
-        if (isActive) ContextCompat.getColor(context, R.color.widget_text)
-        else ContextCompat.getColor(context, R.color.widget_text_dim),
-      )
-      views.setInt(
-        viewId,
-        "setBackgroundResource",
-        if (isActive) activeBackground else R.drawable.widget_chip_idle,
-      )
+      views.setTextColor(viewId, if (isActive) activeColor else idleColor)
+      views.setInt(viewId, "setBackgroundResource", R.drawable.widget_chip_idle)
     }
 
     private fun bindOpenIntent(
@@ -191,15 +199,18 @@ class KojoriBusWidgetProvider : AppWidgetProvider() {
     }
 
     private fun bindRows(
-      context: Context,
       views: RemoteViews,
-      items: org.json.JSONArray?,
+      items: JSONArray?,
       isCompact: Boolean,
+      palette: WidgetPalette,
     ) {
       val rowIds = listOf(
         Triple(R.id.widget_row_1, R.id.widget_row_bus_1, Pair(R.id.widget_row_time_1, R.id.widget_row_countdown_1)),
         Triple(R.id.widget_row_2, R.id.widget_row_bus_2, Pair(R.id.widget_row_time_2, R.id.widget_row_countdown_2)),
         Triple(R.id.widget_row_3, R.id.widget_row_bus_3, Pair(R.id.widget_row_time_3, R.id.widget_row_countdown_3)),
+        Triple(R.id.widget_row_4, R.id.widget_row_bus_4, Pair(R.id.widget_row_time_4, R.id.widget_row_countdown_4)),
+        Triple(R.id.widget_row_5, R.id.widget_row_bus_5, Pair(R.id.widget_row_time_5, R.id.widget_row_countdown_5)),
+        Triple(R.id.widget_row_6, R.id.widget_row_bus_6, Pair(R.id.widget_row_time_6, R.id.widget_row_countdown_6)),
       )
 
       var visibleRows = 0
@@ -212,20 +223,14 @@ class KojoriBusWidgetProvider : AppWidgetProvider() {
         if (!shouldShow || item == null) return@forEachIndexed
 
         visibleRows += 1
-        views.setTextViewText(ids.second, item.optString("bus", "--"))
+        val bus = item.optString("bus", "--")
+        val busColor = if (bus == "380") palette.route380 else palette.route316
+        views.setTextViewText(ids.second, bus)
+        views.setTextColor(ids.second, busColor)
         views.setTextViewText(ids.third.first, item.optString("time", "--:--"))
-
-        val countdown = item.optString("countdown", "")
-        val live = item.optBoolean("live", false)
-        views.setTextViewText(
-          ids.third.second,
-          if (live && countdown.isNotBlank()) "$countdown LIVE" else countdown,
-        )
-        views.setTextColor(
-          ids.third.second,
-          if (live) ContextCompat.getColor(context, R.color.widget_live)
-          else ContextCompat.getColor(context, R.color.widget_text_dim),
-        )
+        views.setTextColor(ids.third.first, palette.text)
+        views.setTextViewText(ids.third.second, item.optString("countdown", ""))
+        views.setTextColor(ids.third.second, if (index == 0) busColor else palette.textDim)
       }
 
       views.setViewVisibility(R.id.widget_message, if (visibleRows == 0) View.VISIBLE else View.GONE)
@@ -235,15 +240,22 @@ class KojoriBusWidgetProvider : AppWidgetProvider() {
       context: Context,
       views: RemoteViews,
       direction: String,
+      palette: WidgetPalette,
     ) {
       views.setTextViewText(R.id.widget_title, directionLabel(direction))
       views.setTextViewText(R.id.widget_stop, "Kojori Bus")
       views.setTextViewText(R.id.widget_updated, "Open app to load widget")
       views.setTextViewText(R.id.widget_message, "No widget snapshot yet")
-      views.setTextColor(R.id.widget_message, ContextCompat.getColor(context, R.color.widget_text_dim))
+      views.setTextColor(R.id.widget_title, palette.text)
+      views.setTextColor(R.id.widget_stop, palette.textDim)
+      views.setTextColor(R.id.widget_updated, palette.textFaint)
+      views.setTextColor(R.id.widget_message, palette.textDim)
       views.setViewVisibility(R.id.widget_row_1, View.GONE)
       views.setViewVisibility(R.id.widget_row_2, View.GONE)
       views.setViewVisibility(R.id.widget_row_3, View.GONE)
+      views.setViewVisibility(R.id.widget_row_4, View.GONE)
+      views.setViewVisibility(R.id.widget_row_5, View.GONE)
+      views.setViewVisibility(R.id.widget_row_6, View.GONE)
       views.setViewVisibility(R.id.widget_message, View.VISIBLE)
       bindOpenIntent(context, views, 0, direction, "")
     }
@@ -275,6 +287,26 @@ class KojoriBusWidgetProvider : AppWidgetProvider() {
 
     private fun directionLabel(direction: String) =
       if (direction == "tbilisi") "→ Tbilisi" else "→ Kojori"
+
+    private fun readPalette(context: Context, root: JSONObject?): WidgetPalette {
+      val paletteJson = root?.optJSONObject("palette")
+      return WidgetPalette(
+        text = colorOrDefault(context, paletteJson?.optString("text"), R.color.widget_text),
+        textDim = colorOrDefault(context, paletteJson?.optString("textDim"), R.color.widget_text_dim),
+        textFaint = colorOrDefault(context, paletteJson?.optString("textFaint"), R.color.widget_text_faint),
+        primary = colorOrDefault(context, paletteJson?.optString("primary"), R.color.widget_text),
+        route380 = colorOrDefault(context, paletteJson?.optString("route380"), R.color.widget_amber),
+        route316 = colorOrDefault(context, paletteJson?.optString("route316"), R.color.widget_teal),
+      )
+    }
+
+    private fun colorOrDefault(context: Context, hex: String?, defaultRes: Int): Int {
+      return runCatching {
+        if (hex.isNullOrBlank()) ContextCompat.getColor(context, defaultRes) else Color.parseColor(hex)
+      }.getOrElse {
+        ContextCompat.getColor(context, defaultRes)
+      }
+    }
 
     private fun isCompactWidget(
       appWidgetManager: AppWidgetManager,
