@@ -65,7 +65,6 @@ const EASTER_EGG_MESSAGES = [
 const PALETTE_IDS = Object.keys(APP_PALETTES) as AppPaletteId[];
 const PALETTE_CARD_WIDTH = 250;
 const PALETTE_CARD_GAP = 12;
-const PROJECT_GITHUB_URL = 'https://github.com/whekin/kojori-bus-time-app';
 const LEGAL_BASE_URL = 'https://github.com/whekin/kojori-bus-time-app/blob/main/release/google-play';
 const LEGAL_URLS = {
   privacyPolicy: Constants.expoConfig?.extra?.legal?.privacyPolicyUrl ?? `${LEGAL_BASE_URL}/privacy-policy.md`,
@@ -863,28 +862,19 @@ export default function SettingsScreen() {
           <Text style={styles.sectionHeader}>LEGAL</Text>
         </View>
         <View style={styles.card}>
-          <Pressable style={styles.manageBtn} onPress={() => setLegalModal('privacy')}>
-            <Text style={[styles.manageBtnText, { color: colors.text }]}>Privacy Policy</Text>
+          <Pressable style={styles.infoRow} onPress={() => setLegalModal('privacy')}>
+            <Text style={[styles.infoLabel, { color: colors.text }]}>Privacy Policy</Text>
+            <Text style={[styles.infoValue, { color: colors.textFaint }]}>→</Text>
           </Pressable>
           <View style={styles.itemDivider} />
-          <Pressable style={styles.manageBtn} onPress={() => Linking.openURL(LEGAL_URLS.privacyPolicy)}>
-            <Text style={[styles.manageBtnText, { color: colors.primary }]}>Open privacy policy online</Text>
+          <Pressable style={styles.infoRow} onPress={() => setLegalModal('terms')}>
+            <Text style={[styles.infoLabel, { color: colors.text }]}>Terms of Service</Text>
+            <Text style={[styles.infoValue, { color: colors.textFaint }]}>→</Text>
           </Pressable>
           <View style={styles.itemDivider} />
-          <Pressable style={styles.manageBtn} onPress={() => setLegalModal('terms')}>
-            <Text style={[styles.manageBtnText, { color: colors.text }]}>Terms of Service</Text>
-          </Pressable>
-          <View style={styles.itemDivider} />
-          <Pressable style={styles.manageBtn} onPress={() => Linking.openURL(LEGAL_URLS.termsOfService)}>
-            <Text style={[styles.manageBtnText, { color: colors.primary }]}>Open terms online</Text>
-          </Pressable>
-          <View style={styles.itemDivider} />
-          <Pressable style={styles.manageBtn} onPress={() => Linking.openURL(LEGAL_URLS.support)}>
-            <Text style={[styles.manageBtnText, { color: colors.primary }]}>Project support</Text>
-          </Pressable>
-          <View style={styles.itemDivider} />
-          <Pressable style={styles.manageBtn} onPress={() => Linking.openURL(PROJECT_GITHUB_URL)}>
-            <Text style={[styles.manageBtnText, { color: colors.primary }]}>Project GitHub</Text>
+          <Pressable style={styles.infoRow} onPress={() => Linking.openURL(LEGAL_URLS.support)}>
+            <Text style={[styles.infoLabel, { color: colors.text }]}>Support</Text>
+            <Text style={[styles.infoValue, { color: colors.textFaint }]}>GitHub ↗</Text>
           </Pressable>
         </View>
 
