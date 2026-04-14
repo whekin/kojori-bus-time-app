@@ -886,7 +886,7 @@ export default function SettingsScreen() {
           </Pressable>
           <Pressable onPress={() => Linking.openURL('https://github.com/whekin')} hitSlop={8}>
             <Text style={styles.buildAuthor}>
-              made with ♥ by <Text style={styles.buildLink}>whekin</Text>
+              vibecoded with ♥ by <Text style={styles.buildLink}>whekin</Text>
             </Text>
           </Pressable>
         </View>
