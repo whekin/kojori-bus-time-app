@@ -33,7 +33,10 @@ class WidgetListFactory(private val context: Context) : RemoteViewsService.Remot
     val items = snapshot.optJSONArray("items") ?: return
 
     palette = readPalette(root)
-    stopLabel = snapshot.optString("stopLabel", "")
+    val label = snapshot.optString("stopLabel", "")
+    val stopId = snapshot.optString("stopId", "")
+    val stopCode = stopId.substringAfter(":", stopId)
+    stopLabel = if (stopCode.isNotBlank()) "from $label [#$stopCode]" else "from $label"
     rows = (0 until items.length()).mapNotNull { i ->
       val item = items.optJSONObject(i) ?: return@mapNotNull null
       DepartureRow(
@@ -88,11 +91,11 @@ class WidgetListFactory(private val context: Context) : RemoteViewsService.Remot
     if (diff < 0) diff += 24 * 60
     return when {
       diff < 1 -> "now"
-      diff < 60 -> "${diff} min"
+      diff < 60 -> "in ${diff} min"
       else -> {
         val h = diff / 60
         val m = diff % 60
-        if (m > 0) "${h}h ${m}m" else "${h}h"
+        if (m > 0) "in ${h}h ${m}m" else "in ${h}h"
       }
     }
   }

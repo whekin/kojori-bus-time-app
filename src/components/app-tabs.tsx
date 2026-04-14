@@ -1,6 +1,6 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import PagerView from 'react-native-pager-view';
-import React, { useRef, useState } from 'react';
+import React, { createContext, useCallback, useContext, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   interpolateColor,
@@ -20,6 +20,13 @@ import TimetableScreen from '@/app/timetable';
 import { useAppColors } from '@/hooks/use-app-colors';
 
 type TabRoute = 'index' | 'explore' | 'timetable' | 'settings';
+
+const TabNavContext = createContext<((route: TabRoute) => void) | null>(null);
+
+export function useTabNav() {
+  return useContext(TabNavContext);
+}
+
 type TabItem = {
   route: TabRoute;
   title: string;
@@ -122,6 +129,11 @@ export default function AppTabs() {
     { route: 'settings', title: 'Settings', icon: 'cog', accent: C.primary, render: () => <SettingsScreen /> },
   ];
 
+  const navigateToTab = useCallback((route: TabRoute) => {
+    const idx = tabs.findIndex(t => t.route === route);
+    if (idx >= 0) pagerRef.current?.setPage(idx);
+  }, []);
+
   const pageScrollHandler = usePagerScrollHandler(event => {
     'worklet';
     pagerProgress.value = event.position + event.offset;
@@ -140,6 +152,7 @@ export default function AppTabs() {
   }));
 
   return (
+    <TabNavContext.Provider value={navigateToTab}>
     <View style={styles.shell}>
       <AnimatedPagerView
         ref={pagerRef}
@@ -198,6 +211,7 @@ export default function AppTabs() {
         </View>
       </View>
     </View>
+    </TabNavContext.Provider>
   );
 }
 

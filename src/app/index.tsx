@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { DirectionToggle } from '@/components/direction-toggle';
 import { StopSelector } from '@/components/stop-selector';
+import { useTabNav } from '@/components/app-tabs';
 import { TtcStatusHeaderBadge } from '@/components/ttc-status-banner';
 import { BottomTabInset, alpha } from '@/constants/theme';
 import { useArrivals } from '@/hooks/use-arrivals';
@@ -299,6 +300,7 @@ function ToKojoriView({
   favoriteIds,
   activeStopId,
   onSelectStop,
+  onAddStop,
   bottomInset,
   isRefreshing,
   onRefresh,
@@ -307,6 +309,7 @@ function ToKojoriView({
   favoriteIds: string[];
   activeStopId: string;
   onSelectStop: (id: string) => void;
+  onAddStop: () => void;
   bottomInset: number;
   isRefreshing: boolean;
   onRefresh: () => void;
@@ -359,6 +362,7 @@ function ToKojoriView({
             activeStopId={activeStopId}
             accentColor={colors.route380}
             onSelectStop={onSelectStop}
+            onAddStop={onAddStop}
           />
 
           {isError && <ErrorBanner message="Could not load schedule. Showing cached data." />}
@@ -392,6 +396,7 @@ function ToTbilisiView({
   favoriteIds,
   activeStopId,
   onSelectStop,
+  onAddStop,
   bottomInset,
   isRefreshing,
   onRefresh,
@@ -400,6 +405,7 @@ function ToTbilisiView({
   favoriteIds: string[];
   activeStopId: string;
   onSelectStop: (id: string) => void;
+  onAddStop: () => void;
   bottomInset: number;
   isRefreshing: boolean;
   onRefresh: () => void;
@@ -452,6 +458,7 @@ function ToTbilisiView({
             activeStopId={activeStopId}
             accentColor={colors.route316}
             onSelectStop={onSelectStop}
+            onAddStop={onAddStop}
           />
 
           {isError && <ErrorBanner message="Could not load schedule. Showing cached data." />}
@@ -564,6 +571,7 @@ export default function HomeScreen() {
     };
   }, []);
 
+  const navigateToTab = useTabNav();
   const accentColor = mode === 'kojori' ? colors.route380 : colors.route316;
   const activeDirection = settings.sharedDirection;
   const activeStopId = mode === 'kojori' ? settings.activeTbilisiStopId : settings.activeKojoriStopId;
@@ -731,6 +739,7 @@ export default function HomeScreen() {
           favoriteIds={settings.tbilisiFavorites}
           activeStopId={settings.activeTbilisiStopId}
           onSelectStop={id => update({ activeTbilisiStopId: id })}
+          onAddStop={() => navigateToTab?.('settings')}
           bottomInset={insets.bottom}
           isRefreshing={isRefreshing}
           onRefresh={handleRefresh}
@@ -741,6 +750,7 @@ export default function HomeScreen() {
           favoriteIds={settings.kojoriFavorites}
           activeStopId={settings.activeKojoriStopId}
           onSelectStop={id => update({ activeKojoriStopId: id })}
+          onAddStop={() => navigateToTab?.('settings')}
           bottomInset={insets.bottom}
           isRefreshing={isRefreshing}
           onRefresh={handleRefresh}

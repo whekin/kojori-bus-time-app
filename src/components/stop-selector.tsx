@@ -27,6 +27,7 @@ interface StopSelectorProps {
   activeStopId: string;
   accentColor: string;
   onSelectStop: (id: string) => void;
+  onAddStop?: () => void;
   label?: string;
 }
 
@@ -96,9 +97,14 @@ function StopOption({
         <Text style={[styles.optionTitle, { fontFamily: DISPLAY }]} numberOfLines={2}>
           {stop.label}
         </Text>
+        <Text style={[styles.optionCode, { fontFamily: MONO }]}>#{stop.id.split(':')[1] ?? stop.id}</Text>
       </View>
     </Pressable>
   );
+}
+
+function stopCode(id: string) {
+  return '#' + (id.split(':')[1] ?? id);
 }
 
 export function StopSelector({
@@ -106,6 +112,7 @@ export function StopSelector({
   activeStopId,
   accentColor,
   onSelectStop,
+  onAddStop,
   label = 'BOARDING STOP',
 }: StopSelectorProps) {
   const insets = useSafeAreaInsets();
@@ -145,7 +152,7 @@ export function StopSelector({
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={`${label}. ${activeStop.label}. Double tap to change stop.`}
-        onPress={() => setOpen(true)}
+        onPress={() => totalStops > 1 ? setOpen(true) : onAddStop?.()}
         style={({ pressed }) => [
           styles.trigger,
           {
@@ -158,22 +165,29 @@ export function StopSelector({
           <Text style={[styles.triggerValue, { fontFamily: DISPLAY }]} numberOfLines={1}>
             {activeStop.label}
           </Text>
+          <Text style={[styles.triggerCode, { fontFamily: MONO }]}>{stopCode(activeStop.id)}</Text>
         </View>
 
         <View style={styles.triggerSide}>
-          <View
-            style={[
-              styles.triggerCount,
-              {
-                borderColor: accentColor + '30',
-                backgroundColor: accentColor + '10',
-              },
-            ]}>
-            <Text style={[styles.triggerCountText, { color: accentColor, fontFamily: MONO }]}>
-              {formatCount(activeIndex, totalStops)}
-            </Text>
-          </View>
-          <Text style={[styles.triggerAction, { color: accentColor }]}>Change</Text>
+          {totalStops > 1 ? (
+            <>
+              <View
+                style={[
+                  styles.triggerCount,
+                  {
+                    borderColor: accentColor + '30',
+                    backgroundColor: accentColor + '10',
+                  },
+                ]}>
+                <Text style={[styles.triggerCountText, { color: accentColor, fontFamily: MONO }]}>
+                  {formatCount(activeIndex, totalStops)}
+                </Text>
+              </View>
+              <Text style={[styles.triggerAction, { color: accentColor }]}>Change</Text>
+            </>
+          ) : (
+            <Text style={[styles.triggerAction, { color: accentColor }]}>+ Add</Text>
+          )}
         </View>
       </Pressable>
 
@@ -227,10 +241,13 @@ export function StopSelector({
                 <Text style={[styles.currentValue, { fontFamily: DISPLAY }]} numberOfLines={1}>
                   {activeStop.label}
                 </Text>
+                <Text style={[styles.currentCode, { fontFamily: MONO }]}>{stopCode(activeStop.id)}</Text>
               </View>
-              <Text style={[styles.currentCount, { color: accentColor, fontFamily: MONO }]}>
-                {formatCount(activeIndex, totalStops)}
-              </Text>
+              {totalStops > 1 && (
+                <Text style={[styles.currentCount, { color: accentColor, fontFamily: MONO }]}>
+                  {formatCount(activeIndex, totalStops)}
+                </Text>
+              )}
             </View>
 
             <ScrollView
@@ -253,7 +270,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 12,
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'stretch',
     justifyContent: 'space-between',
     gap: 12,
   },
@@ -276,6 +293,7 @@ const styles = StyleSheet.create({
   },
   triggerSide: {
     alignItems: 'flex-end',
+    justifyContent: 'flex-end',
     gap: 6,
   },
   triggerCount: {
@@ -456,5 +474,38 @@ const styles = StyleSheet.create({
     fontSize: 21,
     lineHeight: 25,
     fontWeight: '700',
+  },
+  optionCode: {
+    color: C.textDim,
+    fontSize: 11,
+    marginTop: 2,
+  },
+  triggerCode: {
+    color: C.textDim,
+    fontSize: 11,
+    marginTop: 2,
+  },
+  currentCode: {
+    color: C.textDim,
+    fontSize: 11,
+    marginTop: 2,
+  },
+  addStopBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    paddingVertical: 16,
+  },
+  addStopPlus: {
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  addStopText: {
+    fontSize: 14,
+    fontWeight: '600',
   },
 });
