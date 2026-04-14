@@ -260,7 +260,11 @@ function NextCard({
   if (!dep) {
     return <EmptyState message="No more departures today" />;
   }
-  const minsLabel = dep.minsUntil < 1 ? 'now' : `in ${dep.minsUntil} min`;
+  const minsLabel = dep.minsUntil < 1
+    ? 'now'
+    : dep.minsUntil < 60
+      ? `in ${dep.minsUntil} min`
+      : `in ${Math.floor(dep.minsUntil / 60)}h ${dep.minsUntil % 60}min`;
   const realtimeStatus = getRealtimeStatus(dep);
   return (
     <View style={styles.nextBlock}>
