@@ -46,7 +46,26 @@ function TtcStatusBannerBase({
   const isRateLimited = status === 'rate-limited';
   const accent = isOffline || isRateLimited ? colors.error : colors.warning;
   const textColor = isOffline || isRateLimited ? colors.rose : colors.sand;
-  const label = isRateLimited ? 'Rate limited' : isOffline ? 'TTC offline' : 'TTC unstable';
+  
+  const timeAgo = lastSuccessAt
+    ? (() => {
+        const mins = Math.floor((Date.now() - lastSuccessAt) / 60000);
+        if (mins < 1) return 'just now';
+        if (mins === 1) return '1m ago';
+        if (mins < 60) return `${mins}m ago`;
+        const hours = Math.floor(mins / 60);
+        return hours === 1 ? '1h ago' : `${hours}h ago`;
+      })()
+    : null;
+  
+  const baseLabel = isRateLimited 
+    ? 'Rate limited' 
+    : isOffline 
+    ? 'TTC offline' 
+    : 'TTC unstable';
+  
+  const label = timeAgo ? `${baseLabel} · ${timeAgo}` : baseLabel;
+    
   const message = isRateLimited
     ? 'TTC rate limiter hit. Requests are being throttled. Showing cached data when available.'
     : isOffline

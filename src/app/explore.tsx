@@ -6,6 +6,7 @@ import MapView, { Marker, Polyline, type Region } from 'react-native-maps';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { DirectionToggle } from '@/components/direction-toggle';
+import { TtcStatusChip } from '@/components/ttc-status-banner';
 import { BottomTabInset } from '@/constants/theme';
 import { useAppColors } from '@/hooks/use-app-colors';
 import { useRoutePolylines } from '@/hooks/use-route-polylines';
@@ -72,9 +73,9 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
 
   const { data: routeData } = useRoutePolylines(direction);
   const { data: livePositions = [], refetch } = useVehiclePositions(direction, isActive);
+  const { status: ttcStatus, lastSuccessAt } = useTtcHealth();
 
   const positions = livePositions;
-  const { status: ttcStatus } = useTtcHealth();
   const routePolylines = routeData?.polylines;
 
   const splitPolylines = useMemo(() => {
@@ -98,19 +99,22 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
     };
   }, [routePolylines]);
 
-  const serviceNote = ttcStatus === 'rate-limited'
-    ? 'Rate limited — refresh slowed'
-    : ttcStatus === 'offline'
-    ? 'TTC offline — refresh slowed'
-    : ttcStatus === 'degraded'
-      ? 'TTC unstable — markers may lag'
-      : null;
-  const bottomNote = locationMessage ?? serviceNote;
-
   const groupedCounts = useMemo(() => ({
     '380': positions.filter(position => position.bus === '380').length,
     '316': positions.filter(position => position.bus === '316').length,
   }), [positions]);
+
+  const markerScale = useMemo(() => {
+    const delta = currentRegion.latitudeDelta;
+    if (delta > 0.15) return 0.7;
+    if (delta > 0.08) return 0.85;
+    if (delta < 0.03) return 1.2;
+    return 1.0;
+  }, [currentRegion.latitudeDelta]);
+
+  const showMarkers = useMemo(() => {
+    return currentRegion.latitudeDelta < 0.5;
+  }, [currentRegion.latitudeDelta]);
 
   useEffect(() => {
     if (!isActive || positions.length === 0) return;
@@ -223,25 +227,36 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
               );
             })
           : null}
-        {positions.map(position => {
+        {showMarkers && positions.map(position => {
+          const markerWidth = 72 * markerScale;
+          const markerHeight = 84 * markerScale;
+          
           return (
             <React.Fragment key={`${position.bus}-${position.vehicleId}`}>
               <Marker
                 coordinate={{ latitude: position.lat, longitude: position.lon }}
                 anchor={MARKER_ANCHOR}
-                image={MARKER_BADGE_IMAGES[position.bus]}
                 tracksViewChanges={false}
                 title={`${position.bus} to ${direction === 'toKojori' ? 'Kojori' : 'Tbilisi'}`}
-                description={`Vehicle ${position.vehicleId}`}
-              />
+                description={`Vehicle ${position.vehicleId}`}>
+                <Image
+                  source={MARKER_BADGE_IMAGES[position.bus]}
+                  style={{ width: markerWidth, height: markerHeight }}
+                  resizeMode="contain"
+                />
+              </Marker>
               <Marker
                 coordinate={{ latitude: position.lat, longitude: position.lon }}
                 anchor={MARKER_ANCHOR}
-                image={MARKER_HEADING_IMAGES[position.bus]}
                 flat
                 rotation={position.heading}
-                tracksViewChanges={false}
-              />
+                tracksViewChanges={false}>
+                <Image
+                  source={MARKER_HEADING_IMAGES[position.bus]}
+                  style={{ width: markerWidth, height: markerHeight }}
+                  resizeMode="contain"
+                />
+              </Marker>
             </React.Fragment>
           );
         })}
@@ -270,6 +285,7 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
               </View>
             );
           })}
+          <TtcStatusChip />
           <Pressable style={styles.refreshChip} onPress={() => refetch()}>
             <MaterialCommunityIcons name="refresh" size={14} color={C.textDim} />
           </Pressable>
@@ -280,7 +296,7 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
       <Pressable
         style={[
           styles.locateButton,
-          { bottom: insets.bottom + BottomTabInset + (bottomNote ? 64 : 24) },
+          { bottom: insets.bottom + BottomTabInset + 24 },
           isLocating && styles.locateButtonActive,
         ]}
         onPress={handleLocateMe}
@@ -292,10 +308,11 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
         />
       </Pressable>
 
-      {/* Bottom status — only when there's something to say */}
-      {bottomNote ? (
-        <View style={[styles.bottomPill, { bottom: insets.bottom + BottomTabInset + 18 }]}>
-          <Text style={styles.bottomPillText}>{bottomNote}</Text>
+      {locationMessage ? (
+        <View style={[styles.bottomPillContainer, { bottom: insets.bottom + BottomTabInset + 18 }]}>
+          <View style={styles.bottomPill}>
+            <Text style={styles.bottomPillText}>{locationMessage}</Text>
+          </View>
         </View>
       ) : null}
 
@@ -364,10 +381,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   locateButtonActive: { borderColor: C.teal },
-  bottomPill: {
+  bottomPillContainer: {
     position: 'absolute',
     left: 16,
     right: 76,
+    alignItems: 'flex-start',
+  },
+  bottomPill: {
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderRadius: 16,

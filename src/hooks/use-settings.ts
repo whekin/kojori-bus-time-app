@@ -27,8 +27,6 @@ export interface Settings {
   widgetTbilisiStopId: string;
   /** Shared route direction used by Home and Timetable */
   sharedDirection: SharedDirection;
-  /** Use the v3 encoded polyline endpoint instead of stop-coordinate interpolation */
-  useEncodedPolylines: boolean;
   /** Selected visual palette for chrome + route accents */
   paletteId: AppPaletteId;
 }
@@ -41,7 +39,6 @@ const DEFAULTS: Settings = {
   widgetKojoriStopId: DEFAULT_KOJORI_FAVORITES[0],
   widgetTbilisiStopId: DEFAULT_TBILISI_FAVORITES[0],
   sharedDirection: 'toKojori',
-  useEncodedPolylines: true,
   paletteId: DEFAULT_APP_PALETTE,
 };
 

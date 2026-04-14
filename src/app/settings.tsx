@@ -642,25 +642,6 @@ export default function SettingsScreen() {
         ) : null}
 
         <View style={styles.sectionMeta}>
-          <Text style={styles.sectionHeader}>MAP</Text>
-          <Text style={styles.sectionNote}>Route shape drawn on live map.</Text>
-        </View>
-        <View style={styles.card}>
-          <View style={styles.toggleRow}>
-            <View style={styles.toggleCopy}>
-              <Text style={styles.toggleLabel}>Encoded polylines</Text>
-              <Text style={styles.toggleNote}>Use API route geometry. Disable to fall back to stop-coordinate interpolation.</Text>
-            </View>
-            <Switch
-              value={settings.useEncodedPolylines}
-              onValueChange={value => update({ useEncodedPolylines: value })}
-              trackColor={{ false: colors.border, true: alpha(colors.route316, 'aa') }}
-              thumbColor={settings.useEncodedPolylines ? colors.route316 : colors.textDim}
-            />
-          </View>
-        </View>
-
-        <View style={styles.sectionMeta}>
           <Text style={styles.sectionHeader}>DATA SOURCE</Text>
         </View>
         <View style={styles.card}>
