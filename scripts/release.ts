@@ -267,7 +267,7 @@ if (!isDone(state, 'build')) {
 step('6/7  Commit & push');
 
 if (!isDone(state, 'commit_push')) {
-  run('git add app.json package.json android ios');
+  run('git add app.json package.json');
 
   const diff = String(
     run('git diff --cached --quiet || echo changed', { stdio: 'pipe' }) ?? ''
