@@ -116,16 +116,18 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
 
     if (polyline380.length < 2 || polyline316.length < 2) {
       return {
-        '380': { only: polyline380, shared: [] },
-        '316': { only: polyline316, shared: [] },
+        '380': { exclusive: polyline380 },
+        '316': { exclusive: polyline316 },
+        sharedZebra: [],
       };
     }
 
-    const split = splitPolylinesByOverlap(polyline380, polyline316, 2);
+    const split = splitPolylinesByOverlap(polyline380, polyline316, 40);
 
     return {
-      '380': { only: split.polyline1Only, shared: split.polyline1Shared },
-      '316': { only: split.polyline2Only, shared: split.polyline2Shared },
+      '380': { exclusive: split.route1.exclusive },
+      '316': { exclusive: split.route2.exclusive },
+      sharedZebra: split.sharedZebra,
     };
   }, [routePolylines]);
 
@@ -271,37 +273,36 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
         }}
         onRegionChangeComplete={handleRegionChange}>
         {splitPolylines
-          ? (['316', '380'] as const).map((bus) => {
-              const segments = splitPolylines[bus];
-              const color = routeAccent(bus, colors);
-
-              return (
-                <React.Fragment key={`route-${bus}`}>
-                  {segments.only.length >= 2 && (
-                    <Polyline
-                      key={`route-${bus}-only`}
-                      coordinates={segments.only}
-                      strokeColor={color}
-                      strokeWidth={4}
-                      zIndex={2}
-                      lineCap="round"
-                      lineJoin="round"
-                    />
-                  )}
-                  {segments.shared.length >= 2 && (
-                    <Polyline
-                      key={`route-${bus}-shared`}
-                      coordinates={segments.shared}
-                      strokeColor={color}
-                      strokeWidth={2}
-                      zIndex={3}
-                      lineCap="butt"
-                      lineJoin="miter"
-                    />
-                  )}
-                </React.Fragment>
-              );
-            })
+          ? (
+            <>
+              {(['316', '380'] as const).map((bus) => {
+                const { exclusive } = splitPolylines[bus];
+                const color = routeAccent(bus, colors);
+                return exclusive.length >= 2 ? (
+                  <Polyline
+                    key={`route-${bus}-exclusive`}
+                    coordinates={exclusive}
+                    strokeColor={color}
+                    strokeWidth={4}
+                    zIndex={2}
+                    lineCap="round"
+                    lineJoin="round"
+                  />
+                ) : null;
+              })}
+              {splitPolylines.sharedZebra.map((seg, i) => (
+                <Polyline
+                  key={`zebra-${i}`}
+                  coordinates={seg.coords}
+                  strokeColor={routeAccent(seg.colorIndex === 0 ? '380' : '316', colors)}
+                  strokeWidth={4}
+                  zIndex={3}
+                  lineCap="butt"
+                  lineJoin="miter"
+                />
+              ))}
+            </>
+          )
           : null}
         {showMarkers && positions.map(position => {
           const markerWidth = 72 * markerScale;

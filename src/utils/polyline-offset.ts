@@ -1,61 +1,41 @@
 import { PolylinePoint } from '@/services/ttc';
 
 /**
- * Calculate the perpendicular offset for a line segment
- * @param p1 First point
- * @param p2 Second point
- * @param offsetMeters Offset distance in meters (positive = right, negative = left)
- * @returns Offset deltas for latitude and longitude
+ * Haversine distance between two points in meters.
  */
-function calculatePerpendicularOffset(
-  p1: PolylinePoint,
-  p2: PolylinePoint,
-  offsetMeters: number,
-): { latOffset: number; lonOffset: number } {
-  // Calculate the direction vector
-  const dx = p2.longitude - p1.longitude;
-  const dy = p2.latitude - p1.latitude;
-
-  // Calculate the length
-  const length = Math.sqrt(dx * dx + dy * dy);
-
-  if (length === 0) {
-    return { latOffset: 0, lonOffset: 0 };
-  }
-
-  // Normalize the direction vector
-  const nx = dx / length;
-  const ny = dy / length;
-
-  // Calculate perpendicular vector (rotate 90 degrees)
-  // For right offset: perpendicular = (-dy, dx)
-  const perpX = -ny;
-  const perpY = nx;
-
-  // Convert meters to approximate degrees
-  // At latitude ~41.6 (Tbilisi), 1 degree latitude ≈ 111km
-  // 1 degree longitude ≈ 111km * cos(latitude) ≈ 83km
-  const metersPerDegreeLat = 111000;
-  const metersPerDegreeLon = 83000;
-
-  const latOffset = (perpY * offsetMeters) / metersPerDegreeLat;
-  const lonOffset = (perpX * offsetMeters) / metersPerDegreeLon;
-
-  return { latOffset, lonOffset };
+function distanceMeters(a: PolylinePoint, b: PolylinePoint): number {
+  const R = 6371000;
+  const dLat = ((b.latitude - a.latitude) * Math.PI) / 180;
+  const dLon = ((b.longitude - a.longitude) * Math.PI) / 180;
+  const lat1 = (a.latitude * Math.PI) / 180;
+  const lat2 = (b.latitude * Math.PI) / 180;
+  const s =
+    Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(s), Math.sqrt(1 - s));
 }
 
 /**
- * Check if two points are close enough to be considered the same location
+ * Linearly interpolate between two points at fraction t (0–1).
+ */
+function lerp(a: PolylinePoint, b: PolylinePoint, t: number): PolylinePoint {
+  return {
+    latitude: a.latitude + (b.latitude - a.latitude) * t,
+    longitude: a.longitude + (b.longitude - a.longitude) * t,
+  };
+}
+
+/**
+ * Check if two points are close enough to be considered the same location.
  */
 function arePointsClose(p1: PolylinePoint, p2: PolylinePoint, thresholdDegrees = 0.0001): boolean {
-  const latDiff = Math.abs(p1.latitude - p2.latitude);
-  const lonDiff = Math.abs(p1.longitude - p2.longitude);
-  return latDiff < thresholdDegrees && lonDiff < thresholdDegrees;
+  return (
+    Math.abs(p1.latitude - p2.latitude) < thresholdDegrees &&
+    Math.abs(p1.longitude - p2.longitude) < thresholdDegrees
+  );
 }
 
 /**
- * Find overlapping segments between two polylines
- * Returns indices of segments in polyline1 that overlap with polyline2
+ * Find indices of segments in polyline1 that overlap with polyline2.
  */
 function findOverlappingSegments(
   polyline1: PolylinePoint[],
@@ -67,12 +47,10 @@ function findOverlappingSegments(
     const p1Start = polyline1[i];
     const p1End = polyline1[i + 1];
 
-    // Check if this segment overlaps with any segment in polyline2
     for (let j = 0; j < polyline2.length - 1; j++) {
       const p2Start = polyline2[j];
       const p2End = polyline2[j + 1];
 
-      // Check if segments share points or are very close
       const startMatch = arePointsClose(p1Start, p2Start) || arePointsClose(p1Start, p2End);
       const endMatch = arePointsClose(p1End, p2Start) || arePointsClose(p1End, p2End);
 
@@ -87,88 +65,121 @@ function findOverlappingSegments(
 }
 
 /**
- * Split polylines into overlapping and non-overlapping segments
- * Returns separate polylines for rendering with different styles
+ * Break a polyline into alternating-color segments of roughly `segmentMeters` length.
+ * Returns array of small polylines, each tagged with a color index (0 or 1).
+ */
+function buildZebraSegments(
+  points: PolylinePoint[],
+  segmentMeters: number,
+): { coords: PolylinePoint[]; colorIndex: number }[] {
+  if (points.length < 2) return [];
+
+  const segments: { coords: PolylinePoint[]; colorIndex: number }[] = [];
+  let colorIndex = 0;
+  let current: PolylinePoint[] = [points[0]];
+  let accumulated = 0;
+
+  for (let i = 1; i < points.length; i++) {
+    const prev = points[i - 1];
+    const pt = points[i];
+    const d = distanceMeters(prev, pt);
+
+    if (accumulated + d < segmentMeters) {
+      current.push(pt);
+      accumulated += d;
+    } else {
+      // Split this edge at the boundary
+      let remaining = d;
+      let from = prev;
+      let budget = segmentMeters - accumulated;
+
+      while (remaining > 0) {
+        if (remaining <= budget) {
+          current.push(pt);
+          accumulated += remaining;
+          remaining = 0;
+        } else {
+          const t = budget / distanceMeters(from, pt);
+          const split = lerp(from, pt, t);
+          current.push(split);
+          segments.push({ coords: current, colorIndex });
+          colorIndex = 1 - colorIndex;
+          current = [split];
+          from = split;
+          remaining -= budget;
+          accumulated = 0;
+          budget = segmentMeters;
+        }
+      }
+    }
+  }
+
+  if (current.length >= 2) {
+    segments.push({ coords: current, colorIndex });
+  }
+
+  return segments;
+}
+
+export interface SplitResult {
+  /** Segments where only this route runs (no overlap) */
+  exclusive: PolylinePoint[];
+  /** Zebra segments for shared road, each with a color index */
+  zebra: { coords: PolylinePoint[]; colorIndex: number }[];
+}
+
+/**
+ * Split two polylines into exclusive + shared-zebra segments.
+ * Shared sections become zebra stripes alternating between both route colors.
  */
 export function splitPolylinesByOverlap(
   polyline1: PolylinePoint[],
   polyline2: PolylinePoint[],
-  halfWidthMeters: number = 2,
+  zebraSegmentMeters: number = 40,
 ): {
-  polyline1Only: PolylinePoint[];
-  polyline2Only: PolylinePoint[];
-  polyline1Shared: PolylinePoint[];
-  polyline2Shared: PolylinePoint[];
+  route1: SplitResult;
+  route2: SplitResult;
+  sharedZebra: { coords: PolylinePoint[]; colorIndex: number }[];
 } {
   if (polyline1.length < 2 || polyline2.length < 2) {
     return {
-      polyline1Only: polyline1,
-      polyline2Only: polyline2,
-      polyline1Shared: [],
-      polyline2Shared: [],
+      route1: { exclusive: polyline1, zebra: [] },
+      route2: { exclusive: polyline2, zebra: [] },
+      sharedZebra: [],
     };
   }
 
   const overlapping1 = findOverlappingSegments(polyline1, polyline2);
-  const overlapping2 = findOverlappingSegments(polyline2, polyline1);
 
-  // Build separate polylines for overlapping and non-overlapping segments
-  const polyline1Only: PolylinePoint[] = [];
-  const polyline1Shared: PolylinePoint[] = [];
+  // Build exclusive points for route 1
+  const exclusive1: PolylinePoint[] = [];
+  const shared1: PolylinePoint[] = [];
 
   for (let i = 0; i < polyline1.length; i++) {
-    const point = polyline1[i];
     const isInOverlap = overlapping1.has(i) || overlapping1.has(i - 1);
-
     if (isInOverlap) {
-      // Calculate offset for shared segment
-      let offset = { latOffset: 0, lonOffset: 0 };
-
-      if (i > 0 && overlapping1.has(i - 1)) {
-        offset = calculatePerpendicularOffset(polyline1[i - 1], point, halfWidthMeters);
-      } else if (i < polyline1.length - 1 && overlapping1.has(i)) {
-        offset = calculatePerpendicularOffset(point, polyline1[i + 1], halfWidthMeters);
-      }
-
-      polyline1Shared.push({
-        latitude: point.latitude + offset.latOffset,
-        longitude: point.longitude + offset.lonOffset,
-      });
+      shared1.push(polyline1[i]);
     } else {
-      polyline1Only.push(point);
+      exclusive1.push(polyline1[i]);
     }
   }
 
-  const polyline2Only: PolylinePoint[] = [];
-  const polyline2Shared: PolylinePoint[] = [];
+  const overlapping2 = findOverlappingSegments(polyline2, polyline1);
+  const exclusive2: PolylinePoint[] = [];
 
   for (let i = 0; i < polyline2.length; i++) {
-    const point = polyline2[i];
     const isInOverlap = overlapping2.has(i) || overlapping2.has(i - 1);
-
-    if (isInOverlap) {
-      // Calculate offset for shared segment (opposite direction)
-      let offset = { latOffset: 0, lonOffset: 0 };
-
-      if (i > 0 && overlapping2.has(i - 1)) {
-        offset = calculatePerpendicularOffset(polyline2[i - 1], point, -halfWidthMeters);
-      } else if (i < polyline2.length - 1 && overlapping2.has(i)) {
-        offset = calculatePerpendicularOffset(point, polyline2[i + 1], -halfWidthMeters);
-      }
-
-      polyline2Shared.push({
-        latitude: point.latitude + offset.latOffset,
-        longitude: point.longitude + offset.lonOffset,
-      });
-    } else {
-      polyline2Only.push(point);
+    if (!isInOverlap) {
+      exclusive2.push(polyline2[i]);
     }
   }
 
+  // Build zebra from shared points of route 1 (both routes follow same path)
+  const sharedZebra = buildZebraSegments(shared1, zebraSegmentMeters);
+
   return {
-    polyline1Only,
-    polyline2Only,
-    polyline1Shared,
-    polyline2Shared,
+    route1: { exclusive: exclusive1, zebra: [] },
+    route2: { exclusive: exclusive2, zebra: [] },
+    sharedZebra,
   };
 }
