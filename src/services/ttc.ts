@@ -40,6 +40,17 @@ export interface VehiclePosition {
   nextStopId: string;
 }
 
+export type DepartureStatus = 'scheduled' | 'live' | 'cancelled';
+
+export interface DepartureSummary {
+  key: string;
+  bus: BusLine;
+  time: string;
+  minsUntil: number;
+  scheduledTime?: string;
+  scheduledMinsUntil?: number;
+}
+
 export interface PolylinePoint {
   latitude: number;
   longitude: number;
@@ -427,13 +438,18 @@ export function formatFutureTime(offsetMins: number, now = new Date()): string {
 }
 
 export interface Departure {
+  key: string;
   bus: BusLine;
   time: string;      // display time "HH:mm"
   minsUntil: number;
+  status: DepartureStatus;
   live?: boolean;
+  cancelled?: boolean;
+  scheduledTime?: string;
   scheduledMinsUntil?: number;
   liveMinutes?: number; // realtime ETA in mins (only when live=true)
   driftMinutes?: number;
+  replacedCancelledDeparture?: DepartureSummary;
 }
 
 /**
@@ -471,7 +487,14 @@ export function computeUpcomingDepartures(
       // Allow up to 5 min past scheduled time — a late bus can still be coming;
       // mergeArrivalsIntoSchedule will drop unmatched past departures.
       if (minsUntil < -5 || minsUntil > horizonMins) continue;
-      result.push({ bus, time: formatTime(mins), minsUntil });
+      result.push({
+        key: `${bus}-${mins}`,
+        bus,
+        time: formatTime(mins),
+        minsUntil,
+        status: 'scheduled',
+        scheduledTime: formatTime(mins),
+      });
     }
   }
 
@@ -493,40 +516,184 @@ export function mergeArrivalsIntoSchedule(
     ? Math.max(0, Math.floor((now.getTime() - arrivalsUpdatedAt) / 60_000))
     : 0;
 
-  return departures
-    .map(dep => {
-      // Only match arrivals whose adjusted ETA is still plausibly close to this departure
-      const adjustedMatch = arrivals.find(a => {
-        if (a.shortName !== dep.bus) return false;
-        const adjustedEta = a.realtimeArrivalMinutes - elapsedLiveMinutes;
-        return Math.abs(adjustedEta - dep.minsUntil) <= 20;
-      });
-      if (!adjustedMatch) {
-        // No live data — drop if already past scheduled time
-        if (dep.minsUntil < 0) return null;
-        return dep;
+  const byBus = new Map<BusLine, Departure[]>();
+  for (const dep of departures) {
+    if (!byBus.has(dep.bus)) byBus.set(dep.bus, []);
+    byBus.get(dep.bus)?.push({
+      ...dep,
+      status: dep.status ?? 'scheduled',
+      scheduledTime: dep.scheduledTime ?? dep.time,
+      live: false,
+      cancelled: false,
+    });
+  }
+
+  const merged: Departure[] = [];
+
+  for (const bus of ['380', '316'] as const) {
+    const scheduled = (byBus.get(bus) ?? [])
+      .filter(dep => dep.minsUntil >= 0)
+      .sort((a, b) => a.minsUntil - b.minsUntil);
+    if (scheduled.length === 0) continue;
+
+    const realtimeArrivals = arrivals
+      .filter(arrival => arrival.shortName === bus && arrival.realtime)
+      .map(arrival => Math.max(0, arrival.realtimeArrivalMinutes - elapsedLiveMinutes))
+      .sort((a, b) => a - b);
+
+    if (realtimeArrivals.length === 0) {
+      merged.push(...scheduled.map<Departure>(dep => ({
+        ...dep,
+        status: 'scheduled',
+        live: false,
+        cancelled: false,
+        scheduledMinsUntil: dep.scheduledMinsUntil ?? dep.minsUntil,
+      })));
+      continue;
+    }
+
+    const matchedByIndex = new Map<number, number>();
+    const usedIndexes = new Set<number>();
+
+    for (const liveMinutes of realtimeArrivals) {
+      let closestIndex = -1;
+      let closestDistance = Number.POSITIVE_INFINITY;
+
+      for (let index = 0; index < scheduled.length; index += 1) {
+        if (usedIndexes.has(index)) continue;
+        const distance = Math.abs(scheduled[index].minsUntil - liveMinutes);
+        if (distance < closestDistance) {
+          closestDistance = distance;
+          closestIndex = index;
+        }
       }
-      if (!adjustedMatch.realtime) {
-        if (dep.minsUntil < 0) return null;
-        return {
+
+      if (closestIndex === -1) continue;
+      usedIndexes.add(closestIndex);
+      matchedByIndex.set(closestIndex, liveMinutes);
+    }
+
+    const cancelledIndexes = new Set<number>();
+    let latestMatchedIndex = -1;
+    for (let index = 0; index < scheduled.length; index += 1) {
+      if (matchedByIndex.has(index)) {
+        for (let skipped = latestMatchedIndex + 1; skipped < index; skipped += 1) {
+          if (!matchedByIndex.has(skipped)) cancelledIndexes.add(skipped);
+        }
+        latestMatchedIndex = index;
+      }
+    }
+
+    let mostRecentCancelled: DepartureSummary | undefined;
+    for (let index = 0; index < scheduled.length; index += 1) {
+      const dep = scheduled[index];
+      const matchedLiveMinutes = matchedByIndex.get(index);
+
+      if (matchedLiveMinutes != null) {
+        merged.push({
           ...dep,
+          status: 'live',
+          live: true,
+          cancelled: false,
+          time: formatFutureTime(matchedLiveMinutes, now),
+          scheduledTime: dep.scheduledTime ?? dep.time,
+          scheduledMinsUntil: dep.minsUntil,
+          liveMinutes: matchedLiveMinutes,
+          driftMinutes: matchedLiveMinutes - dep.minsUntil,
+          minsUntil: matchedLiveMinutes,
+          replacedCancelledDeparture: mostRecentCancelled,
+        });
+        mostRecentCancelled = undefined;
+        continue;
+      }
+
+      if (cancelledIndexes.has(index)) {
+        const cancelledDep: Departure = {
+          ...dep,
+          status: 'cancelled',
+          cancelled: true,
           live: false,
+          scheduledTime: dep.scheduledTime ?? dep.time,
           scheduledMinsUntil: dep.minsUntil,
         };
+        merged.push(cancelledDep);
+        mostRecentCancelled = {
+          key: cancelledDep.key,
+          bus: cancelledDep.bus,
+          time: cancelledDep.time,
+          minsUntil: cancelledDep.minsUntil,
+          scheduledTime: cancelledDep.scheduledTime,
+          scheduledMinsUntil: cancelledDep.scheduledMinsUntil,
+        };
+        continue;
       }
 
-      const liveMinutes = Math.max(0, adjustedMatch.realtimeArrivalMinutes - elapsedLiveMinutes);
-
-      return {
+      merged.push({
         ...dep,
-        live: true,
-        time: formatFutureTime(liveMinutes, now),
+        status: 'scheduled',
+        live: false,
+        cancelled: false,
+        scheduledTime: dep.scheduledTime ?? dep.time,
         scheduledMinsUntil: dep.minsUntil,
-        liveMinutes,
-        driftMinutes: liveMinutes - dep.minsUntil,
-        minsUntil: liveMinutes,
-      };
-    })
-    .filter((dep): dep is Departure => dep != null && dep.minsUntil >= 0)
+      });
+    }
+  }
+
+  return merged
+    .filter(dep => dep.minsUntil >= 0)
     .sort((a, b) => a.minsUntil - b.minsUntil);
+}
+
+export function injectCancelledDemo(
+  departures: Departure[],
+  now = new Date(),
+): Departure[] {
+  const base = departures
+    .filter(dep => dep.status !== 'cancelled')
+    .sort((a, b) => a.minsUntil - b.minsUntil);
+
+  const demoTarget = base.find(dep => dep.status === 'scheduled' && dep.minsUntil >= 4);
+  if (!demoTarget) return departures;
+
+  const demoDelay = Math.max(12, demoTarget.minsUntil + 11);
+  const scheduledSummary: DepartureSummary = {
+    key: demoTarget.key,
+    bus: demoTarget.bus,
+    time: demoTarget.scheduledTime ?? demoTarget.time,
+    minsUntil: demoTarget.scheduledMinsUntil ?? demoTarget.minsUntil,
+    scheduledTime: demoTarget.scheduledTime ?? demoTarget.time,
+    scheduledMinsUntil: demoTarget.scheduledMinsUntil ?? demoTarget.minsUntil,
+  };
+
+  const demoLive: Departure = {
+    ...demoTarget,
+    status: 'live',
+    live: true,
+    cancelled: false,
+    time: formatFutureTime(demoDelay, now),
+    scheduledTime: scheduledSummary.time,
+    scheduledMinsUntil: scheduledSummary.minsUntil,
+    liveMinutes: demoDelay,
+    driftMinutes: demoDelay - scheduledSummary.minsUntil,
+    minsUntil: demoDelay,
+    replacedCancelledDeparture: scheduledSummary,
+  };
+
+  const demoCancelled: Departure = {
+    ...demoTarget,
+    status: 'cancelled',
+    live: false,
+    cancelled: true,
+    scheduledTime: scheduledSummary.time,
+    scheduledMinsUntil: scheduledSummary.minsUntil,
+  };
+
+  const rest = base.filter(dep => dep.key !== demoTarget.key);
+  return [demoCancelled, demoLive, ...rest]
+    .filter(dep => dep.minsUntil >= 0)
+    .sort((a, b) => {
+      if (a.status === 'cancelled' && b.status !== 'cancelled' && a.key === demoTarget.key) return -1;
+      if (b.status === 'cancelled' && a.status !== 'cancelled' && b.key === demoTarget.key) return 1;
+      return a.minsUntil - b.minsUntil;
+    });
 }

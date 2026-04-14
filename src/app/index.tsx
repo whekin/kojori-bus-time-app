@@ -20,6 +20,7 @@ import {
   computeUpcomingDepartures,
   Departure,
   findStop,
+  injectCancelledDemo,
   mergeArrivalsIntoSchedule,
   ROUTES,
 } from '@/services/ttc';
@@ -99,6 +100,19 @@ function routeColor(bus: BusLine, colors: ReturnType<typeof useAppColors>) {
   return bus === '380' ? colors.route380 : colors.route316;
 }
 
+function getDisplayedDepartures(departures: Departure[]) {
+  const next = departures.find(dep => dep.status !== 'cancelled');
+  const hiddenKeys = new Set<string>();
+
+  if (next) hiddenKeys.add(`${next.key}:${next.status}`);
+  if (next?.replacedCancelledDeparture) hiddenKeys.add(`${next.replacedCancelledDeparture.key}:cancelled`);
+
+  return {
+    next,
+    upcoming: departures.filter(dep => !hiddenKeys.has(`${dep.key}:${dep.status}`)),
+  };
+}
+
 // ── Atoms ─────────────────────────────────────────────────────────────────────
 function BusTag({ bus }: { bus: BusLine }) {
   const colors = useAppColors();
@@ -175,10 +189,13 @@ function LocationAssistCard({
 function DepartureRow({ dep, isLast }: { dep: Departure; isLast: boolean }) {
   const countdown = formatMins(dep.minsUntil);
   const realtimeStatus = getRealtimeStatus(dep);
+  const isCancelled = dep.status === 'cancelled';
   return (
-    <View style={[styles.row, !isLast && styles.rowDivider]}>
+    <View style={[styles.row, isCancelled && styles.rowCancelled, !isLast && styles.rowDivider]}>
       <BusTag bus={dep.bus} />
-      <Text style={[styles.rowTime, { fontFamily: MONO }]}>{dep.time}</Text>
+      <Text style={[styles.rowTime, isCancelled && styles.rowTimeCancelled, { fontFamily: MONO }]}>
+        {dep.time}
+      </Text>
       {realtimeStatus ? (
         <View
           style={[
@@ -193,8 +210,31 @@ function DepartureRow({ dep, isLast }: { dep: Departure; isLast: boolean }) {
             {realtimeStatus.label}
           </Text>
         </View>
+      ) : isCancelled ? (
+        <View style={styles.cancelledBadgeSmall}>
+          <Text style={styles.cancelledBadgeSmallText}>Likely cancelled</Text>
+        </View>
       ) : null}
-      <Text style={[styles.rowCountdown, { fontFamily: MONO }]}>{countdown}</Text>
+      <Text style={[styles.rowCountdown, isCancelled && styles.rowCountdownCancelled, { fontFamily: MONO }]}>
+        {isCancelled ? 'skip' : countdown}
+      </Text>
+    </View>
+  );
+}
+
+function CancelledDepartureSlab({ dep }: { dep: NonNullable<Departure['replacedCancelledDeparture']> }) {
+  return (
+    <View style={styles.cancelledSlab}>
+      <View style={styles.cancelledSlabHeader}>
+        <BusTag bus={dep.bus} />
+        <View style={styles.cancelledSlabCopy}>
+          <Text style={styles.cancelledEyebrow}>SCHEDULED BEFORE LIVE UPDATE</Text>
+          <Text style={[styles.cancelledTime, { fontFamily: MONO }]}>{dep.time}</Text>
+        </View>
+        <View style={styles.cancelledPill}>
+          <Text style={styles.cancelledPillText}>Likely cancelled</Text>
+        </View>
+      </View>
     </View>
   );
 }
@@ -223,74 +263,77 @@ function NextCard({
   const minsLabel = dep.minsUntil < 1 ? 'now' : `in ${dep.minsUntil} min`;
   const realtimeStatus = getRealtimeStatus(dep);
   return (
-    <View style={[styles.nextCard, { borderColor: alpha(accentColor, '30') }]}>
-      <View style={[styles.nextAccentBar, { backgroundColor: accentColor }]} />
-      <View style={styles.nextContent}>
-        <View style={styles.nextHeaderRow}>
-          <View style={styles.nextHeaderLeft}>
+    <View style={styles.nextBlock}>
+      <View style={[styles.nextCard, { borderColor: alpha(accentColor, '30') }]}>
+        <View style={[styles.nextAccentBar, { backgroundColor: accentColor }]} />
+        <View style={styles.nextContent}>
+          <View style={styles.nextHeaderRow}>
+            <View style={styles.nextHeaderLeft}>
+              {(() => {
+                const busColor = routeColor(dep.bus, colors);
+                return (
+              <View
+                style={[
+                  styles.nextRouteBadge,
+                  { borderColor: busColor },
+                ]}>
+                <Text style={[styles.nextRouteBadgeText, { color: busColor, fontFamily: MONO }]}>
+                  {dep.bus}
+                </Text>
+              </View>
+                );
+              })()}
+              <Text style={styles.nextEyebrow}>NEXT DEPARTURE</Text>
+            </View>
+
+            {realtimeStatus ? (
+              <View
+                style={[
+                  styles.liveBadge,
+                  styles.nextStatusBadge,
+                  {
+                    backgroundColor: realtimeStatus.backgroundColor,
+                    borderColor: realtimeStatus.borderColor,
+                  },
+                ]}>
+                <LiveDot color={realtimeStatus.textColor} />
+                <Text style={[styles.liveBadgeText, { color: realtimeStatus.textColor }]}>
+                  {realtimeStatus.label}
+                </Text>
+              </View>
+            ) : null}
+          </View>
+
+          <View style={styles.nextBodyRow}>
+            <View style={styles.nextMain}>
+              <Text
+                style={[styles.nextTime, { fontFamily: MONO }]}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.72}>
+                {dep.time}
+              </Text>
+            </View>
+
             {(() => {
               const busColor = routeColor(dep.bus, colors);
               return (
             <View
               style={[
-                styles.nextRouteBadge,
-                { borderColor: busColor },
+                styles.nextCountdownBadge,
+                { backgroundColor: alpha(busColor, '16'), borderColor: alpha(busColor, '45') },
               ]}>
-              <Text style={[styles.nextRouteBadgeText, { color: busColor, fontFamily: MONO }]}>
-                {dep.bus}
+              <Text style={styles.nextCountdownLabel}>ARRIVES</Text>
+              <Text style={[styles.nextCountdownValue, { color: busColor, fontFamily: MONO }]}>
+                {minsLabel}
               </Text>
             </View>
               );
             })()}
-            <Text style={styles.nextEyebrow}>NEXT DEPARTURE</Text>
           </View>
-
-          {realtimeStatus ? (
-            <View
-              style={[
-                styles.liveBadge,
-                styles.nextStatusBadge,
-                {
-                  backgroundColor: realtimeStatus.backgroundColor,
-                  borderColor: realtimeStatus.borderColor,
-                },
-              ]}>
-              <LiveDot color={realtimeStatus.textColor} />
-              <Text style={[styles.liveBadgeText, { color: realtimeStatus.textColor }]}>
-                {realtimeStatus.label}
-              </Text>
-            </View>
-          ) : null}
-        </View>
-
-        <View style={styles.nextBodyRow}>
-          <View style={styles.nextMain}>
-            <Text
-              style={[styles.nextTime, { fontFamily: MONO }]}
-              numberOfLines={1}
-              adjustsFontSizeToFit
-              minimumFontScale={0.72}>
-              {dep.time}
-            </Text>
-          </View>
-
-          {(() => {
-            const busColor = routeColor(dep.bus, colors);
-            return (
-          <View
-            style={[
-              styles.nextCountdownBadge,
-              { backgroundColor: alpha(busColor, '16'), borderColor: alpha(busColor, '45') },
-            ]}>
-            <Text style={styles.nextCountdownLabel}>ARRIVES</Text>
-            <Text style={[styles.nextCountdownValue, { color: busColor, fontFamily: MONO }]}>
-              {minsLabel}
-            </Text>
-          </View>
-            );
-          })()}
         </View>
       </View>
+      {dep.replacedCancelledDeparture ? <CancelledDepartureSlab dep={dep.replacedCancelledDeparture} /> : null}
     </View>
   );
 }
@@ -305,6 +348,7 @@ function ToKojoriView({
   isRefreshing,
   onRefresh,
   now,
+  demoEnabled,
 }: {
   favoriteIds: string[];
   activeStopId: string;
@@ -314,6 +358,7 @@ function ToKojoriView({
   isRefreshing: boolean;
   onRefresh: () => void;
   now: Date;
+  demoEnabled: boolean;
 }) {
   const colors = useAppColors();
   const stopNames = useStopNames();
@@ -331,15 +376,14 @@ function ToKojoriView({
     [s380, s316, activeStopId, now],
   );
 
-  const departures = useMemo(
-    () => mergeArrivalsIntoSchedule(rawDepartures, arrivals, now, dataUpdatedAt),
-    [rawDepartures, arrivals, now, dataUpdatedAt],
-  );
+  const departures = useMemo(() => {
+    const merged = mergeArrivalsIntoSchedule(rawDepartures, arrivals, now, dataUpdatedAt);
+    return demoEnabled ? injectCancelledDemo(merged, now) : merged;
+  }, [rawDepartures, arrivals, now, dataUpdatedAt, demoEnabled]);
 
   const isLoading = l380 || l316;
   const isError = (e380 || e316) && !s380 && !s316;
-  const next = departures[0];
-  const upcoming = departures.slice(1);
+  const { next, upcoming } = useMemo(() => getDisplayedDepartures(departures), [departures]);
 
   return (
     <View style={styles.modeContainer}>
@@ -377,7 +421,7 @@ function ToKojoriView({
           <View style={[styles.list, styles.listSection]}>
             {upcoming.map((dep, i) => (
               <DepartureRow
-                key={`${dep.bus}-${dep.time}`}
+                key={`${dep.key}-${dep.status}`}
                 dep={dep}
                 isLast={i === upcoming.length - 1}
               />
@@ -401,6 +445,7 @@ function ToTbilisiView({
   isRefreshing,
   onRefresh,
   now,
+  demoEnabled,
 }: {
   favoriteIds: string[];
   activeStopId: string;
@@ -410,6 +455,7 @@ function ToTbilisiView({
   isRefreshing: boolean;
   onRefresh: () => void;
   now: Date;
+  demoEnabled: boolean;
 }) {
   const colors = useAppColors();
   const stopNames = useStopNames();
@@ -427,15 +473,14 @@ function ToTbilisiView({
     [s380, s316, activeStopId, now],
   );
 
-  const departures = useMemo(
-    () => mergeArrivalsIntoSchedule(rawDepartures, arrivals, now, dataUpdatedAt),
-    [rawDepartures, arrivals, now, dataUpdatedAt],
-  );
+  const departures = useMemo(() => {
+    const merged = mergeArrivalsIntoSchedule(rawDepartures, arrivals, now, dataUpdatedAt);
+    return demoEnabled ? injectCancelledDemo(merged, now) : merged;
+  }, [rawDepartures, arrivals, now, dataUpdatedAt, demoEnabled]);
 
   const isLoading = l380 || l316;
   const isError = (e380 || e316 || eArrival) && !s380 && !s316;
-  const next = departures[0];
-  const upcoming = departures.slice(1);
+  const { next, upcoming } = useMemo(() => getDisplayedDepartures(departures), [departures]);
 
   return (
     <View style={styles.modeContainer}>
@@ -473,7 +518,7 @@ function ToTbilisiView({
           <View style={[styles.list, styles.listSection]}>
             {upcoming.map((dep, i) => (
               <DepartureRow
-                key={`${dep.bus}-${dep.time}`}
+                key={`${dep.key}-${dep.status}`}
                 dep={dep}
                 isLast={i === upcoming.length - 1}
               />
@@ -740,28 +785,30 @@ export default function HomeScreen() {
       ) : null}
 
       {mode === 'kojori' ? (
-        <ToKojoriView
-          favoriteIds={settings.tbilisiFavorites}
-          activeStopId={settings.activeTbilisiStopId}
+          <ToKojoriView
+            favoriteIds={settings.tbilisiFavorites}
+            activeStopId={settings.activeTbilisiStopId}
           onSelectStop={id => update({ activeTbilisiStopId: id })}
           onAddStop={() => navigateToTab?.('settings')}
           bottomInset={insets.bottom}
-          isRefreshing={isRefreshing}
-          onRefresh={handleRefresh}
-          now={now}
-        />
-      ) : (
-        <ToTbilisiView
+            isRefreshing={isRefreshing}
+            onRefresh={handleRefresh}
+            now={now}
+            demoEnabled={settings.cancelledBusDemo}
+          />
+        ) : (
+          <ToTbilisiView
           favoriteIds={settings.kojoriFavorites}
           activeStopId={settings.activeKojoriStopId}
           onSelectStop={id => update({ activeKojoriStopId: id })}
           onAddStop={() => navigateToTab?.('settings')}
           bottomInset={insets.bottom}
-          isRefreshing={isRefreshing}
-          onRefresh={handleRefresh}
-          now={now}
-        />
-      )}
+            isRefreshing={isRefreshing}
+            onRefresh={handleRefresh}
+            now={now}
+            demoEnabled={settings.cancelledBusDemo}
+          />
+        )}
     </View>
   );
 }
@@ -830,6 +877,7 @@ const styles = StyleSheet.create({
   dividerLine: { flex: 1, height: 1, backgroundColor: C.border },
   dividerLabel: { color: C.textFaint, fontSize: 10, fontWeight: '700', letterSpacing: 2.5 },
 
+  nextBlock: { gap: 10 },
   nextCard: {
     flexDirection: 'row',
     backgroundColor: C.surface,
@@ -868,6 +916,33 @@ const styles = StyleSheet.create({
   },
   nextCountdownLabel: { color: C.textFaint, fontSize: 9, fontWeight: '700', letterSpacing: 1.4 },
   nextCountdownValue: { fontSize: 16, fontWeight: '800', marginTop: 3 },
+  cancelledSlab: {
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: alpha(C.warning, '30'),
+    backgroundColor: alpha(C.warning, '10'),
+    paddingHorizontal: 14,
+    paddingVertical: 13,
+  },
+  cancelledSlabHeader: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  cancelledSlabCopy: { flex: 1, minWidth: 0, gap: 2 },
+  cancelledEyebrow: { color: alpha(C.warning, 'CC'), fontSize: 10, fontWeight: '800', letterSpacing: 1.5 },
+  cancelledTime: {
+    color: alpha(C.text, 'A8'),
+    fontSize: 20,
+    fontWeight: '700',
+    textDecorationLine: 'line-through',
+    textDecorationColor: alpha(C.warning, 'C0'),
+  },
+  cancelledPill: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: alpha(C.warning, '18'),
+    borderWidth: 1,
+    borderColor: alpha(C.warning, '38'),
+  },
+  cancelledPillText: { color: C.warning, fontSize: 11, fontWeight: '800', letterSpacing: 0.5 },
   badge: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 8, borderWidth: 1 },
   badgeText: { fontSize: 13, fontWeight: '600', letterSpacing: 0.2 },
 
@@ -890,9 +965,16 @@ const styles = StyleSheet.create({
   },
   listSection: { marginHorizontal: 20 },
   row: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 15, gap: 14 },
+  rowCancelled: { opacity: 0.86 },
   rowDivider: { borderBottomWidth: 1, borderBottomColor: C.border },
   rowTime: { flex: 1, color: C.text, fontSize: 22, fontWeight: '600', letterSpacing: -0.3 },
+  rowTimeCancelled: {
+    color: alpha(C.text, '8F'),
+    textDecorationLine: 'line-through',
+    textDecorationColor: alpha(C.warning, 'B0'),
+  },
   rowCountdown: { color: C.textDim, fontSize: 13, fontWeight: '500' },
+  rowCountdownCancelled: { color: C.warning },
 
   liveBadge: {
     flexDirection: 'row',
@@ -914,6 +996,15 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   liveBadgeSmallText: { fontSize: 11, fontWeight: '700', letterSpacing: 0.2 },
+  cancelledBadgeSmall: {
+    borderRadius: 999,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    backgroundColor: alpha(C.warning, '12'),
+    borderWidth: 1,
+    borderColor: alpha(C.warning, '30'),
+  },
+  cancelledBadgeSmallText: { color: C.warning, fontSize: 11, fontWeight: '700', letterSpacing: 0.2 },
   liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: C.live },
 
   emptyState: { paddingVertical: 32, alignItems: 'center' },

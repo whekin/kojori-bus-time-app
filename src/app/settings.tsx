@@ -595,6 +595,12 @@ export default function SettingsScreen() {
     if (easterEggTimerRef.current) clearTimeout(easterEggTimerRef.current);
     const next = easterEggTaps + 1;
     if (next >= EASTER_EGG_TAPS) {
+      if (!settings.debugOptionsUnlocked) {
+        update({ debugOptionsUnlocked: true });
+        Alert.alert('🛠️', 'Debug options unlocked.');
+        setEasterEggTaps(0);
+        return;
+      }
       const msg = EASTER_EGG_MESSAGES[Math.floor(Math.random() * EASTER_EGG_MESSAGES.length)];
       Alert.alert('🚌', msg);
       setEasterEggTaps(0);
@@ -715,6 +721,29 @@ export default function SettingsScreen() {
               stopNames={stopNames}
               onManage={() => setModal('widget-kojori')}
             />
+          </>
+        ) : null}
+
+        {settings.debugOptionsUnlocked ? (
+          <>
+            <View style={styles.sectionMeta}>
+              <Text style={styles.sectionHeader}>HOME DEBUG</Text>
+              <Text style={styles.sectionNote}>Force one likely-cancelled departure so Home UI can be checked on demand.</Text>
+            </View>
+            <View style={styles.card}>
+              <View style={styles.toggleRow}>
+                <View style={styles.toggleCopy}>
+                  <Text style={styles.toggleLabel}>Cancelled bus demo</Text>
+                  <Text style={styles.toggleNote}>Home screen only. Shows live replacement plus cancelled slab.</Text>
+                </View>
+                <Switch
+                  value={settings.cancelledBusDemo}
+                  onValueChange={value => update({ cancelledBusDemo: value })}
+                  trackColor={{ false: alpha(colors.textFaint, '3A'), true: alpha(colors.primary, '68') }}
+                  thumbColor={settings.cancelledBusDemo ? colors.primary : colors.surfaceHigh}
+                />
+              </View>
+            </View>
           </>
         ) : null}
 

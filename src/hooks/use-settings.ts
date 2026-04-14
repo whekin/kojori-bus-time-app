@@ -29,6 +29,10 @@ export interface Settings {
   sharedDirection: SharedDirection;
   /** Selected visual palette for chrome + route accents */
   paletteId: AppPaletteId;
+  /** Reveal hidden debug controls in Settings */
+  debugOptionsUnlocked: boolean;
+  /** Force one inferred cancelled-bus case on Home for UI testing */
+  cancelledBusDemo: boolean;
 }
 
 const DEFAULTS: Settings = {
@@ -40,6 +44,8 @@ const DEFAULTS: Settings = {
   widgetTbilisiStopId: DEFAULT_TBILISI_FAVORITES[0],
   sharedDirection: 'toKojori',
   paletteId: DEFAULT_APP_PALETTE,
+  debugOptionsUnlocked: false,
+  cancelledBusDemo: false,
 };
 
 interface SettingsCtx {
