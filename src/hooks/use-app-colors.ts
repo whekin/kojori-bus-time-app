@@ -74,20 +74,32 @@ function mixPalette(from: AppColors, to: AppColors, progress: number): AppColors
 }
 
 export function AppColorsProvider({ children }: { children: React.ReactNode }) {
-  const { settings } = useSettings();
+  const { settings, isLoaded } = useSettings();
   const targetColors = useMemo(() => getAppColors(settings.paletteId), [settings.paletteId]);
-  const [animatedColors, setAnimatedColors] = useState<AppColors>(targetColors);
+  const [animatedColors, setAnimatedColors] = useState<AppColors | null>(null);
   const frameRef = useRef<number | null>(null);
-  const fromRef = useRef<AppColors>(targetColors);
-  const currentRef = useRef<AppColors>(targetColors);
+  const fromRef = useRef<AppColors | null>(null);
+  const currentRef = useRef<AppColors | null>(null);
+
+  // Once settings load, jump straight to the correct palette — no animation
+  useEffect(() => {
+    if (isLoaded && animatedColors === null) {
+      setAnimatedColors(targetColors);
+      currentRef.current = targetColors;
+      fromRef.current = targetColors;
+    }
+  }, [isLoaded, targetColors]);
 
   useEffect(() => {
+    // Don't animate until initial palette is set
+    if (animatedColors === null) return;
+
     if (frameRef.current) {
       cancelAnimationFrame(frameRef.current);
       frameRef.current = null;
     }
 
-    const from = currentRef.current;
+    const from = currentRef.current!;
     const to = targetColors;
 
     if (from.id === to.id) {
@@ -127,7 +139,9 @@ export function AppColorsProvider({ children }: { children: React.ReactNode }) {
         frameRef.current = null;
       }
     };
-  }, [targetColors]);
+  }, [targetColors, animatedColors]);
+
+  if (animatedColors === null) return null;
 
   return React.createElement(
     AppColorsContext.Provider,

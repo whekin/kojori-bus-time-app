@@ -1,19 +1,20 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
+import { DarkTheme, ThemeProvider } from '@react-navigation/native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import * as SplashScreen from 'expo-splash-screen';
 import React, { useEffect } from 'react';
-import { useColorScheme } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
-import { AnimatedSplashOverlay } from '@/components/animated-icon';
 import AppTabs from '@/components/app-tabs';
 import { AppColorsProvider } from '@/hooks/use-app-colors';
-import { SettingsProvider } from '@/hooks/use-settings';
+import { SettingsProvider, useSettings } from '@/hooks/use-settings';
 import {
   hydrateTtcOfflineData,
   isBakedScheduleCurrent,
   loadBakedData,
   warmTtcOfflineData,
 } from '@/services/ttc-offline';
+
+SplashScreen.preventAutoHideAsync();
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -50,18 +51,33 @@ function CachePrefiller() {
   return null;
 }
 
-export default function RootLayout() {
-  const colorScheme = useColorScheme();
+function AppReady() {
+  const { isLoaded } = useSettings();
 
+  useEffect(() => {
+    if (isLoaded) {
+      SplashScreen.hideAsync();
+    }
+  }, [isLoaded]);
+
+  if (!isLoaded) return null;
+
+  return (
+    <>
+      <CachePrefiller />
+      <AppTabs />
+    </>
+  );
+}
+
+export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <QueryClientProvider client={queryClient}>
         <SettingsProvider>
           <AppColorsProvider>
-            <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-              <CachePrefiller />
-              <AnimatedSplashOverlay />
-              <AppTabs />
+            <ThemeProvider value={DarkTheme}>
+              <AppReady />
             </ThemeProvider>
           </AppColorsProvider>
         </SettingsProvider>
