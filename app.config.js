@@ -1,5 +1,7 @@
 const appJson = require('./app.json');
 
+process.env.NODE_ENV = process.env.NODE_ENV || 'development';
+
 const androidGoogleMapsApiKey = process.env.GOOGLE_MAPS_API_KEY_ANDROID;
 const iosGoogleMapsApiKey = process.env.GOOGLE_MAPS_API_KEY_IOS;
 

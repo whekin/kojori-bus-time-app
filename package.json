@@ -3,17 +3,17 @@
   "main": "expo-router/entry",
   "version": "1.0.0",
   "scripts": {
-    "start": "expo start",
-    "dev": "expo start",
+    "start": "NODE_ENV=development expo start",
+    "dev": "NODE_ENV=development expo start",
     "reset-project": "node ./scripts/reset-project.js",
-    "android": "expo run:android",
+    "android": "NODE_ENV=development expo run:android",
     "android:clean": "cd android && ./gradlew clean",
-    "android:bundle": "cd android && ./gradlew bundleRelease",
-    "android:apk": "cd android && ./gradlew assembleDebug",
-    "ios": "expo run:ios",
-    "web": "expo start --web",
-    "lint": "expo lint",
-    "typecheck": "tsc --noEmit"
+    "android:bundle": "NODE_ENV=production sh -c 'cd android && ./gradlew bundleRelease'",
+    "android:apk": "NODE_ENV=development sh -c 'cd android && ./gradlew assembleDebug'",
+    "ios": "NODE_ENV=development expo run:ios",
+    "web": "NODE_ENV=development expo start --web",
+    "lint": "NODE_ENV=development expo lint",
+    "typecheck": "NODE_ENV=development tsc --noEmit"
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "2.2.0",
