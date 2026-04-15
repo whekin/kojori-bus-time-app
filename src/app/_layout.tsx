@@ -1,4 +1,4 @@
-import { DarkTheme, ThemeProvider } from '@react-navigation/native';
+import { DefaultTheme, ThemeProvider, type Theme } from '@react-navigation/native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import * as SplashScreen from 'expo-splash-screen';
 import React, { useEffect } from 'react';
@@ -6,7 +6,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { AnimatedSplashOverlay, AppReveal } from '@/components/animated-icon';
 import AppTabs from '@/components/app-tabs';
-import { AppColorsProvider } from '@/hooks/use-app-colors';
+import { AppColorsProvider, useAppColors, useResolvedAppThemeMode } from '@/hooks/use-app-colors';
 import { SettingsProvider, useSettings } from '@/hooks/use-settings';
 import {
   hydrateTtcOfflineData,
@@ -74,15 +74,38 @@ function AppReady() {
   );
 }
 
+function AppThemeShell() {
+  const colors = useAppColors();
+  const resolvedMode = useResolvedAppThemeMode();
+
+  const navigationTheme: Theme = {
+    dark: resolvedMode === 'dark',
+    colors: {
+      ...DefaultTheme.colors,
+      primary: colors.primary,
+      background: colors.bg,
+      card: colors.surface,
+      text: colors.text,
+      border: colors.border,
+      notification: colors.error,
+    },
+    fonts: DefaultTheme.fonts,
+  };
+
+  return (
+    <ThemeProvider value={navigationTheme}>
+      <AppReady />
+    </ThemeProvider>
+  );
+}
+
 export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <QueryClientProvider client={queryClient}>
         <SettingsProvider>
           <AppColorsProvider>
-            <ThemeProvider value={DarkTheme}>
-              <AppReady />
-            </ThemeProvider>
+            <AppThemeShell />
           </AppColorsProvider>
         </SettingsProvider>
       </QueryClientProvider>

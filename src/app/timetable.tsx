@@ -13,7 +13,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { DirectionToggle } from '@/components/direction-toggle';
 import { StopSelector } from '@/components/stop-selector';
 import { TtcStatusHeaderBadge } from '@/components/ttc-status-banner';
-import { BottomTabInset, alpha } from '@/constants/theme';
+import { BottomTabInset, alpha, type AppColors } from '@/constants/theme';
 import { useAppColors } from '@/hooks/use-app-colors';
 import { useSchedule } from '@/hooks/use-schedule';
 import { useSettings } from '@/hooks/use-settings';
@@ -26,19 +26,6 @@ import {
   ROUTES,
   SCHEDULE_STOP_PROXY,
 } from '@/services/ttc';
-
-const C = {
-  bg: '#09090B',
-  surface: '#111316',
-  surfaceHigh: '#18191E',
-  border: '#1E2128',
-  borderStrong: '#2A2F3A',
-  text: '#EDEAE4',
-  textDim: '#565C6B',
-  textFaint: '#2C3040',
-  amber: '#F5A20A',
-  teal: '#10B8A3',
-} as const;
 
 const MONO = Platform.select({ android: 'monospace', ios: 'Menlo', default: 'monospace' });
 
@@ -68,6 +55,7 @@ function groupByPeriod(entries: TimetableEntry[]): TimetableSection[] {
 
 function BusTag({ bus }: { bus: BusLine }) {
   const colors = useAppColors();
+  const styles = useTimetableStyles();
   const color = bus === '380' ? colors.route380 : colors.route316;
   return (
     <View style={[styles.busTag, { borderColor: color }]}>
@@ -78,6 +66,7 @@ function BusTag({ bus }: { bus: BusLine }) {
 
 export default function TimetableScreen() {
   const colors = useAppColors();
+  const styles = useTimetableStyles();
   const insets = useSafeAreaInsets();
   const { settings, setSharedDirection, update, toggleKojoriFavorite, toggleTbilisiFavorite } = useSettings();
   const [filter, setFilter] = useState<Filter>('all');
@@ -141,7 +130,7 @@ export default function TimetableScreen() {
         <TtcStatusHeaderBadge />
         <View style={styles.headerRight}>
           {isLoading ? (
-            <ActivityIndicator color={C.textDim} size="small" />
+            <ActivityIndicator color={colors.textDim} size="small" />
           ) : (
             <Text style={styles.headerCount}>{totalCount} departures</Text>
           )}
@@ -235,7 +224,8 @@ export default function TimetableScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(C: AppColors) {
+  return StyleSheet.create({
   screen: { flex: 1, backgroundColor: C.bg },
   header: {
     flexDirection: 'row',
@@ -309,4 +299,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   busTagText: { fontSize: 14, fontWeight: '700', letterSpacing: 0.5 },
-});
+  });
+}
+
+function useTimetableStyles() {
+  const colors = useAppColors();
+  return useMemo(() => createStyles(colors), [colors]);
+}

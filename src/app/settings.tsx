@@ -29,8 +29,16 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { SettingsSwitch } from '@/components/settings-switch';
 import { StopPickerModal } from '@/components/stop-picker-modal';
-import { alpha, APP_PALETTES, BottomTabInset, type AppColors, type AppPaletteId } from '@/constants/theme';
-import { useAppColors } from '@/hooks/use-app-colors';
+import {
+  alpha,
+  APP_PALETTES,
+  BottomTabInset,
+  getAppColors,
+  type AppColors,
+  type AppPaletteId,
+  type AppThemeMode,
+} from '@/constants/theme';
+import { useAppColors, useResolvedAppThemeMode } from '@/hooks/use-app-colors';
 import { useLocation } from '@/hooks/use-location';
 import { useRouteStops } from '@/hooks/use-route-stops';
 import { useSettings } from '@/hooks/use-settings';
@@ -67,6 +75,11 @@ const EASTER_EGG_MESSAGES = [
 const PALETTE_IDS = Object.keys(APP_PALETTES) as AppPaletteId[];
 const PALETTE_CARD_WIDTH = 250;
 const PALETTE_CARD_GAP = 12;
+const THEME_MODE_OPTIONS: { value: AppThemeMode; label: string; caption: string }[] = [
+  { value: 'system', label: 'System', caption: 'Follow device' },
+  { value: 'light', label: 'Light', caption: 'Always bright' },
+  { value: 'dark', label: 'Dark', caption: 'Always moody' },
+];
 const LEGAL_BASE_URL = 'https://github.com/whekin/kojori-bus-time-app/blob/main/release/google-play';
 const LEGAL_URLS = {
   privacyPolicy: Constants.expoConfig?.extra?.legal?.privacyPolicyUrl ?? `${LEGAL_BASE_URL}/privacy-policy.md`,
@@ -338,26 +351,47 @@ function SingleStopPickerModal({
 function PaletteCard({
   paletteId,
   selected,
+  resolvedMode,
   onSelect,
 }: {
   paletteId: AppPaletteId;
   selected: boolean;
+  resolvedMode: 'light' | 'dark';
   onSelect: (paletteId: AppPaletteId) => void;
 }) {
   const { styles } = useStyles();
-  const palette = APP_PALETTES[paletteId];
+  const darkPalette = getAppColors(paletteId, 'dark');
+  const lightPalette = getAppColors(paletteId, 'light');
+  const darkPreviewChipBorder = alpha(darkPalette.primary, '55');
+  const lightPreviewChipBorder = alpha(lightPalette.primary, '55');
+  const darkPreviewChipFill = alpha(darkPalette.primary, '14');
+  const lightPreviewChipFill = alpha(lightPalette.primary, '14');
   const selectedProgress = useSharedValue(selected ? 1 : 0);
+  const modeProgress = useSharedValue(resolvedMode === 'light' ? 1 : 0);
 
   useEffect(() => {
     selectedProgress.value = withTiming(selected ? 1 : 0, { duration: 220 });
   }, [selected, selectedProgress]);
+
+  useEffect(() => {
+    modeProgress.value = withTiming(resolvedMode === 'light' ? 1 : 0, { duration: 260 });
+  }, [modeProgress, resolvedMode]);
 
   const animatedCardStyle = useAnimatedStyle(() => ({
     transform: [
       { scale: interpolate(selectedProgress.value, [0, 1], [0.97, 1]) },
       { translateY: interpolate(selectedProgress.value, [0, 1], [0, -2]) },
     ],
-    borderColor: interpolateColor(selectedProgress.value, [0, 1], [palette.border, palette.primary]),
+    backgroundColor: interpolateColor(modeProgress.value, [0, 1], [darkPalette.surface, lightPalette.surface]),
+    borderColor: interpolateColor(
+      selectedProgress.value,
+      [0, 1],
+      [
+        interpolateColor(modeProgress.value, [0, 1], [darkPalette.border, lightPalette.border]),
+        interpolateColor(modeProgress.value, [0, 1], [darkPalette.primary, lightPalette.primary]),
+      ],
+    ),
+    shadowColor: interpolateColor(modeProgress.value, [0, 1], [darkPalette.primary, lightPalette.primary]),
     shadowOpacity: interpolate(selectedProgress.value, [0, 1], [0.14, 0.26]),
   }));
 
@@ -366,39 +400,154 @@ function PaletteCard({
     transform: [{ scale: interpolate(selectedProgress.value, [0, 1], [0.92, 1]) }],
   }));
 
+  const previewStyle = useAnimatedStyle(() => ({
+    backgroundColor: interpolateColor(modeProgress.value, [0, 1], [darkPalette.bg, lightPalette.bg]),
+    borderColor: interpolateColor(modeProgress.value, [0, 1], [darkPalette.border, lightPalette.border]),
+  }));
+
+  const previewTopStyle = useAnimatedStyle(() => ({
+    backgroundColor: interpolateColor(modeProgress.value, [0, 1], [darkPalette.panelHigh, lightPalette.panelHigh]),
+  }));
+
+  const previewAccentStyle = useAnimatedStyle(() => ({
+    backgroundColor: interpolateColor(modeProgress.value, [0, 1], [darkPalette.route380, lightPalette.route380]),
+  }));
+
+  const previewAccentAltStyle = useAnimatedStyle(() => ({
+    backgroundColor: interpolateColor(modeProgress.value, [0, 1], [darkPalette.route316, lightPalette.route316]),
+  }));
+
+  const previewChipStyle = useAnimatedStyle(() => ({
+    borderColor: interpolateColor(
+      modeProgress.value,
+      [0, 1],
+      [darkPreviewChipBorder, lightPreviewChipBorder],
+    ),
+    backgroundColor: interpolateColor(
+      modeProgress.value,
+      [0, 1],
+      [darkPreviewChipFill, lightPreviewChipFill],
+    ),
+  }));
+
+  const nameStyle = useAnimatedStyle(() => ({
+    color: interpolateColor(modeProgress.value, [0, 1], [darkPalette.text, lightPalette.text]),
+  }));
+
+  const liveStyle = useAnimatedStyle(() => ({
+    color: interpolateColor(modeProgress.value, [0, 1], [darkPalette.primary, lightPalette.primary]),
+  }));
+
+  const taglineStyle = useAnimatedStyle(() => ({
+    color: interpolateColor(modeProgress.value, [0, 1], [darkPalette.textDim, lightPalette.textDim]),
+  }));
+
+  const swatchPrimaryStyle = useAnimatedStyle(() => ({
+    backgroundColor: interpolateColor(modeProgress.value, [0, 1], [darkPalette.primary, lightPalette.primary]),
+  }));
+
+  const swatchRoute380Style = useAnimatedStyle(() => ({
+    backgroundColor: interpolateColor(modeProgress.value, [0, 1], [darkPalette.route380, lightPalette.route380]),
+  }));
+
+  const swatchRoute316Style = useAnimatedStyle(() => ({
+    backgroundColor: interpolateColor(modeProgress.value, [0, 1], [darkPalette.route316, lightPalette.route316]),
+  }));
+
   return (
     <Pressable onPress={() => onSelect(paletteId)}>
       <Animated.View
         style={[
           styles.paletteCard,
-          {
-            backgroundColor: palette.surface,
-            shadowColor: palette.primary,
-          },
           animatedCardStyle,
         ]}>
-        <Animated.View style={[styles.paletteGlow, { backgroundColor: alpha(palette.primary, '22') }, animatedGlowStyle]} />
-        <Animated.View style={[styles.paletteGlowSecondary, { backgroundColor: alpha(palette.route380, '18') }, animatedGlowStyle]} />
+        <Animated.View
+          style={[
+            styles.paletteGlow,
+            {
+              backgroundColor: alpha(resolvedMode === 'light' ? lightPalette.primary : darkPalette.primary, '22'),
+            },
+            animatedGlowStyle,
+          ]}
+        />
+        <Animated.View
+          style={[
+            styles.paletteGlowSecondary,
+            {
+              backgroundColor: alpha(resolvedMode === 'light' ? lightPalette.route380 : darkPalette.route380, '18'),
+            },
+            animatedGlowStyle,
+          ]}
+        />
 
-        <View style={[styles.palettePreview, { backgroundColor: palette.bg, borderColor: palette.border }]}>
-          <View style={[styles.palettePreviewTop, { backgroundColor: palette.panelHigh }]} />
-          <View style={[styles.palettePreviewAccent, { backgroundColor: palette.route380 }]} />
-          <View style={[styles.palettePreviewAccentAlt, { backgroundColor: palette.route316 }]} />
-          <View style={[styles.palettePreviewChip, { borderColor: alpha(palette.primary, '55'), backgroundColor: alpha(palette.primary, '14') }]} />
-        </View>
+        <Animated.View style={[styles.palettePreview, previewStyle]}>
+          <Animated.View style={[styles.palettePreviewTop, previewTopStyle]} />
+          <Animated.View style={[styles.palettePreviewAccent, previewAccentStyle]} />
+          <Animated.View style={[styles.palettePreviewAccentAlt, previewAccentAltStyle]} />
+          <Animated.View style={[styles.palettePreviewChip, previewChipStyle]} />
+        </Animated.View>
 
         <View style={styles.paletteMeta}>
           <View style={styles.paletteHeaderRow}>
-            <Text style={[styles.paletteName, { color: palette.text, fontFamily: DISPLAY }]}>{palette.name}</Text>
-            {selected ? <Text style={[styles.paletteSelected, { color: palette.primary }]}>LIVE</Text> : null}
+            <Animated.Text style={[styles.paletteName, nameStyle, { fontFamily: DISPLAY }]}>
+              {darkPalette.name}
+            </Animated.Text>
+            {selected ? <Animated.Text style={[styles.paletteSelected, liveStyle]}>LIVE</Animated.Text> : null}
           </View>
-          <Text style={[styles.paletteTagline, { color: palette.textDim }]}>{palette.tagline}</Text>
+          <Animated.Text style={[styles.paletteTagline, taglineStyle]}>{darkPalette.tagline}</Animated.Text>
           <View style={styles.paletteSwatches}>
-            {[palette.primary, palette.route380, palette.route316].map((color, index) => (
-              <View key={`${paletteId}-${index}-${color}`} style={[styles.paletteSwatch, { backgroundColor: color }]} />
-            ))}
+            <Animated.View style={[styles.paletteSwatch, swatchPrimaryStyle]} />
+            <Animated.View style={[styles.paletteSwatch, swatchRoute380Style]} />
+            <Animated.View style={[styles.paletteSwatch, swatchRoute316Style]} />
           </View>
         </View>
+      </Animated.View>
+    </Pressable>
+  );
+}
+
+function ThemeModeCard({
+  option,
+  selected,
+  colors,
+  onSelect,
+}: {
+  option: { value: AppThemeMode; label: string; caption: string };
+  selected: boolean;
+  colors: AppColors;
+  onSelect: (value: AppThemeMode) => void;
+}) {
+  const { styles } = useStyles();
+  const selectedProgress = useSharedValue(selected ? 1 : 0);
+  const selectedBackground = alpha(colors.primary, '14');
+
+  useEffect(() => {
+    selectedProgress.value = withTiming(selected ? 1 : 0, { duration: 220 });
+  }, [selected, selectedProgress]);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    borderColor: interpolateColor(selectedProgress.value, [0, 1], [colors.border, colors.primary]),
+    backgroundColor: interpolateColor(selectedProgress.value, [0, 1], [colors.panel, selectedBackground]),
+    transform: [{ translateY: interpolate(selectedProgress.value, [0, 1], [0, -1]) }],
+  }));
+
+  const labelStyle = useAnimatedStyle(() => ({
+    color: interpolateColor(selectedProgress.value, [0, 1], [colors.textDim, colors.text]),
+  }));
+
+  const captionStyle = useAnimatedStyle(() => ({
+    color: interpolateColor(selectedProgress.value, [0, 1], [colors.textFaint, colors.primary]),
+  }));
+
+  return (
+    <Pressable onPress={() => onSelect(option.value)} style={styles.themeModePressable}>
+      <Animated.View style={[styles.themeModeButton, animatedStyle]}>
+        <Animated.Text style={[styles.themeModeLabel, labelStyle]}>
+          {option.label}
+        </Animated.Text>
+        <Animated.Text style={[styles.themeModeCaption, captionStyle]}>
+          {option.caption}
+        </Animated.Text>
       </Animated.View>
     </Pressable>
   );
@@ -408,6 +557,7 @@ export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
   const { colors, styles } = useStyles();
+  const resolvedThemeMode = useResolvedAppThemeMode();
   const { settings, toggleKojoriFavorite, toggleTbilisiFavorite, update, hasManualDirectionOverride } = useSettings();
   const stopNames = useStopNames();
   const offlineStatus = useTtcOfflineStatus();
@@ -464,6 +614,12 @@ export default function SettingsScreen() {
   useEffect(() => {
     paletteCarouselRef.current?.scrollTo({ index: paletteIndex, animated: true });
   }, [paletteIndex]);
+
+  useEffect(() => {
+    if (permission !== 'denied' || !settings.enableSmartDirection) return;
+
+    update({ enableSmartDirection: false });
+  }, [permission, settings.enableSmartDirection, update]);
 
   async function handleRefreshTimetables() {
     if (isRefreshing) return;
@@ -641,6 +797,7 @@ export default function SettingsScreen() {
                 <PaletteCard
                   paletteId={paletteId}
                   selected={settings.paletteId === paletteId}
+                  resolvedMode={resolvedThemeMode}
                   onSelect={nextPaletteId => {
                     update({ paletteId: nextPaletteId });
                     paletteCarouselRef.current?.scrollTo({
@@ -652,6 +809,35 @@ export default function SettingsScreen() {
               </View>
             )}
           />
+        </View>
+
+        <View style={styles.sectionMeta}>
+          <Text style={styles.sectionHeader}>COLOR MODE</Text>
+          <Text style={styles.sectionNote}>
+            Keep each palette, choose whether it runs in light, dark, or follows your device.
+          </Text>
+        </View>
+        <View style={styles.card}>
+          <View style={styles.themeModeRow}>
+            {THEME_MODE_OPTIONS.map(option => {
+              return (
+                <ThemeModeCard
+                  key={option.value}
+                  option={option}
+                  selected={settings.themeMode === option.value}
+                  colors={colors}
+                  onSelect={value => update({ themeMode: value })}
+                />
+              );
+            })}
+          </View>
+          <View style={styles.itemDivider} />
+          <View style={styles.themeModeFooter}>
+            <Text style={styles.themeModeFooterText}>
+              Active now: {resolvedThemeMode === 'dark' ? 'Dark' : 'Light'}
+              {settings.themeMode === 'system' ? ' from device setting.' : ' mode pinned in app.'}
+            </Text>
+          </View>
         </View>
 
         <View style={styles.sectionMeta}>
@@ -1100,6 +1286,23 @@ function createStyles(C: AppColors) {
     toggleCopy: { flex: 1, gap: 3 },
     toggleLabel: { color: C.text, fontSize: 15, fontWeight: '500' },
     toggleNote: { color: C.textDim, fontSize: 12, lineHeight: 17 },
+    themeModeRow: { flexDirection: 'row', gap: 10, padding: 12 },
+    themeModePressable: { flex: 1 },
+    themeModeButton: {
+      minHeight: 88,
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: C.border,
+      backgroundColor: C.panel,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      justifyContent: 'space-between',
+      gap: 8,
+    },
+    themeModeLabel: { fontSize: 15, fontWeight: '700', letterSpacing: 0.2 },
+    themeModeCaption: { fontSize: 12, lineHeight: 16, fontWeight: '600' },
+    themeModeFooter: { paddingHorizontal: 16, paddingVertical: 12 },
+    themeModeFooterText: { color: C.textDim, fontSize: 12, lineHeight: 17 },
     infoRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 18, paddingVertical: 14, gap: 12 },
     infoLabel: { color: C.textDim, fontSize: 14, fontWeight: '500' },
     infoValue: { color: C.text, fontSize: 14, fontWeight: '500' },
@@ -1141,7 +1344,7 @@ function PermissionModal({
       onRequestClose={onClose}>
       <View style={styles.permissionOverlay}>
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
-        <View style={[styles.permissionCard, { marginBottom: insets.bottom + 20 }]}>
+        <View style={[styles.permissionCard, { marginBottom: insets.bottom + 20, backgroundColor: colors.surface }]}>
           <View style={[styles.permissionIconWrap, { backgroundColor: alpha(colors.primary, '18') }]}>
             <Text style={styles.permissionIcon}>📍</Text>
           </View>
@@ -1198,7 +1401,7 @@ function NoticeModal({
       onRequestClose={onClose}>
       <View style={styles.permissionOverlay}>
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
-        <View style={[styles.permissionCard, { marginBottom: insets.bottom + 20 }]}>
+        <View style={[styles.permissionCard, { marginBottom: insets.bottom + 20, backgroundColor: colors.surface }]}>
           <View style={[styles.permissionIconWrap, { backgroundColor: alpha(colors.primary, '18') }]}>
             <Text style={styles.permissionIcon}>{icon}</Text>
           </View>
@@ -1226,12 +1429,11 @@ function NoticeModal({
 const styles = StyleSheet.create({
   permissionOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    backgroundColor: 'rgba(0, 0, 0, 0.45)',
     justifyContent: 'flex-end',
     paddingHorizontal: 20,
   },
   permissionCard: {
-    backgroundColor: '#18191E',
     borderRadius: 24,
     padding: 24,
     alignItems: 'center',

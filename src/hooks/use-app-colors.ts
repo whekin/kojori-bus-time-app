@@ -3,8 +3,11 @@ import React, { createContext, useContext, useEffect, useMemo, useRef, useState 
 import {
   DEFAULT_APP_PALETTE,
   getAppColors,
+  resolveAppThemeMode,
+  type AppResolvedThemeMode,
   type AppColors,
 } from '@/constants/theme';
+import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useSettings } from '@/hooks/use-settings';
 
 const TRANSITION_MS = 260;
@@ -32,6 +35,7 @@ const COLOR_KEYS = [
 ] as const satisfies ReadonlyArray<keyof AppColors>;
 
 const AppColorsContext = createContext<AppColors>(getAppColors(DEFAULT_APP_PALETTE));
+const AppThemeModeContext = createContext<AppResolvedThemeMode>('dark');
 
 function hexToRgb(hex: string) {
   const normalized = hex.replace('#', '');
@@ -75,7 +79,15 @@ function mixPalette(from: AppColors, to: AppColors, progress: number): AppColors
 
 export function AppColorsProvider({ children }: { children: React.ReactNode }) {
   const { settings, isLoaded } = useSettings();
-  const targetColors = useMemo(() => getAppColors(settings.paletteId), [settings.paletteId]);
+  const systemScheme = useColorScheme();
+  const resolvedMode = useMemo(
+    () => resolveAppThemeMode(settings.themeMode, systemScheme),
+    [settings.themeMode, systemScheme],
+  );
+  const targetColors = useMemo(
+    () => getAppColors(settings.paletteId, resolvedMode),
+    [resolvedMode, settings.paletteId],
+  );
   const [animatedColors, setAnimatedColors] = useState<AppColors | null>(null);
   const frameRef = useRef<number | null>(null);
   const fromRef = useRef<AppColors | null>(null);
@@ -102,7 +114,7 @@ export function AppColorsProvider({ children }: { children: React.ReactNode }) {
     const from = currentRef.current!;
     const to = targetColors;
 
-    if (from.id === to.id) {
+    if (from.id === to.id && from.mode === to.mode) {
       setAnimatedColors(to);
       currentRef.current = to;
       fromRef.current = to;
@@ -144,12 +156,20 @@ export function AppColorsProvider({ children }: { children: React.ReactNode }) {
   if (animatedColors === null) return null;
 
   return React.createElement(
-    AppColorsContext.Provider,
-    { value: animatedColors },
-    children,
+    AppThemeModeContext.Provider,
+    { value: resolvedMode },
+    React.createElement(
+      AppColorsContext.Provider,
+      { value: animatedColors },
+      children,
+    ),
   );
 }
 
 export function useAppColors() {
   return useContext(AppColorsContext);
+}
+
+export function useResolvedAppThemeMode() {
+  return useContext(AppThemeModeContext);
 }

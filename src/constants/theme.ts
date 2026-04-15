@@ -7,111 +7,246 @@ import '@/global.css';
 
 import { Platform } from 'react-native';
 
+export type AppResolvedThemeMode = 'light' | 'dark';
+export type AppThemeMode = 'system' | AppResolvedThemeMode;
+
+type AppColorTokens = {
+  bg: string;
+  surface: string;
+  surfaceHigh: string;
+  surfaceRaised: string;
+  panel: string;
+  panelHigh: string;
+  border: string;
+  borderStrong: string;
+  text: string;
+  textDim: string;
+  textFaint: string;
+  primary: string;
+  route380: string;
+  route316: string;
+  live: string;
+  warning: string;
+  error: string;
+  sand: string;
+  rose: string;
+  map: string;
+};
+
+type AppPaletteDefinition = {
+  id: string;
+  name: string;
+  tagline: string;
+  dark: AppColorTokens;
+  light: AppColorTokens;
+};
+
 export const APP_PALETTES = {
   nightShift: {
     id: 'nightShift',
     name: 'Night Shift',
     tagline: 'Ink black, electric mint, taxi amber.',
-    bg: '#08090D',
-    surface: '#11141B',
-    surfaceHigh: '#191E27',
-    surfaceRaised: '#202734',
-    panel: '#0D1118',
-    panelHigh: '#141B25',
-    border: '#202837',
-    borderStrong: '#313B4D',
-    text: '#F4EFE7',
-    textDim: '#99A3B6',
-    textFaint: '#5E687B',
-    primary: '#71E7C5',
-    route380: '#FFB54A',
-    route316: '#39D0BE',
-    live: '#71E7C5',
-    warning: '#FFB54A',
-    error: '#FF6B6B',
-    sand: '#FFE3AF',
-    rose: '#FFD2D2',
-    map: '#8BCAFF',
+    dark: {
+      bg: '#08090D',
+      surface: '#11141B',
+      surfaceHigh: '#191E27',
+      surfaceRaised: '#202734',
+      panel: '#0D1118',
+      panelHigh: '#141B25',
+      border: '#202837',
+      borderStrong: '#313B4D',
+      text: '#F4EFE7',
+      textDim: '#99A3B6',
+      textFaint: '#5E687B',
+      primary: '#71E7C5',
+      route380: '#FFB54A',
+      route316: '#39D0BE',
+      live: '#71E7C5',
+      warning: '#FFB54A',
+      error: '#FF6B6B',
+      sand: '#FFE3AF',
+      rose: '#FFD2D2',
+      map: '#8BCAFF',
+    },
+    light: {
+      bg: '#F6FBFD',
+      surface: '#FFFFFF',
+      surfaceHigh: '#E9F2F5',
+      surfaceRaised: '#DDEBED',
+      panel: '#EFF7F8',
+      panelHigh: '#E3F0F2',
+      border: '#C8DCE1',
+      borderStrong: '#AFC9D0',
+      text: '#102028',
+      textDim: '#54707B',
+      textFaint: '#7F99A3',
+      primary: '#2A9D84',
+      route380: '#D48D1F',
+      route316: '#1C9D92',
+      live: '#249D84',
+      warning: '#C98928',
+      error: '#D96A6A',
+      sand: '#8B5E12',
+      rose: '#A14F5E',
+      map: '#4D8FC8',
+    },
   },
   emberPunch: {
     id: 'emberPunch',
     name: 'Ember Punch',
     tagline: 'Cocoa chrome, hot coral, aqua pulse.',
-    bg: '#100B0C',
-    surface: '#1A1316',
-    surfaceHigh: '#261B20',
-    surfaceRaised: '#302126',
-    panel: '#140E11',
-    panelHigh: '#20161A',
-    border: '#34252C',
-    borderStrong: '#4B3540',
-    text: '#FFF2EA',
-    textDim: '#BBA39D',
-    textFaint: '#745D61',
-    primary: '#FF8B77',
-    route380: '#FFC561',
-    route316: '#6DE4D7',
-    live: '#6DE4D7',
-    warning: '#FFC561',
-    error: '#FF8B77',
-    sand: '#FFE7B8',
-    rose: '#FFD5CC',
-    map: '#9CDAFF',
+    dark: {
+      bg: '#100B0C',
+      surface: '#1A1316',
+      surfaceHigh: '#261B20',
+      surfaceRaised: '#302126',
+      panel: '#140E11',
+      panelHigh: '#20161A',
+      border: '#34252C',
+      borderStrong: '#4B3540',
+      text: '#FFF2EA',
+      textDim: '#BBA39D',
+      textFaint: '#745D61',
+      primary: '#FF8B77',
+      route380: '#FFC561',
+      route316: '#6DE4D7',
+      live: '#6DE4D7',
+      warning: '#FFC561',
+      error: '#FF8B77',
+      sand: '#FFE7B8',
+      rose: '#FFD5CC',
+      map: '#9CDAFF',
+    },
+    light: {
+      bg: '#FFF7F3',
+      surface: '#FFFFFF',
+      surfaceHigh: '#F8E7E2',
+      surfaceRaised: '#F2D8D0',
+      panel: '#FFF0EA',
+      panelHigh: '#FCE4DC',
+      border: '#E8C7BE',
+      borderStrong: '#DCA99C',
+      text: '#351D21',
+      textDim: '#8C6765',
+      textFaint: '#B08B89',
+      primary: '#E46D58',
+      route380: '#E7AC42',
+      route316: '#3DB7AA',
+      live: '#3FAE9E',
+      warning: '#D39E42',
+      error: '#CC6A62',
+      sand: '#9D6B21',
+      rose: '#A8544D',
+      map: '#6FA6D3',
+    },
   },
   sorbetStatic: {
     id: 'sorbetStatic',
     name: 'Sorbet Static',
     tagline: 'Pastel bloom, lilac spark, peach haze.',
-    bg: '#120E18',
-    surface: '#1D1726',
-    surfaceHigh: '#291F35',
-    surfaceRaised: '#352846',
-    panel: '#17111E',
-    panelHigh: '#231A2E',
-    border: '#433456',
-    borderStrong: '#5B4874',
-    text: '#FFF5FA',
-    textDim: '#D5C4D8',
-    textFaint: '#8C7A98',
-    primary: '#F28DB2',
-    route380: '#F2CDA0',
-    route316: '#B3ECF2',
-    live: '#B3ECF2',
-    warning: '#F2CDA0',
-    error: '#F28DB2',
-    sand: '#F9E7C9',
-    rose: '#FFD9E8',
-    map: '#8873D6',
+    dark: {
+      bg: '#120E18',
+      surface: '#1D1726',
+      surfaceHigh: '#291F35',
+      surfaceRaised: '#352846',
+      panel: '#17111E',
+      panelHigh: '#231A2E',
+      border: '#433456',
+      borderStrong: '#5B4874',
+      text: '#FFF5FA',
+      textDim: '#D5C4D8',
+      textFaint: '#8C7A98',
+      primary: '#F28DB2',
+      route380: '#F2CDA0',
+      route316: '#B3ECF2',
+      live: '#B3ECF2',
+      warning: '#F2CDA0',
+      error: '#F28DB2',
+      sand: '#F9E7C9',
+      rose: '#FFD9E8',
+      map: '#8873D6',
+    },
+    light: {
+      bg: '#FFF8FC',
+      surface: '#FFFFFF',
+      surfaceHigh: '#F7ECF8',
+      surfaceRaised: '#EFDFF2',
+      panel: '#FFF1F7',
+      panelHigh: '#F8E6F3',
+      border: '#E3CBE5',
+      borderStrong: '#D1B0D8',
+      text: '#39293E',
+      textDim: '#8E7694',
+      textFaint: '#B49CBC',
+      primary: '#DC719B',
+      route380: '#E6B883',
+      route316: '#7BC9D5',
+      live: '#82C7D3',
+      warning: '#D9AF78',
+      error: '#D77698',
+      sand: '#9E7448',
+      rose: '#B86886',
+      map: '#7A67C4',
+    },
   },
   midnightFig: {
     id: 'midnightFig',
     name: 'Midnight Fig',
     tagline: 'Fig skin, leaf smoke, apricot glow.',
-    bg: '#0F0B10',
-    surface: '#19131B',
-    surfaceHigh: '#241C28',
-    surfaceRaised: '#2E2433',
-    panel: '#140F16',
-    panelHigh: '#1E1721',
-    border: '#3A2B35',
-    borderStrong: '#51404D',
-    text: '#F6EFF4',
-    textDim: '#C7BAC3',
-    textFaint: '#8E7F8F',
-    primary: '#DB795F',
-    route380: '#DB795F',
-    route316: '#BACC82',
-    live: '#BACC82',
-    warning: '#E0B089',
-    error: '#9F5C69',
-    sand: '#F2D8B7',
-    rose: '#E7C7CF',
-    map: '#7B6E8C',
+    dark: {
+      bg: '#0F0B10',
+      surface: '#19131B',
+      surfaceHigh: '#241C28',
+      surfaceRaised: '#2E2433',
+      panel: '#140F16',
+      panelHigh: '#1E1721',
+      border: '#3A2B35',
+      borderStrong: '#51404D',
+      text: '#F6EFF4',
+      textDim: '#C7BAC3',
+      textFaint: '#8E7F8F',
+      primary: '#DB795F',
+      route380: '#DB795F',
+      route316: '#BACC82',
+      live: '#BACC82',
+      warning: '#E0B089',
+      error: '#9F5C69',
+      sand: '#F2D8B7',
+      rose: '#E7C7CF',
+      map: '#7B6E8C',
+    },
+    light: {
+      bg: '#FAF7F8',
+      surface: '#FFFFFF',
+      surfaceHigh: '#F1EAEE',
+      surfaceRaised: '#E7DBE1',
+      panel: '#F8F1F3',
+      panelHigh: '#EFE3E7',
+      border: '#DCCCD2',
+      borderStrong: '#C5B0B7',
+      text: '#34212A',
+      textDim: '#7D6870',
+      textFaint: '#A59198',
+      primary: '#C76D56',
+      route380: '#CD6F58',
+      route316: '#9DB36B',
+      live: '#9BB36B',
+      warning: '#C79772',
+      error: '#8D5663',
+      sand: '#8F6542',
+      rose: '#935D6B',
+      map: '#756888',
+    },
   },
-} as const;
+} as const satisfies Record<string, AppPaletteDefinition>;
 
 export type AppPaletteId = keyof typeof APP_PALETTES;
-export type AppColors = (typeof APP_PALETTES)[AppPaletteId];
+export type AppColors = AppColorTokens & {
+  id: AppPaletteId;
+  name: string;
+  tagline: string;
+  mode: AppResolvedThemeMode;
+};
 
 export const Colors = {
   light: {
@@ -133,9 +268,33 @@ export const Colors = {
 export type ThemeColor = keyof typeof Colors.light & keyof typeof Colors.dark;
 
 export const DEFAULT_APP_PALETTE: AppPaletteId = 'nightShift';
+export const DEFAULT_APP_THEME_MODE: AppThemeMode = 'system';
 
-export function getAppColors(paletteId: AppPaletteId = DEFAULT_APP_PALETTE) {
-  return APP_PALETTES[paletteId] ?? APP_PALETTES[DEFAULT_APP_PALETTE];
+export function resolveAppThemeMode(
+  themeMode: AppThemeMode = DEFAULT_APP_THEME_MODE,
+  systemScheme: 'light' | 'dark' | 'unspecified' | null | undefined = 'dark',
+): AppResolvedThemeMode {
+  if (themeMode === 'light' || themeMode === 'dark') {
+    return themeMode;
+  }
+
+  return systemScheme === 'light' ? 'light' : 'dark';
+}
+
+export function getAppColors(
+  paletteId: AppPaletteId = DEFAULT_APP_PALETTE,
+  mode: AppResolvedThemeMode = 'dark',
+): AppColors {
+  const palette = APP_PALETTES[paletteId] ?? APP_PALETTES[DEFAULT_APP_PALETTE];
+  const variant = palette[mode];
+
+  return {
+    id: palette.id as AppPaletteId,
+    name: palette.name,
+    tagline: palette.tagline,
+    mode,
+    ...variant,
+  };
 }
 
 export function alpha(hex: string, opacityHex: string) {

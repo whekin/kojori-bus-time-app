@@ -8,19 +8,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { DirectionToggle } from '@/components/direction-toggle';
 import { TtcStatusChip } from '@/components/ttc-status-banner';
 import { BottomTabInset } from '@/constants/theme';
-import { useAppColors } from '@/hooks/use-app-colors';
+import { useAppColors, useResolvedAppThemeMode } from '@/hooks/use-app-colors';
 import { useRoutePolylines } from '@/hooks/use-route-polylines';
 import { useTtcHealth } from '@/hooks/use-ttc-health';
 import { useVehiclePositions } from '@/hooks/use-vehicle-positions';
 import { splitPolylinesByOverlap } from '@/utils/polyline-offset';
-
-const C = {
-  bg: '#09090B',
-  border: '#1E2430',
-  text: '#EDEAE4',
-  textDim: '#98A0AE',
-  teal: '#10B8A3',
-} as const;
 
 const DEFAULT_REGION: Region = {
   latitude: 41.639,
@@ -57,9 +49,24 @@ const MARKER_HEADING_IMAGES: Record<'380' | '316', number> = {
 };
 
 const MARKER_ANCHOR = { x: 0.5, y: 54 / 84 };
+const GOOGLE_DARK_MAP_STYLE = [
+  { elementType: 'geometry', stylers: [{ color: '#1d1d1d' }] },
+  { elementType: 'labels.text.stroke', stylers: [{ color: '#1d1d1d' }] },
+  { elementType: 'labels.text.fill', stylers: [{ color: '#8a8a8a' }] },
+  { featureType: 'administrative', elementType: 'geometry', stylers: [{ color: '#444444' }] },
+  { featureType: 'poi', elementType: 'labels.text.fill', stylers: [{ color: '#6d6d6d' }] },
+  { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#2c2c2c' }] },
+  { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#171717' }] },
+  { featureType: 'road', elementType: 'labels.text.fill', stylers: [{ color: '#8a8a8a' }] },
+  { featureType: 'transit', elementType: 'geometry', stylers: [{ color: '#2f2f2f' }] },
+  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#0f141a' }] },
+  { featureType: 'water', elementType: 'labels.text.fill', stylers: [{ color: '#5f7a88' }] },
+];
 
 export default function ExploreScreen({ isActive = false }: ExploreScreenProps) {
   const colors = useAppColors();
+  const resolvedThemeMode = useResolvedAppThemeMode();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
   const mapRef = useRef<MapView>(null);
   const [direction, setDirection] = useState<Direction>('toKojori');
@@ -258,7 +265,8 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
         ref={mapRef}
         style={StyleSheet.absoluteFill}
         initialRegion={DEFAULT_REGION}
-        userInterfaceStyle="dark"
+        userInterfaceStyle={resolvedThemeMode}
+        customMapStyle={resolvedThemeMode === 'dark' ? GOOGLE_DARK_MAP_STYLE : []}
         showsUserLocation={hasUserLocation}
         showsMyLocationButton={false}
         showsPointsOfInterests={false}
@@ -371,7 +379,7 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
           <TtcStatusChip />
           <Pressable style={styles.refreshChip} onPress={() => refetch()} disabled={isFetching}>
             <Animated.View style={{ transform: [{ rotate: spinRotation }] }}>
-              <MaterialCommunityIcons name="refresh" size={14} color={isFetching ? C.teal : C.textDim} />
+              <MaterialCommunityIcons name="refresh" size={14} color={isFetching ? colors.primary : colors.textDim} />
             </Animated.View>
           </Pressable>
         </View>
@@ -389,7 +397,7 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
         <MaterialCommunityIcons
           name={isLocating ? 'crosshairs-question' : 'crosshairs-gps'}
           size={20}
-          color={isLocating ? C.teal : C.text}
+          color={isLocating ? colors.primary : colors.text}
         />
       </Pressable>
 
@@ -414,7 +422,8 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(C: ReturnType<typeof useAppColors>) {
+  return StyleSheet.create({
   screen: { flex: 1, backgroundColor: C.bg },
   topPanel: {
     position: 'absolute',
@@ -423,7 +432,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   directionToggle: {
-    backgroundColor: 'rgba(14,17,23,0.88)',
+    backgroundColor: `${C.panel}E0`,
   },
   legendRow: {
     flexDirection: 'row',
@@ -436,7 +445,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 7,
     borderRadius: 14,
-    backgroundColor: 'rgba(14,17,23,0.85)',
+    backgroundColor: `${C.panel}D9`,
     borderWidth: 1,
     borderColor: C.border,
     opacity: 0.5,
@@ -451,7 +460,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 7,
     borderRadius: 14,
-    backgroundColor: 'rgba(14,17,23,0.85)',
+    backgroundColor: `${C.panel}D9`,
     borderWidth: 1,
     borderColor: C.border,
     alignItems: 'center',
@@ -463,13 +472,13 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: 'rgba(14,17,23,0.90)',
+    backgroundColor: `${C.panel}E6`,
     borderWidth: 1,
     borderColor: C.border,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  locateButtonActive: { borderColor: C.teal },
+  locateButtonActive: { borderColor: C.primary },
   bottomPillContainer: {
     position: 'absolute',
     left: 16,
@@ -480,7 +489,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderRadius: 16,
-    backgroundColor: 'rgba(14,17,23,0.88)',
+    backgroundColor: `${C.panel}E0`,
     borderWidth: 1,
     borderColor: C.border,
   },
@@ -493,11 +502,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingVertical: 18,
     borderRadius: 22,
-    backgroundColor: 'rgba(14,17,23,0.94)',
+    backgroundColor: `${C.panel}F0`,
     borderWidth: 1,
     borderColor: C.border,
     alignItems: 'center',
   },
   configTitle: { color: C.text, fontSize: 16, fontWeight: '700' },
   configText: { color: C.textDim, fontSize: 13, textAlign: 'center', lineHeight: 18, marginTop: 6 },
-});
+  });
+}

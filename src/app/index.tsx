@@ -25,23 +25,6 @@ import {
     ROUTES,
 } from '@/services/ttc';
 
-// ── Design tokens ─────────────────────────────────────────────────────────────
-const C = {
-  bg: '#09090B',
-  surface: '#111316',
-  surfaceHigh: '#18191E',
-  border: '#1E2128',
-  borderStrong: '#2A2F3A',
-  text: '#EDEAE4',
-  textDim: '#565C6B',
-  textFaint: '#2C3040',
-  amber: '#F5A20A',
-  teal: '#10B8A3',
-  live: '#22C55E',
-  warning: '#F59E0B',
-  error: '#EF4444',
-} as const;
-
 const MONO = Platform.select({ android: 'monospace', ios: 'Menlo', default: 'monospace' });
 type SharedMode = 'kojori' | 'tbilisi';
 const CONTENT_SIDE = 20;
@@ -118,6 +101,7 @@ function getDisplayedDepartures(departures: Departure[]) {
 // ── Atoms ─────────────────────────────────────────────────────────────────────
 function BusTag({ bus }: { bus: BusLine }) {
   const colors = useAppColors();
+  const styles = useHomeStyles();
   const color = routeColor(bus, colors);
   return (
     <View style={[styles.busTag, { borderColor: color }]}>
@@ -126,11 +110,14 @@ function BusTag({ bus }: { bus: BusLine }) {
   );
 }
 
-function LiveDot({ color = C.live }: { color?: string }) {
-  return <View style={[styles.liveDot, { backgroundColor: color }]} />;
+function LiveDot({ color }: { color?: string }) {
+  const colors = useAppColors();
+  const styles = useHomeStyles();
+  return <View style={[styles.liveDot, { backgroundColor: color ?? colors.live }]} />;
 }
 
 function SectionDivider({ label, style }: { label: string; style?: ViewStyle }) {
+  const styles = useHomeStyles();
   return (
     <View style={[styles.divider, style]}>
       <View style={styles.dividerLine} />
@@ -141,6 +128,7 @@ function SectionDivider({ label, style }: { label: string; style?: ViewStyle }) 
 }
 
 function EmptyState({ message }: { message: string }) {
+  const styles = useHomeStyles();
   return (
     <View style={styles.emptyState}>
       <Text style={styles.emptyText}>{message}</Text>
@@ -150,6 +138,7 @@ function EmptyState({ message }: { message: string }) {
 
 function ErrorBanner({ message }: { message: string }) {
   const colors = useAppColors();
+  const styles = useHomeStyles();
   return (
     <View
       style={[
@@ -182,6 +171,8 @@ function StatusIsland({
 }: {
   items: IslandStatusItem[];
 }) {
+  const colors = useAppColors();
+  const styles = useHomeStyles();
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
   const [dismissedTokens, setDismissedTokens] = useState<Record<string, string>>({});
 
@@ -239,7 +230,7 @@ function StatusIsland({
             styles.statusPanel,
             {
               borderColor: alpha(expandedItem.accentColor, '42'),
-              backgroundColor: C.surface,
+              backgroundColor: colors.surface,
             },
           ]}>
           <View style={styles.statusPanelHeader}>
@@ -269,7 +260,7 @@ function StatusIsland({
                   { borderColor: alpha(expandedItem.accentColor, '36') },
                 ]}
                 onPress={() => handleDismiss(expandedItem)}>
-                <Text style={[styles.statusPanelButtonText, { color: C.textDim }]}>
+                <Text style={[styles.statusPanelButtonText, { color: colors.textDim }]}>
                   Dismiss
                 </Text>
               </Pressable>
@@ -296,6 +287,7 @@ function StatusIsland({
 // ── Shared departure row ───────────────────────────────────────────────────────
 function DepartureRow({ dep, isLast }: { dep: Departure; isLast: boolean }) {
   const colors = useAppColors();
+  const styles = useHomeStyles();
   const countdown = formatMins(dep.minsUntil);
   const realtimeStatus = getRealtimeStatus(dep, colors);
   const isCancelled = dep.status === 'cancelled';
@@ -346,6 +338,7 @@ function DepartureRow({ dep, isLast }: { dep: Departure; isLast: boolean }) {
 
 function CancelledDepartureSlab({ dep }: { dep: NonNullable<Departure['replacedCancelledDeparture']> }) {
   const colors = useAppColors();
+  const styles = useHomeStyles();
   return (
     <View
       style={[
@@ -399,6 +392,7 @@ function NextCard({
   isLoading: boolean;
 }) {
   const colors = useAppColors();
+  const styles = useHomeStyles();
   if (isLoading && !dep) {
     return (
       <View style={[styles.nextCard, styles.centered]}>
@@ -514,6 +508,7 @@ function ToKojoriView({
   demoEnabled: boolean;
 }) {
   const colors = useAppColors();
+  const styles = useHomeStyles();
   const stopNames = useStopNames();
   const favoriteStops = favoriteIds.map(id => {
     const base = findStop(id) ?? { id, label: `Stop #${id.split(':')[1]}` };
@@ -548,9 +543,9 @@ function ToKojoriView({
           <RefreshControl
             refreshing={isRefreshing}
             onRefresh={onRefresh}
-            tintColor={C.text}
-            colors={[C.text]}
-            progressBackgroundColor={C.surfaceHigh}
+            tintColor={colors.text}
+            colors={[colors.text]}
+            progressBackgroundColor={colors.surfaceHigh}
           />
         }>
         <View style={styles.fixedSection}>
@@ -616,6 +611,7 @@ function ToTbilisiView({
   demoEnabled: boolean;
 }) {
   const colors = useAppColors();
+  const styles = useHomeStyles();
   const stopNames = useStopNames();
   const favoriteStops = favoriteIds.map(id => {
     const base = findStop(id) ?? { id, label: `Stop #${id.split(':')[1]}` };
@@ -650,9 +646,9 @@ function ToTbilisiView({
           <RefreshControl
             refreshing={isRefreshing}
             onRefresh={onRefresh}
-            tintColor={C.text}
-            colors={[C.text]}
-            progressBackgroundColor={C.surfaceHigh}
+            tintColor={colors.text}
+            colors={[colors.text]}
+            progressBackgroundColor={colors.surfaceHigh}
           />
         }>
         <View style={styles.fixedSection}>
@@ -698,6 +694,7 @@ function ToTbilisiView({
 // ── Root ──────────────────────────────────────────────────────────────────────
 export default function HomeScreen() {
   const colors = useAppColors();
+  const styles = useHomeStyles();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const {
@@ -1056,7 +1053,7 @@ export default function HomeScreen() {
             onPress={handleRefresh}
             disabled={isRefreshing}>
             {isRefreshing ? (
-              <ActivityIndicator size="small" color={C.textDim} />
+              <ActivityIndicator size="small" color={colors.textDim} />
             ) : (
               <Text style={styles.refreshGlyph}>↻</Text>
             )}
@@ -1106,7 +1103,8 @@ export default function HomeScreen() {
 }
 
 // ── Styles ────────────────────────────────────────────────────────────────────
-const styles = StyleSheet.create({
+function createStyles(C: AppColors) {
+  return StyleSheet.create({
   screen: { flex: 1, backgroundColor: C.bg },
   header: {
     flexDirection: 'row',
@@ -1373,4 +1371,10 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   errorText: { color: C.error, fontSize: 12 },
-});
+  });
+}
+
+function useHomeStyles() {
+  const colors = useAppColors();
+  return useMemo(() => createStyles(colors), [colors]);
+}

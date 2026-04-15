@@ -21,6 +21,8 @@ First public release of **Kojoring Time** — a real-time transit companion for 
 - **Zebra-striped polylines** — shared road segments show both routes with zebra pattern instead of overlapping lines
 - **Map bounds clamping** — keeps map focused on the Kojori–Tbilisi corridor
 - **Elene Akhvlediani stop** — added as actual first Tbilisi departure stop (TTC API omits it)
+- **Expanded theme suite** — Night Shift, Ember Punch, Sorbet Static, and Midnight Fig palettes with animated switching
+- **Color mode selector** — each palette can now run in Light, Dark, or follow the system setting
 
 ### Improved
 
@@ -37,6 +39,10 @@ First public release of **Kojoring Time** — a real-time transit companion for 
 - Data source internals behind debug unlock for cleaner Settings
 - Refresh spinner inside button instead of replacing it
 - Compact legal section (3 rows instead of 6)
+- Theme switching now animates across app chrome, palette picker, and mode controls
+- Departures, Timetable, stop picker, and map overlays now follow the active palette instead of fixed dark colors
+- Settings uses modern in-app notice sheets for debug unlock and easter egg messages
+- Smart direction now asks for location before enabling and shows a first-run opt-in prompt
 
 ### Fixed
 
@@ -45,6 +51,10 @@ First public release of **Kojoring Time** — a real-time transit companion for 
 - Toggle chips no longer clipped by widget rounded corners
 - Google Maps marker clipping while keeping vehicle direction readable
 - Stale departures no longer present as next arrivals
+- Android switch tint now stays palette-correct instead of falling back to violet
+- Google Maps now correctly switches between light and dark styling with app theme mode
+- Smart direction now turns itself off when location permission is denied
+- Permission and notice modals now respect light mode instead of staying dark
 
 ### Infra
 

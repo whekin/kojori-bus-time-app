@@ -1,7 +1,7 @@
 import { Platform } from 'react-native';
 
 import { BAKED_SCHEDULES, BAKED_STOP_NAMES } from '@/assets/ttc-baked';
-import { getAppColors, type AppPaletteId } from '@/constants/theme';
+import { getAppColors, type AppPaletteId, type AppResolvedThemeMode } from '@/constants/theme';
 import {
   BusLine,
   computeUpcomingDepartures,
@@ -22,6 +22,7 @@ interface WidgetSyncSettings {
   activeKojoriStopId: string;
   activeTbilisiStopId: string;
   paletteId: AppPaletteId;
+  themeMode: AppResolvedThemeMode;
 }
 
 interface WidgetItemPayload {
@@ -144,7 +145,7 @@ export async function syncAndroidWidgetState(settings: WidgetSyncSettings) {
   if (Platform.OS !== 'android' || !KojoriWidget) return;
 
   const now = new Date();
-  const palette = getAppColors(settings.paletteId);
+  const palette = getAppColors(settings.paletteId, settings.themeMode);
   const [kojori, tbilisi] = await Promise.all([
     buildDirectionPayload('kojori', settings.activeTbilisiStopId, now),
     buildDirectionPayload('tbilisi', settings.activeKojoriStopId, now),

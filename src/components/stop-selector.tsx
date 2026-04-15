@@ -3,18 +3,7 @@ import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from '
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { StopPickerModal } from '@/components/stop-picker-modal';
-
-const C = {
-  backdrop: 'rgba(4, 5, 8, 0.68)',
-  surface: '#111316',
-  surfaceHigh: '#18191E',
-  surfaceRaised: '#1C2027',
-  border: '#1E2128',
-  borderStrong: '#2A2F3A',
-  text: '#EDEAE4',
-  textDim: '#565C6B',
-  textFaint: '#2C3040',
-} as const;
+import { useAppColors } from '@/hooks/use-app-colors';
 
 const MONO = Platform.select({ android: 'monospace', ios: 'Menlo', default: 'monospace' });
 const DISPLAY = Platform.select({ android: 'serif', ios: 'Georgia', default: 'serif' });
@@ -62,6 +51,8 @@ function StopOption({
   accentColor: string;
   onPress: () => void;
 }) {
+  const colors = useAppColors();
+  const styles = useStopSelectorStyles();
   return (
     <Pressable
       accessibilityRole="button"
@@ -70,8 +61,8 @@ function StopOption({
       style={({ pressed }) => [
         styles.option,
         {
-          borderColor: isActive ? accentColor + '55' : C.border,
-          backgroundColor: isActive ? accentColor + '10' : C.surfaceRaised,
+          borderColor: isActive ? accentColor + '55' : colors.border,
+          backgroundColor: isActive ? accentColor + '10' : colors.surfaceRaised,
           opacity: pressed ? 0.95 : 1,
         },
       ]}>
@@ -80,8 +71,8 @@ function StopOption({
           style={[
             styles.optionDot,
             {
-              backgroundColor: isActive ? accentColor : C.borderStrong,
-              borderColor: isActive ? accentColor + 'aa' : C.borderStrong,
+              backgroundColor: isActive ? accentColor : colors.borderStrong,
+              borderColor: isActive ? accentColor + 'aa' : colors.borderStrong,
             },
           ]}
         />
@@ -89,7 +80,7 @@ function StopOption({
           <View
             style={[
               styles.optionLine,
-              { backgroundColor: isActive ? accentColor + '40' : C.border },
+              { backgroundColor: isActive ? accentColor + '40' : colors.border },
             ]}
           />
         ) : null}
@@ -98,7 +89,7 @@ function StopOption({
       <View style={styles.optionCopy}>
         <View style={styles.optionMeta}>
           <Text style={styles.optionEyebrow}>STOP {formatIndex(index)}</Text>
-          <Text style={[styles.optionState, { color: isActive ? accentColor : C.textDim, fontFamily: MONO }]}>
+          <Text style={[styles.optionState, { color: isActive ? accentColor : colors.textDim, fontFamily: MONO }]}>
             {isActive ? 'CURRENT' : 'SWITCH'}
           </Text>
         </View>
@@ -124,6 +115,8 @@ export function StopSelector({
   addStopModal,
   label = 'BOARDING STOP',
 }: StopSelectorProps) {
+  const colors = useAppColors();
+  const styles = useStopSelectorStyles();
   const insets = useSafeAreaInsets();
   const [open, setOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
@@ -179,7 +172,7 @@ export function StopSelector({
           styles.trigger,
           {
             borderColor: accentColor + '34',
-            backgroundColor: pressed ? C.surfaceHigh : C.surface,
+            backgroundColor: pressed ? colors.surfaceHigh : colors.surface,
           },
         ]}>
         <View style={styles.triggerMain}>
@@ -224,9 +217,9 @@ export function StopSelector({
           <View
             style={[
               styles.sheet,
-              {
-                paddingBottom: Math.max(insets.bottom, 16),
-              },
+                {
+                  paddingBottom: Math.max(insets.bottom, 16),
+                },
             ]}>
             <View style={styles.sheetHandle} />
 
@@ -296,7 +289,8 @@ export function StopSelector({
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(C: ReturnType<typeof useAppColors>) {
+  return StyleSheet.create({
   trigger: {
     minHeight: 74,
     borderRadius: 18,
@@ -351,7 +345,7 @@ const styles = StyleSheet.create({
   },
   backdrop: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: C.backdrop,
+    backgroundColor: `${C.bg}CC`,
   },
   sheet: {
     borderTopLeftRadius: 28,
@@ -542,4 +536,10 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
-});
+  });
+}
+
+function useStopSelectorStyles() {
+  const colors = useAppColors();
+  return useMemo(() => createStyles(colors), [colors]);
+}
