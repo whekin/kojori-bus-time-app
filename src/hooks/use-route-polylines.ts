@@ -3,10 +3,8 @@ import { useQuery } from '@tanstack/react-query';
 import { BusLine, PolylinePoint, RouteGeometrySource } from '@/services/ttc';
 import {
   CachedRoutePolylines,
-  fetchRoutePolylinesForDirection,
+  getBakedRoutePolylines,
   readRoutePolylinesCache,
-  ROUTE_POLYLINES_CACHE_TTL,
-  writeRoutePolylinesCache,
 } from '@/services/ttc-offline';
 
 type Direction = 'toKojori' | 'toTbilisi';
@@ -36,25 +34,13 @@ export function useRoutePolylines(direction: Direction) {
   return useQuery<RoutePolylinesPayload>({
     queryKey: ['route-polylines', direction],
     meta: { source: 'ttc' },
+    initialData: () => normalizeRoutePolylinesPayload(getBakedRoutePolylines(direction)),
     queryFn: async () => {
-      try {
-        const data = await fetchRoutePolylinesForDirection(direction);
-        void writeRoutePolylinesCache(direction, {
-          version: 3,
-          polylines: data.polylines,
-          source: data.source,
-        });
-        return normalizeRoutePolylinesPayload(data);
-      } catch (error) {
-        const cached = await readRoutePolylinesCache(direction, true);
-        if (cached) {
-          return normalizeRoutePolylinesPayload(cached);
-        }
-        throw error;
-      }
+      const cached = await readRoutePolylinesCache(direction, true);
+      return normalizeRoutePolylinesPayload(cached ?? getBakedRoutePolylines(direction));
     },
     select: normalizeRoutePolylinesPayload,
-    staleTime: ROUTE_POLYLINES_CACHE_TTL,
-    retry: 1,
+    staleTime: Number.POSITIVE_INFINITY,
+    retry: 0,
   });
 }

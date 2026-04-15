@@ -117,7 +117,7 @@ export default function AppTabs() {
   const [navWidth, setNavWidth] = useState(0);
   const pagerProgress = useSharedValue(0);
   const tabs: TabItem[] = [
-    { route: 'index', title: 'Departures', icon: 'bus-clock', accent: C.route380, render: () => <HomeScreen /> },
+    { route: 'index', title: 'Departures', icon: 'bus-clock', accent: C.route380, render: isActive => <HomeScreen isActive={isActive} /> },
     { route: 'explore', title: 'Map', icon: 'map-marker-radius', accent: C.map, render: isActive => <ExploreScreen isActive={isActive} /> },
     { route: 'timetable', title: 'Timetable', icon: 'table-clock', accent: C.route316, render: () => <TimetableScreen /> },
     { route: 'settings', title: 'Settings', icon: 'cog', accent: C.primary, render: () => <SettingsScreen /> },

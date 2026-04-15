@@ -8,12 +8,12 @@ import { AnimatedSplashOverlay, AppReveal } from '@/components/animated-icon';
 import AppTabs from '@/components/app-tabs';
 import { AppColorsProvider, useAppColors, useResolvedAppThemeMode } from '@/hooks/use-app-colors';
 import { SettingsProvider, useSettings } from '@/hooks/use-settings';
+import { prefillStopNames } from '@/hooks/use-stop-names';
 import {
   hydrateTtcOfflineData,
-  isBakedScheduleCurrent,
   loadBakedData,
-  warmTtcOfflineData,
 } from '@/services/ttc-offline';
+import { hydrateTtcQueryLog } from '@/services/ttc-query-log';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -28,25 +28,15 @@ const queryClient = new QueryClient({
 
 function CachePrefiller() {
   useEffect(() => {
-    let isActive = true;
-
     void (async () => {
       // 1. Instantly seed from baked asset — zero network, zero I/O.
       loadBakedData(queryClient);
+      await prefillStopNames(queryClient);
+      await hydrateTtcQueryLog();
 
-      // 2. Overlay with anything the user has previously fetched from AsyncStorage.
+      // 2. Overlay with anything the user has previously saved in AsyncStorage.
       await hydrateTtcOfflineData(queryClient);
-
-      // 3. Only hit the network if today's schedule isn't covered by the baked data
-      //    or previously cached data. Polylines/stops never auto-refresh.
-      if (isActive && !isBakedScheduleCurrent()) {
-        await warmTtcOfflineData(queryClient);
-      }
     })();
-
-    return () => {
-      isActive = false;
-    };
   }, []);
 
   return null;

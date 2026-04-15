@@ -1,9 +1,60 @@
 import { reportTtcFailure, reportTtcSuccess } from '@/hooks/use-ttc-health';
+import {
+  getTtcErrorCode,
+  recordTtcQuery,
+  type TtcQueryKind,
+} from '@/services/ttc-query-log';
 
 const BASE = 'https://transit.ttc.com.ge/pis-gateway/api';
 const API_KEY = 'c0a2f304-551a-4d08-b8df-2c53ecd57f9f';
 
 const headers = { 'x-api-key': API_KEY };
+
+async function fetchTtcJson<T>(url: string, kind: TtcQueryKind): Promise<T> {
+  const startedAt = Date.now();
+  let statusCode: number | null = null;
+
+  try {
+    const res = await fetch(url, { headers });
+    statusCode = res.status;
+
+    if (!res.ok) {
+      const isRateLimited = res.status === 520;
+      reportTtcFailure(isRateLimited);
+      throw new Error(`HTTP ${res.status}`);
+    }
+
+    const data = await res.json();
+    reportTtcSuccess();
+    recordTtcQuery({
+      kind,
+      endpoint: url.replace(`${BASE}/`, ''),
+      startedAt,
+      finishedAt: Date.now(),
+      durationMs: Date.now() - startedAt,
+      ok: true,
+      statusCode,
+      errorCode: null,
+    });
+    return data as T;
+  } catch (error) {
+    if (!(error instanceof Error && error.message.startsWith('HTTP '))) {
+      reportTtcFailure();
+    }
+
+    recordTtcQuery({
+      kind,
+      endpoint: url.replace(`${BASE}/`, ''),
+      startedAt,
+      finishedAt: Date.now(),
+      durationMs: Date.now() - startedAt,
+      ok: false,
+      statusCode,
+      errorCode: getTtcErrorCode(error, statusCode),
+    });
+    throw error;
+  }
+}
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -212,127 +263,58 @@ export const KOJORI_BOUNDS = {
 // ── API functions ─────────────────────────────────────────────────────────────
 
 export async function fetchArrivalTimes(stopId: string): Promise<ArrivalTime[]> {
-  try {
-    const res = await fetch(
-      `${BASE}/v2/stops/${stopId}/arrival-times?locale=en&ignoreScheduledArrivalTimes=false`,
-      { headers },
-    );
-    if (!res.ok) {
-      const isRateLimited = res.status === 520;
-      reportTtcFailure(isRateLimited);
-      throw new Error(`HTTP ${res.status}`);
-    }
-    reportTtcSuccess();
-    return res.json();
-  } catch (error) {
-    if (error instanceof Error && !error.message.startsWith('HTTP')) {
-      reportTtcFailure();
-    }
-    throw error;
-  }
+  return fetchTtcJson<ArrivalTime[]>(
+    `${BASE}/v2/stops/${stopId}/arrival-times?locale=en&ignoreScheduledArrivalTimes=false`,
+    'arrivals',
+  );
 }
 
 export async function fetchSchedule(
   routeId: string,
   patternSuffix: string,
 ): Promise<SchedulePeriod[]> {
-  try {
-    const res = await fetch(
-      `${BASE}/v3/routes/${routeId}/schedule?patternSuffix=${patternSuffix}&locale=en`,
-      { headers },
-    );
-    if (!res.ok) {
-      const isRateLimited = res.status === 520;
-      reportTtcFailure(isRateLimited);
-      throw new Error(`HTTP ${res.status}`);
-    }
-    reportTtcSuccess();
-    return res.json();
-  } catch (error) {
-    if (error instanceof Error && !error.message.startsWith('HTTP')) {
-      reportTtcFailure();
-    }
-    throw error;
-  }
+  return fetchTtcJson<SchedulePeriod[]>(
+    `${BASE}/v3/routes/${routeId}/schedule?patternSuffix=${patternSuffix}&locale=en`,
+    'schedule',
+  );
 }
 
 /** Fetches name + coordinates for a single stop. */
 export async function fetchStopDetails(stopId: string): Promise<{ id: string; name: string }> {
-  try {
-    const res = await fetch(`${BASE}/v2/stops/${stopId}?locale=en`, { headers });
-    if (!res.ok) {
-      const isRateLimited = res.status === 520;
-      reportTtcFailure(isRateLimited);
-      throw new Error(`HTTP ${res.status}`);
-    }
-    const data = await res.json();
-    reportTtcSuccess();
-    return { id: data.id ?? stopId, name: data.name };
-  } catch (error) {
-    if (error instanceof Error && !error.message.startsWith('HTTP')) {
-      reportTtcFailure();
-    }
-    throw error;
-  }
+  const data = await fetchTtcJson<{ id?: string; name: string }>(
+    `${BASE}/v2/stops/${stopId}?locale=en`,
+    'stop-details',
+  );
+  return { id: data.id ?? stopId, name: data.name };
 }
 
 /** Fetches all stops for a route pattern — used in Settings to populate the full picker. */
 export async function fetchRouteStops(routeId: string, patternSuffix: string): Promise<StopInfo[]> {
-  try {
-    const res = await fetch(
-      `${BASE}/v3/routes/${routeId}/stops-of-patterns?patternSuffixes=${patternSuffix}&locale=en`,
-      { headers },
-    );
-    if (!res.ok) {
-      const isRateLimited = res.status === 520;
-      reportTtcFailure(isRateLimited);
-      throw new Error(`HTTP ${res.status}`);
-    }
-    // Response: [{ stop: { id, name, lat, lon, ... }, patternSuffixes: [...] }]
-    const raw: { stop: { id: string; name: string; lat?: number; lon?: number } }[] = await res.json();
-    reportTtcSuccess();
-    return raw.map(s => ({ id: s.stop.id, label: s.stop.name, lat: s.stop.lat, lon: s.stop.lon }));
-  } catch (error) {
-    if (error instanceof Error && !error.message.startsWith('HTTP')) {
-      reportTtcFailure();
-    }
-    throw error;
-  }
+  const raw = await fetchTtcJson<{ stop: { id: string; name: string; lat?: number; lon?: number } }[]>(
+    `${BASE}/v3/routes/${routeId}/stops-of-patterns?patternSuffixes=${patternSuffix}&locale=en`,
+    'route-stops',
+  );
+  return raw.map(s => ({ id: s.stop.id, label: s.stop.name, lat: s.stop.lat, lon: s.stop.lon }));
 }
 
 export async function fetchRoutePolyline(
   routeId: string,
   patternSuffix: string,
 ): Promise<{ points: PolylinePoint[]; source: RouteGeometrySource }> {
-  try {
-    const res = await fetch(
-      `${BASE}/v3/routes/${routeId}/polylines?patternSuffixes=${patternSuffix}`,
-      { headers },
-    );
-    if (!res.ok) {
-      const isRateLimited = res.status === 520;
-      reportTtcFailure(isRateLimited);
-      throw new Error(`HTTP ${res.status}`);
-    }
+  const raw = await fetchTtcJson<Record<string, { encodedValue?: string }>>(
+    `${BASE}/v3/routes/${routeId}/polylines?patternSuffixes=${patternSuffix}`,
+    'route-polylines',
+  );
 
-    const raw: Record<string, { encodedValue?: string }> = await res.json();
-    reportTtcSuccess();
-
-    const encodedValue = raw[patternSuffix]?.encodedValue;
-    if (!encodedValue) {
-      return { points: [], source: 'stops-fallback' };
-    }
-
-    return {
-      points: decodeGooglePolyline(encodedValue),
-      source: 'google-directions',
-    };
-  } catch (error) {
-    if (error instanceof Error && !error.message.startsWith('HTTP')) {
-      reportTtcFailure();
-    }
-    throw error;
+  const encodedValue = raw[patternSuffix]?.encodedValue;
+  if (!encodedValue) {
+    return { points: [], source: 'stops-fallback' };
   }
+
+  return {
+    points: decodeGooglePolyline(encodedValue),
+    source: 'google-directions',
+  };
 }
 
 /** Builds a route polyline from stop coordinates + Catmull-Rom smoothing. */
@@ -340,66 +322,37 @@ export async function fetchRoutePolylineFromStops(
   routeId: string,
   patternSuffix: string,
 ): Promise<{ points: PolylinePoint[]; source: RouteGeometrySource }> {
-  try {
-    const res = await fetch(
-      `${BASE}/v3/routes/${routeId}/stops-of-patterns?patternSuffixes=${patternSuffix}&locale=en`,
-      { headers },
-    );
-    if (!res.ok) {
-      const isRateLimited = res.status === 520;
-      reportTtcFailure(isRateLimited);
-      throw new Error(`HTTP ${res.status}`);
-    }
+  const raw = await fetchTtcJson<{ stop: { lat?: number; lon?: number } }[]>(
+    `${BASE}/v3/routes/${routeId}/stops-of-patterns?patternSuffixes=${patternSuffix}&locale=en`,
+    'route-stops',
+  );
 
-    const raw: { stop: { lat?: number; lon?: number } }[] = await res.json();
-    reportTtcSuccess();
+  const stopPoints = raw
+    .map(entry => ({
+      latitude: entry.stop.lat ?? NaN,
+      longitude: entry.stop.lon ?? NaN,
+    }))
+    .filter(point => Number.isFinite(point.latitude) && Number.isFinite(point.longitude))
+    .filter((point, index, points) => {
+      if (index === 0) return true;
+      const previous = points[index - 1];
+      return point.latitude !== previous.latitude || point.longitude !== previous.longitude;
+    });
 
-    const stopPoints = raw
-      .map(entry => ({
-        latitude: entry.stop.lat ?? NaN,
-        longitude: entry.stop.lon ?? NaN,
-      }))
-      .filter(point => Number.isFinite(point.latitude) && Number.isFinite(point.longitude))
-      .filter((point, index, points) => {
-        if (index === 0) return true;
-        const previous = points[index - 1];
-        return point.latitude !== previous.latitude || point.longitude !== previous.longitude;
-      });
-
-    return {
-      points: smoothPolyline(stopPoints),
-      source: 'stops-fallback',
-    };
-  } catch (error) {
-    if (error instanceof Error && !error.message.startsWith('HTTP')) {
-      reportTtcFailure();
-    }
-    throw error;
-  }
+  return {
+    points: smoothPolyline(stopPoints),
+    source: 'stops-fallback',
+  };
 }
 
 export async function fetchVehiclePositions(
   routeId: string,
   patternSuffix: string,
 ): Promise<Record<string, VehiclePosition[]>> {
-  try {
-    const res = await fetch(
-      `${BASE}/v3/routes/${routeId}/positions?patternSuffixes=${patternSuffix}`,
-      { headers },
-    );
-    if (!res.ok) {
-      const isRateLimited = res.status === 520;
-      reportTtcFailure(isRateLimited);
-      throw new Error(`HTTP ${res.status}`);
-    }
-    reportTtcSuccess();
-    return res.json();
-  } catch (error) {
-    if (error instanceof Error && !error.message.startsWith('HTTP')) {
-      reportTtcFailure();
-    }
-    throw error;
-  }
+  return fetchTtcJson<Record<string, VehiclePosition[]>>(
+    `${BASE}/v3/routes/${routeId}/positions?patternSuffixes=${patternSuffix}`,
+    'vehicle-positions',
+  );
 }
 
 // ── Schedule helpers ──────────────────────────────────────────────────────────

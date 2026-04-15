@@ -487,6 +487,7 @@ function NextCard({
 
 // ── To Kojori view ────────────────────────────────────────────────────────────
 function ToKojoriView({
+  isActive,
   favoriteIds,
   activeStopId,
   onSelectStop,
@@ -497,6 +498,7 @@ function ToKojoriView({
   now,
   demoEnabled,
 }: {
+  isActive: boolean;
   favoriteIds: string[];
   activeStopId: string;
   onSelectStop: (id: string) => void;
@@ -517,7 +519,7 @@ function ToKojoriView({
 
   const { data: s380, isLoading: l380, isError: e380 } = useSchedule(ROUTES['380'].id, ROUTES['380'].toKojori);
   const { data: s316, isLoading: l316, isError: e316 } = useSchedule(ROUTES['316'].id, ROUTES['316'].toKojori);
-  const { arrivals, dataUpdatedAt } = useArrivals(activeStopId, 'toKojori');
+  const { arrivals, dataUpdatedAt } = useArrivals(activeStopId, 'toKojori', isActive);
 
   const rawDepartures = useMemo(
     () => computeUpcomingDepartures(s380, s316, activeStopId, undefined, now),
@@ -590,6 +592,7 @@ function ToKojoriView({
 
 // ── To Tbilisi view ───────────────────────────────────────────────────────────
 function ToTbilisiView({
+  isActive,
   favoriteIds,
   activeStopId,
   onSelectStop,
@@ -600,6 +603,7 @@ function ToTbilisiView({
   now,
   demoEnabled,
 }: {
+  isActive: boolean;
   favoriteIds: string[];
   activeStopId: string;
   onSelectStop: (id: string) => void;
@@ -620,7 +624,7 @@ function ToTbilisiView({
 
   const { data: s380, isLoading: l380, isError: e380 } = useSchedule(ROUTES['380'].id, ROUTES['380'].toTbilisi);
   const { data: s316, isLoading: l316, isError: e316 } = useSchedule(ROUTES['316'].id, ROUTES['316'].toTbilisi);
-  const { arrivals, dataUpdatedAt, isError: eArrival } = useArrivals(activeStopId, 'toTbilisi');
+  const { arrivals, dataUpdatedAt, isError: eArrival } = useArrivals(activeStopId, 'toTbilisi', isActive);
 
   const rawDepartures = useMemo(
     () => computeUpcomingDepartures(s380, s316, activeStopId, undefined, now),
@@ -692,7 +696,7 @@ function ToTbilisiView({
 }
 
 // ── Root ──────────────────────────────────────────────────────────────────────
-export default function HomeScreen() {
+export default function HomeScreen({ isActive = false }: { isActive?: boolean }) {
   const colors = useAppColors();
   const styles = useHomeStyles();
   const insets = useSafeAreaInsets();
@@ -1075,6 +1079,7 @@ export default function HomeScreen() {
 
       {mode === 'kojori' ? (
           <ToKojoriView
+            isActive={isActive}
             favoriteIds={settings.tbilisiFavorites}
             activeStopId={settings.activeTbilisiStopId}
             onSelectStop={id => update({ activeTbilisiStopId: id })}
@@ -1087,6 +1092,7 @@ export default function HomeScreen() {
           />
         ) : (
           <ToTbilisiView
+            isActive={isActive}
             favoriteIds={settings.kojoriFavorites}
             activeStopId={settings.activeKojoriStopId}
             onSelectStop={id => update({ activeKojoriStopId: id })}

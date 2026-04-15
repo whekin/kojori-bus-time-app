@@ -101,6 +101,20 @@ function routePolylinesCacheKey(direction: Direction) {
   return `@ttc_route_polylines_v3_${direction}`;
 }
 
+function bakedScheduleKey(routeId: string, patternSuffix: string) {
+  const routeEntry = Object.entries(ROUTES).find(([, route]) => route.id === routeId);
+  if (!routeEntry) return null;
+
+  const [bus, route] = routeEntry as [BusLine, (typeof ROUTES)[BusLine]];
+  const direction = route.toKojori === patternSuffix
+    ? 'toKojori'
+    : route.toTbilisi === patternSuffix
+      ? 'toTbilisi'
+      : null;
+
+  return direction ? `${bus}_${direction}` : null;
+}
+
 async function readEnvelope<T>(key: string): Promise<CacheEnvelope<T> | null> {
   try {
     const raw = await AsyncStorage.getItem(key);
@@ -223,7 +237,7 @@ export function getTtcOfflineSnapshot() {
 export function isBakedScheduleCurrent(): boolean {
   const today = new Date().toISOString().split('T')[0];
   return Object.values(BAKED_SCHEDULES).some((periods: unknown) =>
-    (periods as Array<{ serviceDates: string[] }>).some(p => p.serviceDates.includes(today)),
+    (periods as { serviceDates: string[] }[]).some(p => p.serviceDates.includes(today)),
   );
 }
 
@@ -272,6 +286,47 @@ export function loadBakedData(client: QueryClient) {
   }
 
   updateSnapshot({ status: 'ready', availableDatasets: TOTAL_OFFLINE_DATASETS, lastSyncAt: new Date(BAKED_AT).getTime() });
+}
+
+export function getBakedSchedule(routeId: string, patternSuffix: string): SchedulePeriod[] | null {
+  const key = bakedScheduleKey(routeId, patternSuffix);
+  if (!key) return null;
+  return (BAKED_SCHEDULES[key as keyof typeof BAKED_SCHEDULES] as unknown as SchedulePeriod[] | undefined) ?? null;
+}
+
+export function getBakedRouteStops(direction: Direction): StopInfo[] {
+  type StopEntry = { stop: { id: string; name: string } };
+
+  const stopsForDir380 = (BAKED_STOPS[`380_${direction}` as keyof typeof BAKED_STOPS] as unknown as StopEntry[]) ?? [];
+  const stopsForDir316 = (BAKED_STOPS[`316_${direction}` as keyof typeof BAKED_STOPS] as unknown as StopEntry[]) ?? [];
+  const merged = dedupeStops([
+    ...stopsForDir380.map(s => ({ id: s.stop.id, label: s.stop.name })),
+    ...stopsForDir316.map(s => ({ id: s.stop.id, label: s.stop.name })),
+  ]);
+
+  if (direction === 'toKojori' && !merged.some(s => s.id === '1:2994')) {
+    merged.unshift({ id: '1:2994', label: 'Elene Akhvlediani Street' });
+  }
+
+  return merged;
+}
+
+export function getBakedRoutePolylines(direction: Direction): CachedRoutePolylines {
+  return {
+    version: 3,
+    polylines: {
+      '380': decodeGooglePolyline(BAKED_POLYLINES[`380_${direction}`] ?? ''),
+      '316': decodeGooglePolyline(BAKED_POLYLINES[`316_${direction}`] ?? ''),
+    },
+    source: 'google-directions',
+  };
+}
+
+export function getBakedStopNames() {
+  return {
+    ...Object.fromEntries([...ALL_TBILISI_STOPS, ...ALL_KOJORI_STOPS].map(stop => [stop.id, stop.label])),
+    ...BAKED_STOP_NAMES,
+  };
 }
 
 export async function readScheduleCache(

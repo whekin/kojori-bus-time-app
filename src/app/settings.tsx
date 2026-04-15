@@ -27,6 +27,7 @@ import Animated, {
 import Carousel, { ICarouselInstance } from 'react-native-reanimated-carousel';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { BAKED_AT } from '@/assets/ttc-baked';
 import { SettingsSwitch } from '@/components/settings-switch';
 import { StopPickerModal } from '@/components/stop-picker-modal';
 import {
@@ -43,6 +44,7 @@ import { useLocation } from '@/hooks/use-location';
 import { useRouteStops } from '@/hooks/use-route-stops';
 import { useSettings } from '@/hooks/use-settings';
 import { useStopNames } from '@/hooks/use-stop-names';
+import { useTtcQueryLog } from '@/hooks/use-ttc-query-log';
 import { useTtcOfflineStatus } from '@/hooks/use-ttc-offline';
 import { StopInfo } from '@/services/ttc';
 import {
@@ -51,8 +53,12 @@ import {
     ROUTE_STOPS_CACHE_TTL,
     SCHEDULE_CACHE_TTL,
     STOP_NAMES_CACHE_TTL,
-    warmTtcOfflineData,
 } from '@/services/ttc-offline';
+import {
+  calculateTtcQueryMetrics,
+  clearTtcQueryLog,
+  type TtcQueryLogEntry,
+} from '@/services/ttc-query-log';
 import { useQueryClient } from '@tanstack/react-query';
 import KojoriWidget from '../../modules/kojori-widget';
 
@@ -165,6 +171,163 @@ function formatOfflineStatus(status: ReturnType<typeof useTtcOfflineStatus>) {
   }
 
   return `Partial ${status.availableDatasets}/${status.totalDatasets}`;
+}
+
+function formatBakedAt(timestamp: string) {
+  return new Date(timestamp).toLocaleString('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function formatQueryKind(kind: TtcQueryLogEntry['kind']) {
+  switch (kind) {
+    case 'arrivals':
+      return 'Arrivals';
+    case 'vehicle-positions':
+      return 'Vehicles';
+    case 'schedule':
+      return 'Schedule';
+    case 'route-stops':
+      return 'Stops';
+    case 'route-polylines':
+      return 'Polylines';
+    case 'stop-details':
+      return 'Stop';
+    default:
+      return kind;
+  }
+}
+
+function formatQueryAge(timestamp: number) {
+  const diffMs = Math.max(0, Date.now() - timestamp);
+  const seconds = Math.floor(diffMs / 1000);
+  if (seconds < 10) return 'just now';
+  if (seconds < 60) return `${seconds}s ago`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return new Date(timestamp).toLocaleString('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function formatQueryDuration(durationMs: number) {
+  if (durationMs < 1000) return `${durationMs} ms`;
+  return `${(durationMs / 1000).toFixed(1)} s`;
+}
+
+function getQueryStatusLabel(entry: TtcQueryLogEntry) {
+  if (entry.ok) {
+    return entry.statusCode ? `${entry.statusCode}` : 'OK';
+  }
+
+  if (entry.statusCode) {
+    return `HTTP ${entry.statusCode}`;
+  }
+
+  return entry.errorCode ?? 'ERROR';
+}
+
+function TtcQueryLogCard({
+  entries,
+  queriesLastMinute,
+  queriesLastTenMinutes,
+  totalErrors,
+  onClear,
+}: {
+  entries: TtcQueryLogEntry[];
+  queriesLastMinute: number;
+  queriesLastTenMinutes: number;
+  totalErrors: number;
+  onClear: () => void;
+}) {
+  const { styles, colors } = useStyles();
+  const visibleEntries = entries.slice(0, 18);
+
+  return (
+    <View style={styles.queryConsoleCard}>
+      <View style={[styles.queryConsoleGlow, { backgroundColor: alpha(colors.primary, '15') }]} />
+      <View style={[styles.queryConsoleGlowSecondary, { backgroundColor: alpha(colors.route380, '12') }]} />
+
+      <View style={styles.queryConsoleHeader}>
+        <View style={styles.queryConsoleCopy}>
+          <Text style={styles.queryConsoleEyebrow}>TTC OBSERVABILITY</Text>
+          <Text style={[styles.queryConsoleTitle, { fontFamily: DISPLAY }]}>Realtime calls only.</Text>
+          <Text style={styles.queryConsoleBody}>
+            Static schedules, stops, polylines, and known stop names now come from the bundled build. Normal live traffic should be arrivals on Departures and vehicle positions on Map.
+          </Text>
+        </View>
+        <Pressable style={[styles.queryClearButton, { borderColor: colors.borderStrong }]} onPress={onClear}>
+          <Text style={[styles.queryClearButtonText, { color: colors.text }]}>Clear logs</Text>
+        </Pressable>
+      </View>
+
+      <View style={styles.queryMetricRow}>
+        <View style={[styles.queryMetricTile, { backgroundColor: alpha(colors.primary, '0E') }]}>
+          <Text style={styles.queryMetricValue}>{queriesLastMinute}</Text>
+          <Text style={styles.queryMetricLabel}>queries / 1 min</Text>
+        </View>
+        <View style={[styles.queryMetricTile, { backgroundColor: alpha(colors.route380, '10') }]}>
+          <Text style={styles.queryMetricValue}>{queriesLastTenMinutes}</Text>
+          <Text style={styles.queryMetricLabel}>queries / 10 min</Text>
+        </View>
+        <View style={[styles.queryMetricTile, { backgroundColor: alpha(colors.route316, '10') }]}>
+          <Text style={styles.queryMetricValue}>{totalErrors}</Text>
+          <Text style={styles.queryMetricLabel}>errors saved</Text>
+        </View>
+      </View>
+
+      <View style={styles.queryListWrap}>
+        {visibleEntries.length === 0 ? (
+          <View style={styles.queryEmptyState}>
+            <Text style={styles.queryEmptyTitle}>No TTC requests captured yet.</Text>
+            <Text style={styles.queryEmptyNote}>Open Departures or Map to generate live traffic, then return here.</Text>
+          </View>
+        ) : (
+          visibleEntries.map((entry, index) => {
+            const statusColor = entry.ok ? colors.route316 : colors.error;
+
+            return (
+              <View key={entry.id}>
+                {index > 0 ? <View style={styles.queryDivider} /> : null}
+                <View style={styles.queryRow}>
+                  <View style={styles.queryRowTop}>
+                    <View style={styles.queryRowLead}>
+                      <Text style={styles.queryKind}>{formatQueryKind(entry.kind)}</Text>
+                      <Text style={styles.queryAge}>{formatQueryAge(entry.finishedAt)}</Text>
+                    </View>
+                    <View style={[styles.queryStatusChip, { borderColor: alpha(statusColor, '40'), backgroundColor: alpha(statusColor, '12') }]}>
+                      <Text style={[styles.queryStatusText, { color: statusColor }]}>{getQueryStatusLabel(entry)}</Text>
+                    </View>
+                  </View>
+                  <Text style={styles.queryEndpoint} numberOfLines={1}>{entry.endpoint}</Text>
+                  <View style={styles.queryMetaRow}>
+                    <Text style={styles.queryMetaText}>{formatQueryDuration(entry.durationMs)}</Text>
+                    <Text style={styles.queryMetaSeparator}>·</Text>
+                    <Text style={styles.queryMetaText}>{new Date(entry.finishedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</Text>
+                    {!entry.ok && entry.errorCode ? (
+                      <>
+                        <Text style={styles.queryMetaSeparator}>·</Text>
+                        <Text style={[styles.queryMetaText, { color: colors.error }]}>{entry.errorCode}</Text>
+                      </>
+                    ) : null}
+                  </View>
+                </View>
+              </View>
+            );
+          })
+        )}
+      </View>
+    </View>
+  );
 }
 
 function FavoritesCard({
@@ -561,13 +724,14 @@ export default function SettingsScreen() {
   const { settings, toggleKojoriFavorite, toggleTbilisiFavorite, update, hasManualDirectionOverride } = useSettings();
   const stopNames = useStopNames();
   const offlineStatus = useTtcOfflineStatus();
+  const queryLog = useTtcQueryLog();
+  const [queryMetricsNow, setQueryMetricsNow] = useState(() => Date.now());
   const queryClient = useQueryClient();
   const {
     permission,
     locationError,
     requestLocationAccess,
   } = useLocation(settings.enableSmartDirection);
-  const [isRefreshing, setIsRefreshing] = useState(false);
   const [modal, setModal] = useState<'kojori' | 'tbilisi' | 'widget-kojori' | 'widget-tbilisi' | null>(null);
   const [showPermissionModal, setShowPermissionModal] = useState(false);
   const [noticeModal, setNoticeModal] = useState<NoticeModalState | null>(null);
@@ -583,6 +747,11 @@ export default function SettingsScreen() {
     terms: '',
   });
   const [legalLoadError, setLegalLoadError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const intervalId = setInterval(() => setQueryMetricsNow(Date.now()), 30_000);
+    return () => clearInterval(intervalId);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -611,6 +780,11 @@ export default function SettingsScreen() {
     };
   }, []);
 
+  const liveQueryMetrics = useMemo(
+    () => calculateTtcQueryMetrics(queryLog.entries, queryMetricsNow),
+    [queryLog.entries, queryMetricsNow],
+  );
+
   useEffect(() => {
     paletteCarouselRef.current?.scrollTo({ index: paletteIndex, animated: true });
   }, [paletteIndex]);
@@ -620,16 +794,6 @@ export default function SettingsScreen() {
 
     update({ enableSmartDirection: false });
   }, [permission, settings.enableSmartDirection, update]);
-
-  async function handleRefreshTimetables() {
-    if (isRefreshing) return;
-    setIsRefreshing(true);
-    try {
-      await warmTtcOfflineData(queryClient);
-    } finally {
-      setIsRefreshing(false);
-    }
-  }
 
   async function handleClearCache() {
     Alert.alert(
@@ -649,9 +813,26 @@ export default function SettingsScreen() {
                 const Updates = require('expo-updates');
                 await Updates.reloadAsync();
               }
-            } catch (error) {
+            } catch {
               Alert.alert('Error', 'Failed to clear cache.');
             }
+          },
+        },
+      ],
+    );
+  }
+
+  function handleClearQueryLog() {
+    Alert.alert(
+      'Clear TTC logs',
+      'Remove all persisted TTC request logs and metrics from this device?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Clear',
+          style: 'destructive',
+          onPress: () => {
+            void clearTtcQueryLog();
           },
         },
       ],
@@ -950,6 +1131,22 @@ export default function SettingsScreen() {
           </>
         ) : null}
 
+        {settings.debugOptionsUnlocked ? (
+          <>
+            <View style={styles.sectionMeta}>
+              <Text style={styles.sectionHeader}>TTC QUERY LOGGER</Text>
+              <Text style={styles.sectionNote}>Persisted request history for live TTC traffic, with rolling query-rate metrics.</Text>
+            </View>
+            <TtcQueryLogCard
+              entries={queryLog.entries}
+              queriesLastMinute={liveQueryMetrics.queriesLastMinute}
+              queriesLastTenMinutes={liveQueryMetrics.queriesLastTenMinutes}
+              totalErrors={liveQueryMetrics.totalErrors}
+              onClear={handleClearQueryLog}
+            />
+          </>
+        ) : null}
+
         <View style={styles.sectionMeta}>
           <Text style={styles.sectionHeader}>DATA SOURCE</Text>
         </View>
@@ -969,6 +1166,21 @@ export default function SettingsScreen() {
                 <Text style={[styles.miniTagText, { color: colors.route316, fontFamily: MONO }]}>316</Text>
               </View>
             </View>
+          </View>
+          <View style={styles.itemDivider} />
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>Static data</Text>
+            <Text style={[styles.infoValue, styles.infoValueWrap]}>Bundled schedules, stops, polylines, stop names</Text>
+          </View>
+          <View style={styles.itemDivider} />
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>Live data</Text>
+            <Text style={[styles.infoValue, styles.infoValueWrap]}>Arrivals on Departures, vehicles on Map</Text>
+          </View>
+          <View style={styles.itemDivider} />
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>Baked asset</Text>
+            <Text style={[styles.infoValue, styles.infoValueWrap]}>{formatBakedAt(BAKED_AT)}</Text>
           </View>
           {settings.debugOptionsUnlocked ? (
             <>
@@ -1020,19 +1232,6 @@ export default function SettingsScreen() {
           ) : null}
           {settings.debugOptionsUnlocked ? (
             <>
-              <View style={styles.itemDivider} />
-              <Pressable
-                style={styles.manageBtn}
-                onPress={handleRefreshTimetables}
-                disabled={isRefreshing}>
-                {isRefreshing
-                  ? <View style={styles.refreshingRow}>
-                      <ActivityIndicator size="small" color={colors.route316} />
-                      <Text style={[styles.refreshingText, { color: colors.textDim }]}>Refreshing slowly to avoid rate limits…</Text>
-                    </View>
-                  : <Text style={[styles.manageBtnText, { color: colors.route316 }]}>Refresh timetables</Text>}
-              </Pressable>
-              <View style={styles.itemDivider} />
               <Pressable
                 style={styles.manageBtn}
                 onPress={handleClearCache}>
@@ -1311,8 +1510,82 @@ function createStyles(C: AppColors) {
     miniTag: { borderWidth: 1.5, borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2 },
     miniTagText: { fontSize: 12, fontWeight: '700' },
 
-    refreshingRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-    refreshingText: { fontSize: 12 },
+    queryConsoleCard: {
+      position: 'relative',
+      backgroundColor: C.surface,
+      borderRadius: 22,
+      borderWidth: 1,
+      borderColor: C.border,
+      padding: 18,
+      overflow: 'hidden',
+      gap: 16,
+    },
+    queryConsoleGlow: {
+      position: 'absolute',
+      width: 170,
+      height: 170,
+      borderRadius: 999,
+      top: -70,
+      right: -46,
+    },
+    queryConsoleGlowSecondary: {
+      position: 'absolute',
+      width: 130,
+      height: 130,
+      borderRadius: 999,
+      bottom: -52,
+      left: -34,
+    },
+    queryConsoleHeader: { gap: 14 },
+    queryConsoleCopy: { gap: 6 },
+    queryConsoleEyebrow: { color: C.primary, fontSize: 10, fontWeight: '800', letterSpacing: 2.4 },
+    queryConsoleTitle: { color: C.text, fontSize: 28, fontWeight: '700', letterSpacing: -0.9 },
+    queryConsoleBody: { color: C.textDim, fontSize: 13, lineHeight: 19, maxWidth: 520 },
+    queryClearButton: {
+      alignSelf: 'flex-start',
+      borderRadius: 999,
+      borderWidth: 1,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      backgroundColor: alpha(C.bg, '86'),
+    },
+    queryClearButtonText: { fontSize: 12, fontWeight: '700', letterSpacing: 0.4 },
+    queryMetricRow: { flexDirection: 'row', gap: 10 },
+    queryMetricTile: {
+      flex: 1,
+      minHeight: 84,
+      borderRadius: 18,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      justifyContent: 'space-between',
+      borderWidth: 1,
+      borderColor: alpha(C.borderStrong, '26'),
+    },
+    queryMetricValue: { color: C.text, fontSize: 24, fontWeight: '800', letterSpacing: -0.7, fontFamily: MONO },
+    queryMetricLabel: { color: C.textDim, fontSize: 11, lineHeight: 15, textTransform: 'uppercase' },
+    queryListWrap: {
+      backgroundColor: alpha(C.bg, '82'),
+      borderRadius: 18,
+      borderWidth: 1,
+      borderColor: C.border,
+      overflow: 'hidden',
+    },
+    queryEmptyState: { paddingHorizontal: 18, paddingVertical: 22, gap: 6 },
+    queryEmptyTitle: { color: C.text, fontSize: 15, fontWeight: '700' },
+    queryEmptyNote: { color: C.textDim, fontSize: 12, lineHeight: 18 },
+    queryDivider: { height: 1, backgroundColor: C.border, marginLeft: 16 },
+    queryRow: { paddingHorizontal: 16, paddingVertical: 14, gap: 6 },
+    queryRowTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+    queryRowLead: { flexDirection: 'row', alignItems: 'baseline', gap: 8, flex: 1 },
+    queryKind: { color: C.text, fontSize: 14, fontWeight: '700' },
+    queryAge: { color: C.textFaint, fontSize: 11, fontWeight: '600', textTransform: 'uppercase' },
+    queryStatusChip: { borderRadius: 999, borderWidth: 1, paddingHorizontal: 10, paddingVertical: 5 },
+    queryStatusText: { fontSize: 11, fontWeight: '800', letterSpacing: 0.4, fontFamily: MONO },
+    queryEndpoint: { color: C.textDim, fontSize: 12, lineHeight: 17, fontFamily: MONO },
+    queryMetaRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6 },
+    queryMetaText: { color: C.textFaint, fontSize: 11, fontWeight: '500' },
+    queryMetaSeparator: { color: C.textFaint, fontSize: 11 },
+
     buildFooter: { alignItems: 'center', paddingTop: 32, paddingBottom: 12, gap: 10 },
     buildDivider: { width: 40, height: 1, backgroundColor: C.border, marginBottom: 6 },
     buildTapArea: { alignItems: 'center', gap: 2 },

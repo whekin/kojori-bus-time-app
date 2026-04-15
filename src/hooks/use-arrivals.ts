@@ -5,15 +5,16 @@ import { ArrivalTime, BusLine, fetchArrivalTimes, ROUTES, SCHEDULE_STOP_PROXY } 
 const BUSES: BusLine[] = ['380', '316'];
 
 /** Real-time + scheduled arrivals for a stop. Refreshes every 30s. */
-export function useArrivals(stopId: string, direction?: 'toKojori' | 'toTbilisi') {
+export function useArrivals(stopId: string, direction?: 'toKojori' | 'toTbilisi', enabled = true) {
   const fetchStopId = SCHEDULE_STOP_PROXY[stopId] ?? stopId;
   const query = useQuery<ArrivalTime[]>({
     queryKey: ['arrivals', stopId],
     meta: { source: 'ttc' },
     queryFn: () => fetchArrivalTimes(fetchStopId),
+    enabled,
     refetchInterval: 30_000,
     staleTime: 20_000,
-    retry: 1,
+    retry: 0,
   });
 
   const arrivals = (query.data ?? [])
