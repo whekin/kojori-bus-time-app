@@ -295,15 +295,20 @@ step('7/7  GitHub release');
 
 if (!isDone(state, 'github_release')) {
   const apkName = `kojoring-time-${tag}.apk`;
+  const renamedApkPath = resolve(root, `android/app/build/outputs/apk/release/${apkName}`);
   const notesFile = resolve(tmpdir(), `kojoring-release-${tag}.md`);
   writeFileSync(notesFile, releaseNotes);
 
   try {
+    // Copy APK with proper name to avoid browser download issues
+    run(`cp "${apkPath}" "${renamedApkPath}"`);
+
     run(
-      `gh release create ${tag} "${apkPath}#${apkName}" --title "Kojoring Time ${tag}" --notes-file "${notesFile}"`
+      `gh release create ${tag} "${renamedApkPath}" --title "Kojoring Time ${tag}" --notes-file "${notesFile}"`
     );
   } finally {
     if (existsSync(notesFile)) unlinkSync(notesFile);
+    if (existsSync(renamedApkPath)) unlinkSync(renamedApkPath);
   }
 
   console.log(`\n🎉 Release ${tag} published!`);
