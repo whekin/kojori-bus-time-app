@@ -1,51 +1,52 @@
-import Constants from 'expo-constants';
 import { Asset } from 'expo-asset';
+import Constants from 'expo-constants';
 import { File } from 'expo-file-system';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  FlatList,
-  Linking,
-  Modal,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Switch,
-  Text,
-  TextInput,
-  useWindowDimensions,
-  View,
+    ActivityIndicator,
+    Alert,
+    FlatList,
+    Linking,
+    Modal,
+    Platform,
+    Pressable,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    useWindowDimensions,
+    View,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Carousel, { ICarouselInstance } from 'react-native-reanimated-carousel';
 import Animated, {
-  interpolate,
-  interpolateColor,
-  useAnimatedStyle,
-  useSharedValue,
-  withTiming,
+    interpolate,
+    interpolateColor,
+    useAnimatedStyle,
+    useSharedValue,
+    withTiming,
 } from 'react-native-reanimated';
+import Carousel, { ICarouselInstance } from 'react-native-reanimated-carousel';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { useQueryClient } from '@tanstack/react-query';
-import KojoriWidget from '../../modules/kojori-widget';
 import { StopPickerModal } from '@/components/stop-picker-modal';
-import { APP_PALETTES, BottomTabInset, alpha, type AppPaletteId, type AppColors } from '@/constants/theme';
+import { SettingsSwitch } from '@/components/settings-switch';
+import { alpha, APP_PALETTES, BottomTabInset, type AppColors, type AppPaletteId } from '@/constants/theme';
 import { useAppColors } from '@/hooks/use-app-colors';
+import { useLocation } from '@/hooks/use-location';
 import { useRouteStops } from '@/hooks/use-route-stops';
 import { useSettings } from '@/hooks/use-settings';
 import { useStopNames } from '@/hooks/use-stop-names';
 import { useTtcOfflineStatus } from '@/hooks/use-ttc-offline';
 import { StopInfo } from '@/services/ttc';
 import {
-  clearAllTtcCache,
-  ROUTE_POLYLINES_CACHE_TTL,
-  ROUTE_STOPS_CACHE_TTL,
-  SCHEDULE_CACHE_TTL,
-  STOP_NAMES_CACHE_TTL,
-  warmTtcOfflineData,
+    clearAllTtcCache,
+    ROUTE_POLYLINES_CACHE_TTL,
+    ROUTE_STOPS_CACHE_TTL,
+    SCHEDULE_CACHE_TTL,
+    STOP_NAMES_CACHE_TTL,
+    warmTtcOfflineData,
 } from '@/services/ttc-offline';
+import { useQueryClient } from '@tanstack/react-query';
+import KojoriWidget from '../../modules/kojori-widget';
 
 const MONO = Platform.select({ android: 'monospace', ios: 'Menlo', default: 'monospace' });
 const DISPLAY = Platform.select({ android: 'serif', ios: 'Georgia', default: 'serif' });
@@ -402,10 +403,15 @@ export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
   const { colors, styles } = useStyles();
-  const { settings, toggleKojoriFavorite, toggleTbilisiFavorite, update } = useSettings();
+  const { settings, toggleKojoriFavorite, toggleTbilisiFavorite, update, hasManualDirectionOverride } = useSettings();
   const stopNames = useStopNames();
   const offlineStatus = useTtcOfflineStatus();
   const queryClient = useQueryClient();
+  const {
+    permission,
+    isLocating,
+    locationError,
+  } = useLocation(settings.enableSmartDirection);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [modal, setModal] = useState<'kojori' | 'tbilisi' | 'widget-kojori' | 'widget-tbilisi' | null>(null);
   const [easterEggTaps, setEasterEggTaps] = useState(0);
@@ -508,6 +514,48 @@ export default function SettingsScreen() {
     }
   }
 
+  const smartDirectionStatus = (() => {
+    if (isLocating) {
+      return {
+        title: 'Checking location now',
+        note: 'Refreshing your position for smart direction.',
+      };
+    }
+
+    if (!settings.enableSmartDirection) {
+      return {
+        title: 'Smart direction is off',
+        note: 'Direction stays manual only. The app will not suggest Kojori or Tbilisi automatically.',
+      };
+    }
+
+    if (permission === 'granted') {
+      if (hasManualDirectionOverride) {
+        return {
+          title: 'Manual direction is active',
+          note: 'The app can switch back automatically once you use location again from Departures.',
+        };
+      }
+
+      return {
+        title: 'Smart direction is on',
+        note: 'Kojori and Tbilisi direction can update automatically from your current location.',
+      };
+    }
+
+    if (permission === 'denied') {
+      return {
+        title: 'Location permission is off',
+        note: 'Smart direction is enabled, but Android location access is unavailable.',
+      };
+    }
+
+    return {
+      title: 'Location is not ready yet',
+      note: 'Smart direction is enabled and will start working once location becomes available.',
+    };
+  })();
+
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
       <View style={styles.header}>
@@ -571,6 +619,26 @@ export default function SettingsScreen() {
               </View>
             )}
           />
+        </View>
+
+        <View style={styles.sectionMeta}>
+          <Text style={styles.sectionHeader}>SMART DIRECTION</Text>
+          <Text style={styles.sectionNote}>Turn automatic location-based direction switching on or off.</Text>
+        </View>
+        <View style={styles.card}>
+          <View style={styles.toggleRow}>
+            <View style={styles.toggleCopy}>
+              <Text style={styles.toggleLabel}>{smartDirectionStatus.title}</Text>
+              <Text style={styles.toggleNote}>
+                {locationError ?? smartDirectionStatus.note}
+              </Text>
+            </View>
+            <SettingsSwitch
+              value={settings.enableSmartDirection}
+              onValueChange={value => update({ enableSmartDirection: value })}
+              accentColor={colors.primary}
+            />
+          </View>
         </View>
 
         <View style={styles.sectionMeta}>
@@ -653,11 +721,10 @@ export default function SettingsScreen() {
                   <Text style={styles.toggleLabel}>Cancelled bus demo</Text>
                   <Text style={styles.toggleNote}>Home screen only. Shows live replacement plus cancelled slab.</Text>
                 </View>
-                <Switch
+                <SettingsSwitch
                   value={settings.cancelledBusDemo}
                   onValueChange={value => update({ cancelledBusDemo: value })}
-                  trackColor={{ false: alpha(colors.textFaint, '3A'), true: alpha(colors.primary, '68') }}
-                  thumbColor={settings.cancelledBusDemo ? colors.primary : colors.surfaceHigh}
+                  accentColor={colors.primary}
                 />
               </View>
             </View>
@@ -983,7 +1050,6 @@ function createStyles(C: AppColors) {
     toggleCopy: { flex: 1, gap: 3 },
     toggleLabel: { color: C.text, fontSize: 15, fontWeight: '500' },
     toggleNote: { color: C.textDim, fontSize: 12, lineHeight: 17 },
-
     infoRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 18, paddingVertical: 14, gap: 12 },
     infoLabel: { color: C.textDim, fontSize: 14, fontWeight: '500' },
     infoValue: { color: C.text, fontSize: 14, fontWeight: '500' },

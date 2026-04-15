@@ -33,6 +33,8 @@ export interface Settings {
   debugOptionsUnlocked: boolean;
   /** Force one inferred cancelled-bus case on Home for UI testing */
   cancelledBusDemo: boolean;
+  /** Enable automatic location-based direction suggestions */
+  enableSmartDirection: boolean;
 }
 
 const DEFAULTS: Settings = {
@@ -46,6 +48,7 @@ const DEFAULTS: Settings = {
   paletteId: DEFAULT_APP_PALETTE,
   debugOptionsUnlocked: false,
   cancelledBusDemo: false,
+  enableSmartDirection: true,
 };
 
 interface SettingsCtx {

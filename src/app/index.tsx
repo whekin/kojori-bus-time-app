@@ -1,3 +1,4 @@
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, AppState, Linking, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View, ViewStyle } from 'react-native';
 import { useQueryClient } from '@tanstack/react-query';
@@ -6,7 +7,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { DirectionToggle } from '@/components/direction-toggle';
 import { StopSelector } from '@/components/stop-selector';
-import { TtcStatusHeaderBadge } from '@/components/ttc-status-banner';
 import { BottomTabInset, alpha } from '@/constants/theme';
 import { useArrivals } from '@/hooks/use-arrivals';
 import { useAppColors } from '@/hooks/use-app-colors';
@@ -14,6 +14,7 @@ import { useLocation } from '@/hooks/use-location';
 import { useSchedule } from '@/hooks/use-schedule';
 import { useSettings } from '@/hooks/use-settings';
 import { useStopNames } from '@/hooks/use-stop-names';
+import { useTtcHealth } from '@/hooks/use-ttc-health';
 import {
   BusLine,
   computeUpcomingDepartures,
@@ -153,32 +154,128 @@ function ErrorBanner({ message }: { message: string }) {
   );
 }
 
-function LocationAssistCard({
-  title,
-  message,
-  actionLabel,
-  onPress,
-  disabled = false,
-}: {
-  title: string;
-  message: string;
+type IslandStatusItem = {
+  key: string;
+  dismissToken: string;
+  label: string;
+  detail: string;
+  meta?: string;
+  accentColor: string;
+  textColor: string;
   actionLabel?: string;
-  onPress?: () => void;
-  disabled?: boolean;
+  onAction?: () => void;
+};
+
+function StatusIsland({
+  items,
+}: {
+  items: IslandStatusItem[];
 }) {
+  const [expandedKey, setExpandedKey] = useState<string | null>(null);
+  const [dismissedTokens, setDismissedTokens] = useState<Record<string, string>>({});
+
+  const visibleItems = items.filter(item => dismissedTokens[item.key] !== item.dismissToken);
+
+  useEffect(() => {
+    if (expandedKey && !visibleItems.some(item => item.key === expandedKey)) {
+      setExpandedKey(null);
+    }
+  }, [expandedKey, visibleItems]);
+
+  if (visibleItems.length === 0) return null;
+
+  const expandedItem = visibleItems.find(item => item.key === expandedKey) ?? null;
+
+  function handleDismiss(item: IslandStatusItem) {
+    setDismissedTokens(current => ({ ...current, [item.key]: item.dismissToken }));
+    setExpandedKey(current => current === item.key ? null : current);
+  }
+
   return (
-    <View style={styles.locationCard}>
-      <View style={styles.locationCardCopy}>
-        <Text style={styles.locationCardTitle}>{title}</Text>
-        <Text style={styles.locationCardText}>{message}</Text>
+    <View style={styles.statusIslandWrap}>
+      <View style={styles.statusIslandRow}>
+        {visibleItems.map(item => {
+          const isExpanded = expandedKey === item.key;
+          return (
+            <Pressable
+              key={item.key}
+              onPress={() => setExpandedKey(current => current === item.key ? null : item.key)}
+              style={[
+                styles.statusPill,
+                {
+                  backgroundColor: alpha(item.accentColor, isExpanded ? '20' : '14'),
+                  borderColor: alpha(item.accentColor, isExpanded ? '66' : '42'),
+                },
+              ]}>
+              <View style={[styles.statusPillDot, { backgroundColor: item.accentColor }]} />
+              <Text style={[styles.statusPillLabel, { color: item.textColor }]} numberOfLines={1}>
+                {item.label}
+              </Text>
+              <MaterialCommunityIcons
+                name={isExpanded ? 'chevron-up' : 'chevron-down'}
+                size={15}
+                color={item.textColor}
+              />
+            </Pressable>
+          );
+        })}
       </View>
-      {actionLabel && onPress ? (
-        <Pressable
-          style={[styles.locationCardButton, disabled && styles.locationCardButtonDisabled]}
-          onPress={onPress}
-          disabled={disabled}>
-          <Text style={styles.locationCardButtonText}>{actionLabel}</Text>
-        </Pressable>
+
+      {expandedItem ? (
+        <View
+          style={[
+            styles.statusPanel,
+            {
+              borderColor: alpha(expandedItem.accentColor, '42'),
+              backgroundColor: C.surface,
+            },
+          ]}>
+          <View style={styles.statusPanelHeader}>
+            <View style={styles.statusPanelHeaderMain}>
+              <View style={[styles.statusPillDot, { backgroundColor: expandedItem.accentColor }]} />
+              <Text style={[styles.statusPanelTitle, { color: expandedItem.textColor }]}>
+                {expandedItem.label}
+              </Text>
+            </View>
+            <Pressable
+              hitSlop={8}
+              onPress={() => setExpandedKey(null)}
+              style={styles.statusPanelClose}>
+              <MaterialCommunityIcons name="close" size={15} color={expandedItem.textColor} />
+            </Pressable>
+          </View>
+          <Text style={styles.statusPanelText}>{expandedItem.detail}</Text>
+          <View style={styles.statusPanelFooter}>
+            <View style={styles.statusPanelFooterLeft}>
+              {expandedItem.meta ? (
+                <Text style={styles.statusPanelMeta}>{expandedItem.meta}</Text>
+              ) : null}
+              <Pressable
+                style={[
+                  styles.statusPanelButton,
+                  styles.statusPanelDismissButton,
+                  { borderColor: alpha(expandedItem.accentColor, '36') },
+                ]}
+                onPress={() => handleDismiss(expandedItem)}>
+                <Text style={[styles.statusPanelButtonText, { color: C.textDim }]}>
+                  Dismiss
+                </Text>
+              </Pressable>
+            </View>
+            {expandedItem.actionLabel && expandedItem.onAction ? (
+              <Pressable
+                style={[
+                  styles.statusPanelButton,
+                  { borderColor: alpha(expandedItem.accentColor, '55') },
+                ]}
+                onPress={expandedItem.onAction}>
+                <Text style={[styles.statusPanelButtonText, { color: expandedItem.textColor }]}>
+                  {expandedItem.actionLabel}
+                </Text>
+              </Pressable>
+            ) : null}
+          </View>
+        </View>
       ) : null}
     </View>
   );
@@ -567,7 +664,8 @@ export default function HomeScreen() {
     locationError,
     requestLocationAccess,
     refreshLocation,
-  } = useLocation();
+  } = useLocation(settings.enableSmartDirection);
+  const { status: ttcStatus, lastSuccessAt } = useTtcHealth();
   const { widgetMode, widgetStopId } = useLocalSearchParams<{
     widgetMode?: string;
     widgetStopId?: string;
@@ -579,10 +677,10 @@ export default function HomeScreen() {
   const mode = directionToMode(settings.sharedDirection);
 
   useEffect(() => {
-    if (!isLoaded || hasManualDirectionOverride || !detectedMode) return;
+    if (!isLoaded || !settings.enableSmartDirection || hasManualDirectionOverride || !detectedMode) return;
 
     setSharedDirection(modeToDirection(detectedMode), false);
-  }, [detectedMode, hasManualDirectionOverride, isLoaded, setSharedDirection]);
+  }, [detectedMode, hasManualDirectionOverride, isLoaded, setSharedDirection, settings.enableSmartDirection]);
 
   useEffect(() => {
     if (widgetMode !== 'kojori' && widgetMode !== 'tbilisi') return;
@@ -645,11 +743,12 @@ export default function HomeScreen() {
   const accentColor = mode === 'kojori' ? colors.route380 : colors.route316;
   const activeDirection = settings.sharedDirection;
   const activeStopId = mode === 'kojori' ? settings.activeTbilisiStopId : settings.activeKojoriStopId;
-  const showLocationCard =
+  const showLocationStatus =
+    settings.enableSmartDirection && (
     (permission !== 'granted' && permission !== 'unknown') ||
     hasManualDirectionOverride ||
     isLocating ||
-    Boolean(locationError);
+    Boolean(locationError));
 
   function handleModeToggle(next: SharedMode) {
     setSharedDirection(modeToDirection(next));
@@ -692,68 +791,149 @@ export default function HomeScreen() {
     }
   }
 
-  const locationCard = useMemo(() => {
-    if (!showLocationCard) return null;
+  const statusItems = useMemo<IslandStatusItem[]>(() => {
+    const items: IslandStatusItem[] = [];
+
+    if (ttcStatus !== 'healthy') {
+      const isOffline = ttcStatus === 'offline';
+      const isRateLimited = ttcStatus === 'rate-limited';
+      const accent = isOffline || isRateLimited ? colors.error : colors.warning;
+      const textColor = isOffline || isRateLimited ? colors.rose : colors.sand;
+      const timeAgo = lastSuccessAt
+        ? (() => {
+            const mins = Math.floor((Date.now() - lastSuccessAt) / 60000);
+            if (mins < 1) return 'just now';
+            if (mins === 1) return '1m ago';
+            if (mins < 60) return `${mins}m ago`;
+            const hours = Math.floor(mins / 60);
+            return hours === 1 ? '1h ago' : `${hours}h ago`;
+          })()
+        : null;
+
+      items.push({
+        key: 'ttc',
+        dismissToken: `ttc:${ttcStatus}`,
+        label: timeAgo ? `${isRateLimited ? 'Rate limited' : isOffline ? 'TTC offline' : 'TTC unstable'} · ${timeAgo}` : (isRateLimited ? 'Rate limited' : isOffline ? 'TTC offline' : 'TTC unstable'),
+        detail: isRateLimited
+          ? 'TTC rate limiter hit. Requests are being throttled. Showing cached data when available.'
+          : isOffline
+          ? 'Cannot reach TTC right now. Showing cached data when available.'
+          : 'TTC requests are failing intermittently. Some data may be stale.',
+        meta: lastSuccessAt
+          ? `Last TTC update ${new Date(lastSuccessAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`
+          : 'No TTC response yet this session',
+        actionLabel: 'Refresh',
+        onAction: () => {
+          queryClient.refetchQueries({
+            predicate: query => query.meta?.source === 'ttc' && query.getObserversCount() > 0,
+          });
+        },
+        accentColor: accent,
+        textColor,
+      });
+    }
+
+    if (!showLocationStatus) return items;
 
     if (isLocating) {
-      return {
-        title: 'Checking your location',
-        message: 'Finding whether you are closer to Kojori or Tbilisi for automatic direction.',
-      };
+      items.push({
+        key: 'location',
+        dismissToken: 'location:checking',
+        label: 'Checking location',
+        detail: 'Finding whether you are closer to Kojori or Tbilisi for automatic direction.',
+        accentColor: colors.primary,
+        textColor: colors.text,
+      });
+      return items;
     }
 
     if (hasManualDirectionOverride) {
-      return {
-        title: 'Manual direction is active',
-        message: 'You switched direction manually. Re-enable location if you want the app to suggest the right side automatically again.',
+      items.push({
+        key: 'location',
+        dismissToken: 'location:manual',
+        label: 'Manual direction',
+        detail: 'You switched direction manually. Use location again if you want the app to suggest the right side automatically.',
         actionLabel: permission === 'granted' ? 'Use my location' : 'Enable location',
-        onPress: handleEnableLocation,
-      };
+        onAction: handleEnableLocation,
+        accentColor,
+        textColor: colors.text,
+      });
+      return items;
     }
 
     if (permission === 'denied' && !canAskAgain) {
-      return {
-        title: 'Location permission is blocked',
-        message: 'Open system settings to turn location back on for automatic direction suggestions. Manual switching still works.',
+      items.push({
+        key: 'location',
+        dismissToken: 'location:blocked',
+        label: 'Location blocked',
+        detail: 'Open system settings to turn location back on for automatic direction suggestions. Manual switching still works.',
         actionLabel: 'Open settings',
-        onPress: () => {
+        onAction: () => {
           void Linking.openSettings();
         },
-      };
+        accentColor: colors.warning,
+        textColor: colors.sand,
+      });
+      return items;
     }
 
     if (permission === 'denied') {
-      return {
-        title: 'Location is off',
-        message: 'Allow location if you want the app to switch between Kojori and Tbilisi automatically. You can still control it manually.',
+      items.push({
+        key: 'location',
+        dismissToken: 'location:denied',
+        label: 'Location off',
+        detail: 'Allow location if you want the app to switch between Kojori and Tbilisi automatically. You can still control it manually.',
         actionLabel: 'Allow location',
-        onPress: handleEnableLocation,
-      };
+        onAction: handleEnableLocation,
+        accentColor: colors.warning,
+        textColor: colors.sand,
+      });
+      return items;
     }
 
     if (locationError) {
-      return {
-        title: 'Could not read your location',
-        message: 'Automatic direction is available, but the last location check failed. Try again or keep using the manual toggle.',
+      items.push({
+        key: 'location',
+        dismissToken: 'location:error',
+        label: 'Location error',
+        detail: 'Automatic direction is available, but the last location check failed. Try again or keep using the manual toggle.',
         actionLabel: 'Try again',
-        onPress: handleEnableLocation,
-      };
+        onAction: handleEnableLocation,
+        accentColor: colors.warning,
+        textColor: colors.sand,
+      });
+      return items;
     }
 
-    return {
-      title: 'Use location for smart direction',
-      message: 'Allow location to suggest whether you are heading to Kojori or Tbilisi automatically. You can keep using the toggle whenever you want.',
+    items.push({
+      key: 'location',
+      dismissToken: 'location:enable',
+      label: 'Enable location',
+      detail: 'Allow location to suggest whether you are heading to Kojori or Tbilisi automatically. You can keep using the toggle whenever you want.',
       actionLabel: 'Enable location',
-      onPress: handleEnableLocation,
-    };
+      onAction: handleEnableLocation,
+      accentColor: colors.primary,
+      textColor: colors.text,
+    });
+    return items;
   }, [
     canAskAgain,
+    colors.error,
+    colors.primary,
+    colors.rose,
+    colors.sand,
+    colors.warning,
+    colors.text,
     handleEnableLocation,
     hasManualDirectionOverride,
     isLocating,
+    lastSuccessAt,
     locationError,
     permission,
-    showLocationCard,
+    queryClient,
+    showLocationStatus,
+    ttcStatus,
+    accentColor,
   ]);
 
   return (
@@ -764,7 +944,9 @@ export default function HomeScreen() {
           <View style={[styles.locationDot, { backgroundColor: accentColor }]} />
           <Text style={styles.headerCity}>{mode === 'kojori' ? 'Tbilisi' : 'Kojori'}</Text>
         </View>
-        <TtcStatusHeaderBadge />
+        <View style={styles.headerCenter}>
+          <StatusIsland items={statusItems} />
+        </View>
         <View style={styles.headerRight}>
           <Text style={[styles.headerClock, { fontFamily: MONO }]}>{formatHeaderTime(now)}</Text>
           <Pressable
@@ -791,18 +973,6 @@ export default function HomeScreen() {
           ]}
         />
       </View>
-
-      {locationCard ? (
-        <View style={styles.locationCardWrap}>
-          <LocationAssistCard
-            title={locationCard.title}
-            message={locationCard.message}
-            actionLabel={locationCard.actionLabel}
-            onPress={locationCard.onPress}
-            disabled={isLocating}
-          />
-        </View>
-      ) : null}
 
       {mode === 'kojori' ? (
           <ToKojoriView
@@ -843,11 +1013,92 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 14,
   },
-  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 8, width: 92 },
+  headerCenter: { flex: 1, alignItems: 'center', paddingHorizontal: 8 },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 8, width: 92, justifyContent: 'flex-end' },
   locationDot: { width: 8, height: 8, borderRadius: 4 },
   headerCity: { color: C.text, fontSize: 16, fontWeight: '600', letterSpacing: 0.2 },
   headerClock: { color: C.textDim, fontSize: 15, letterSpacing: 0.4 },
+  statusIslandWrap: { alignItems: 'center', gap: 8, maxWidth: '100%' },
+  statusIslandRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  statusPill: {
+    minHeight: 34,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingLeft: 10,
+    paddingRight: 12,
+    paddingVertical: 6,
+    maxWidth: 220,
+  },
+  statusPillDot: { width: 8, height: 8, borderRadius: 4, flexShrink: 0 },
+  statusPillLabel: { fontSize: 11, fontWeight: '800', letterSpacing: 0.3, flexShrink: 1 },
+  statusPanel: {
+    position: 'absolute',
+    top: 44,
+    alignSelf: 'center',
+    width: '100%',
+    minWidth: 252,
+    maxWidth: 340,
+    borderRadius: 18,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    shadowColor: '#000',
+    shadowOpacity: 0.28,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 10,
+    zIndex: 40,
+  },
+  statusPanelHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    marginBottom: 8,
+  },
+  statusPanelHeaderMain: { flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 },
+  statusPanelClose: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  statusPanelTitle: { fontSize: 12, fontWeight: '800', letterSpacing: 0.35 },
+  statusPanelText: { color: C.textDim, fontSize: 12, lineHeight: 17 },
+  statusPanelFooter: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    gap: 10,
+    marginTop: 10,
+  },
+  statusPanelFooterLeft: { flex: 1, gap: 8, minWidth: 0 },
+  statusPanelMeta: { color: C.textFaint, fontSize: 10, flex: 1 },
+  statusPanelButton: {
+    minHeight: 32,
+    borderRadius: 999,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+    backgroundColor: alpha(C.surfaceHigh, 'AA'),
+  },
+  statusPanelDismissButton: {
+    alignSelf: 'flex-start',
+    backgroundColor: alpha(C.surfaceHigh, '66'),
+  },
+  statusPanelButtonText: { fontSize: 11, fontWeight: '700' },
   refreshButton: {
     width: 34,
     height: 34,
@@ -861,30 +1112,6 @@ const styles = StyleSheet.create({
   refreshGlyph: { fontSize: 16, fontWeight: '700', color: C.textDim },
 
   toggleWrap: { paddingHorizontal: 20, paddingBottom: 4 },
-  locationCardWrap: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 4 },
-  locationCard: {
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: C.border,
-    backgroundColor: C.surface,
-    gap: 12,
-  },
-  locationCardCopy: { gap: 5 },
-  locationCardTitle: { color: C.text, fontSize: 14, fontWeight: '700' },
-  locationCardText: { color: C.textDim, fontSize: 12, lineHeight: 17 },
-  locationCardButton: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: C.borderStrong,
-    backgroundColor: C.surfaceHigh,
-  },
-  locationCardButtonDisabled: { opacity: 0.6 },
-  locationCardButtonText: { color: C.text, fontSize: 12, fontWeight: '700' },
 
   modeContainer: { flex: 1 },
   pageScroll: { flex: 1 },

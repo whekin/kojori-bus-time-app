@@ -6,7 +6,7 @@ import { KOJORI_BOUNDS } from '@/services/ttc';
 type Permission = 'unknown' | 'granted' | 'denied';
 type LocationMode = 'kojori' | 'tbilisi' | null; // null = permission denied / not yet known
 
-export function useLocation() {
+export function useLocation(enabled = true) {
   const [permission, setPermission] = useState<Permission>('unknown');
   const [detectedMode, setDetectedMode] = useState<LocationMode>(null);
   const [canAskAgain, setCanAskAgain] = useState(true);
@@ -41,6 +41,13 @@ export function useLocation() {
   }, []);
 
   useEffect(() => {
+    if (!enabled) {
+      setIsLocating(false);
+      setLocationError(null);
+      setDetectedMode(null);
+      return;
+    }
+
     let cancelled = false;
 
     async function hydratePermission() {
@@ -61,9 +68,10 @@ export function useLocation() {
 
     void hydratePermission();
     return () => { cancelled = true; };
-  }, [detectCurrentMode]);
+  }, [detectCurrentMode, enabled]);
 
   const requestLocationAccess = useCallback(async () => {
+    if (!enabled) return false;
     setLocationError(null);
 
     const { status, canAskAgain: nextCanAskAgain } =
@@ -79,12 +87,13 @@ export function useLocation() {
 
     setPermission('granted');
     return detectCurrentMode();
-  }, [detectCurrentMode]);
+  }, [detectCurrentMode, enabled]);
 
   const refreshLocation = useCallback(async () => {
+    if (!enabled) return false;
     if (permission !== 'granted') return false;
     return detectCurrentMode();
-  }, [detectCurrentMode, permission]);
+  }, [detectCurrentMode, enabled, permission]);
 
   return {
     permission,
