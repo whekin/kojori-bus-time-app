@@ -1,28 +1,28 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, AppState, Linking, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View, ViewStyle } from 'react-native';
 import { useQueryClient } from '@tanstack/react-query';
 import { useLocalSearchParams } from 'expo-router';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, AppState, Linking, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View, ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { DirectionToggle } from '@/components/direction-toggle';
 import { StopSelector } from '@/components/stop-selector';
-import { BottomTabInset, alpha } from '@/constants/theme';
-import { useArrivals } from '@/hooks/use-arrivals';
+import { alpha, BottomTabInset, type AppColors } from '@/constants/theme';
 import { useAppColors } from '@/hooks/use-app-colors';
+import { useArrivals } from '@/hooks/use-arrivals';
 import { useLocation } from '@/hooks/use-location';
 import { useSchedule } from '@/hooks/use-schedule';
 import { useSettings } from '@/hooks/use-settings';
 import { useStopNames } from '@/hooks/use-stop-names';
 import { useTtcHealth } from '@/hooks/use-ttc-health';
 import {
-  BusLine,
-  computeUpcomingDepartures,
-  Departure,
-  findStop,
-  injectCancelledDemo,
-  mergeArrivalsIntoSchedule,
-  ROUTES,
+    BusLine,
+    computeUpcomingDepartures,
+    Departure,
+    findStop,
+    injectCancelledDemo,
+    mergeArrivalsIntoSchedule,
+    ROUTES,
 } from '@/services/ttc';
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
@@ -44,6 +44,8 @@ const C = {
 
 const MONO = Platform.select({ android: 'monospace', ios: 'Menlo', default: 'monospace' });
 type SharedMode = 'kojori' | 'tbilisi';
+const CONTENT_SIDE = 20;
+const SECTION_SPACE = 12;
 
 function modeToDirection(mode: SharedMode) {
   return mode === 'kojori' ? 'toKojori' : 'toTbilisi';
@@ -66,33 +68,33 @@ function formatMins(mins: number) {
   return m > 0 ? `+${h}h\u202F${m}m` : `+${h}h`;
 }
 
-function getRealtimeStatus(dep: Departure) {
+function getRealtimeStatus(dep: Departure, colors: AppColors) {
   if (!dep.live) return null;
 
   const drift = dep.driftMinutes ?? 0;
   if (drift > 0) {
     return {
       label: `LIVE +${drift}m`,
-      textColor: C.error,
-      backgroundColor: C.error + '14',
-      borderColor: C.error + '38',
+      textColor: colors.error,
+      backgroundColor: alpha(colors.error, '14'),
+      borderColor: alpha(colors.error, '38'),
     };
   }
 
   if (drift < 0) {
     return {
       label: `LIVE ${Math.abs(drift)}m early`,
-      textColor: C.warning,
-      backgroundColor: C.warning + '14',
-      borderColor: C.warning + '38',
+      textColor: colors.warning,
+      backgroundColor: alpha(colors.warning, '14'),
+      borderColor: alpha(colors.warning, '38'),
     };
   }
 
   return {
     label: 'LIVE on time',
-    textColor: C.live,
-    backgroundColor: C.live + '14',
-    borderColor: C.live + '38',
+    textColor: colors.live,
+    backgroundColor: alpha(colors.live, '14'),
+    borderColor: alpha(colors.live, '38'),
   };
 }
 
@@ -147,9 +149,17 @@ function EmptyState({ message }: { message: string }) {
 }
 
 function ErrorBanner({ message }: { message: string }) {
+  const colors = useAppColors();
   return (
-    <View style={styles.errorBanner}>
-      <Text style={styles.errorText}>{message}</Text>
+    <View
+      style={[
+        styles.errorBanner,
+        {
+          backgroundColor: alpha(colors.error, '18'),
+          borderColor: alpha(colors.error, '40'),
+        },
+      ]}>
+      <Text style={[styles.errorText, { color: colors.error }]}>{message}</Text>
     </View>
   );
 }
@@ -285,8 +295,9 @@ function StatusIsland({
 
 // ── Shared departure row ───────────────────────────────────────────────────────
 function DepartureRow({ dep, isLast }: { dep: Departure; isLast: boolean }) {
+  const colors = useAppColors();
   const countdown = formatMins(dep.minsUntil);
-  const realtimeStatus = getRealtimeStatus(dep);
+  const realtimeStatus = getRealtimeStatus(dep, colors);
   const isCancelled = dep.status === 'cancelled';
   return (
     <View style={[styles.row, isCancelled && styles.rowCancelled, !isLast && styles.rowDivider]}>
@@ -309,11 +320,24 @@ function DepartureRow({ dep, isLast }: { dep: Departure; isLast: boolean }) {
           </Text>
         </View>
       ) : isCancelled ? (
-        <View style={styles.cancelledBadgeSmall}>
-          <Text style={styles.cancelledBadgeSmallText}>Likely cancelled</Text>
+        <View
+          style={[
+            styles.cancelledBadgeSmall,
+            {
+              backgroundColor: alpha(colors.warning, '12'),
+              borderColor: alpha(colors.warning, '30'),
+            },
+          ]}>
+          <Text style={[styles.cancelledBadgeSmallText, { color: colors.warning }]}>Likely cancelled</Text>
         </View>
       ) : null}
-      <Text style={[styles.rowCountdown, isCancelled && styles.rowCountdownCancelled, { fontFamily: MONO }]}>
+      <Text
+        style={[
+          styles.rowCountdown,
+          isCancelled && styles.rowCountdownCancelled,
+          isCancelled && { color: colors.warning },
+          { fontFamily: MONO },
+        ]}>
         {isCancelled ? 'skip' : countdown}
       </Text>
     </View>
@@ -321,16 +345,43 @@ function DepartureRow({ dep, isLast }: { dep: Departure; isLast: boolean }) {
 }
 
 function CancelledDepartureSlab({ dep }: { dep: NonNullable<Departure['replacedCancelledDeparture']> }) {
+  const colors = useAppColors();
   return (
-    <View style={styles.cancelledSlab}>
+    <View
+      style={[
+        styles.cancelledSlab,
+        {
+          borderColor: alpha(colors.warning, '30'),
+          backgroundColor: alpha(colors.warning, '10'),
+        },
+      ]}>
       <View style={styles.cancelledSlabHeader}>
         <BusTag bus={dep.bus} />
         <View style={styles.cancelledSlabCopy}>
-          <Text style={styles.cancelledEyebrow}>SCHEDULED BEFORE LIVE UPDATE</Text>
-          <Text style={[styles.cancelledTime, { fontFamily: MONO }]}>{dep.time}</Text>
+          <Text style={[styles.cancelledEyebrow, { color: alpha(colors.warning, 'CC') }]}>
+            SCHEDULED BEFORE LIVE UPDATE
+          </Text>
+          <Text
+            style={[
+              styles.cancelledTime,
+              {
+                color: alpha(colors.warning, 'F0'),
+                textDecorationColor: alpha(colors.warning, 'C0'),
+                fontFamily: MONO,
+              },
+            ]}>
+            {dep.time}
+          </Text>
         </View>
-        <View style={styles.cancelledPill}>
-          <Text style={styles.cancelledPillText}>Likely cancelled</Text>
+        <View
+          style={[
+            styles.cancelledPill,
+            {
+              backgroundColor: alpha(colors.warning, '18'),
+              borderColor: alpha(colors.warning, '38'),
+            },
+          ]}>
+          <Text style={[styles.cancelledPillText, { color: colors.warning }]}>Likely cancelled</Text>
         </View>
       </View>
     </View>
@@ -363,7 +414,7 @@ function NextCard({
     : dep.minsUntil < 60
       ? `in ${dep.minsUntil} min`
       : `in ${Math.floor(dep.minsUntil / 60)}h ${dep.minsUntil % 60}min`;
-  const realtimeStatus = getRealtimeStatus(dep);
+  const realtimeStatus = getRealtimeStatus(dep, colors);
   return (
     <View style={styles.nextBlock}>
       <View style={[styles.nextCard, { borderColor: alpha(accentColor, '30') }]}>
@@ -1061,8 +1112,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 14,
+    paddingHorizontal: CONTENT_SIDE,
+    paddingTop: 14,
+    paddingBottom: 12,
   },
   headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 8, width: 92 },
   headerCenter: { flex: 1, alignItems: 'center', paddingHorizontal: 8 },
@@ -1162,16 +1214,20 @@ const styles = StyleSheet.create({
   },
   refreshGlyph: { fontSize: 16, fontWeight: '700', color: C.textDim },
 
-  toggleWrap: { paddingHorizontal: 20, paddingBottom: 4 },
+  toggleWrap: {
+    paddingHorizontal: CONTENT_SIDE,
+    paddingTop: 4,
+    paddingBottom: CONTENT_SIDE,
+  },
 
   modeContainer: { flex: 1 },
   pageScroll: { flex: 1 },
   pageScrollContent: { flexGrow: 1 },
-  fixedSection: { paddingHorizontal: 20, paddingTop: 8 },
-  dividerPadded: { paddingHorizontal: 20 },
+  fixedSection: { paddingHorizontal: CONTENT_SIDE, paddingTop: 0 },
+  dividerPadded: { paddingHorizontal: CONTENT_SIDE },
 
-  divider: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 14 },
-  nextDivider: { paddingVertical: 8 },
+  divider: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: SECTION_SPACE },
+  nextDivider: { paddingTop: SECTION_SPACE, paddingBottom: SECTION_SPACE },
   dividerLine: { flex: 1, height: 1, backgroundColor: C.border },
   dividerLabel: { color: C.textFaint, fontSize: 10, fontWeight: '700', letterSpacing: 2.5 },
 
@@ -1261,7 +1317,7 @@ const styles = StyleSheet.create({
     borderColor: C.border,
     overflow: 'hidden',
   },
-  listSection: { marginHorizontal: 20 },
+  listSection: { marginHorizontal: CONTENT_SIDE },
   row: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 15, gap: 14 },
   rowCancelled: { opacity: 0.86 },
   rowDivider: { borderBottomWidth: 1, borderBottomColor: C.border },
