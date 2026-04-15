@@ -2,6 +2,8 @@ import React, { useMemo, useState } from 'react';
 import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { StopPickerModal } from '@/components/stop-picker-modal';
+
 const C = {
   backdrop: 'rgba(4, 5, 8, 0.68)',
   surface: '#111316',
@@ -28,6 +30,12 @@ interface StopSelectorProps {
   accentColor: string;
   onSelectStop: (id: string) => void;
   onAddStop?: () => void;
+  addStopModal?: {
+    title: string;
+    direction: 'toKojori' | 'toTbilisi';
+    favoriteIds: string[];
+    onToggle: (id: string) => void;
+  };
   label?: string;
 }
 
@@ -113,10 +121,12 @@ export function StopSelector({
   accentColor,
   onSelectStop,
   onAddStop,
+  addStopModal,
   label = 'BOARDING STOP',
 }: StopSelectorProps) {
   const insets = useSafeAreaInsets();
   const [open, setOpen] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
 
   const activeIndex = Math.max(0, stops.findIndex(stop => stop.id === activeStopId));
   const activeStop = stops[activeIndex] ?? stops[0];
@@ -152,7 +162,19 @@ export function StopSelector({
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={`${label}. ${activeStop.label}. Double tap to change stop.`}
-        onPress={() => totalStops > 1 ? setOpen(true) : onAddStop?.()}
+        onPress={() => {
+          if (totalStops > 1) {
+            setOpen(true);
+            return;
+          }
+
+          if (addStopModal) {
+            setAddOpen(true);
+            return;
+          }
+
+          onAddStop?.();
+        }}
         style={({ pressed }) => [
           styles.trigger,
           {
@@ -258,6 +280,18 @@ export function StopSelector({
           </View>
         </View>
       </Modal>
+
+      {addStopModal ? (
+        <StopPickerModal
+          visible={addOpen}
+          title={addStopModal.title}
+          direction={addStopModal.direction}
+          favoriteIds={addStopModal.favoriteIds}
+          accentColor={accentColor}
+          onToggle={addStopModal.onToggle}
+          onClose={() => setAddOpen(false)}
+        />
+      ) : null}
     </>
   );
 }

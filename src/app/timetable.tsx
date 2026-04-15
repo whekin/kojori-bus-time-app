@@ -17,7 +17,6 @@ import { BottomTabInset, alpha } from '@/constants/theme';
 import { useAppColors } from '@/hooks/use-app-colors';
 import { useSchedule } from '@/hooks/use-schedule';
 import { useSettings } from '@/hooks/use-settings';
-import { useTabNav } from '@/hooks/use-tab-nav';
 import {
   BusLine,
   extractStopTimes,
@@ -80,8 +79,7 @@ function BusTag({ bus }: { bus: BusLine }) {
 export default function TimetableScreen() {
   const colors = useAppColors();
   const insets = useSafeAreaInsets();
-  const { settings, setSharedDirection, update } = useSettings();
-  const navigateToTab = useTabNav();
+  const { settings, setSharedDirection, update, toggleKojoriFavorite, toggleTbilisiFavorite } = useSettings();
   const [filter, setFilter] = useState<Filter>('all');
   const direction = settings.sharedDirection;
 
@@ -178,7 +176,12 @@ export default function TimetableScreen() {
                 activeStopId={stopId}
                 accentColor={accentColor}
                 onSelectStop={handleSelectStop}
-                onAddStop={() => navigateToTab?.('settings')}
+                addStopModal={{
+                  title: direction === 'toKojori' ? 'Tbilisi Departure Stops' : 'Kojori Stops',
+                  direction,
+                  favoriteIds,
+                  onToggle: direction === 'toKojori' ? toggleTbilisiFavorite : toggleKojoriFavorite,
+                }}
                 label="TIMETABLE STOP"
               />
             </View>

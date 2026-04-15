@@ -30,6 +30,7 @@ import Animated, {
 
 import { useQueryClient } from '@tanstack/react-query';
 import KojoriWidget from '../../modules/kojori-widget';
+import { StopPickerModal } from '@/components/stop-picker-modal';
 import { APP_PALETTES, BottomTabInset, alpha, type AppPaletteId, type AppColors } from '@/constants/theme';
 import { useAppColors } from '@/hooks/use-app-colors';
 import { useRouteStops } from '@/hooks/use-route-stops';
@@ -145,109 +146,6 @@ function formatOfflineStatus(status: ReturnType<typeof useTtcOfflineStatus>) {
   }
 
   return `Partial ${status.availableDatasets}/${status.totalDatasets}`;
-}
-
-function StopPickerModal({
-  visible,
-  title,
-  direction,
-  favoriteIds,
-  accentColor,
-  stopNames,
-  onToggle,
-  onClose,
-}: {
-  visible: boolean;
-  title: string;
-  direction: 'toKojori' | 'toTbilisi';
-  favoriteIds: string[];
-  accentColor: string;
-  stopNames: Record<string, string>;
-  onToggle: (id: string) => void;
-  onClose: () => void;
-}) {
-  const [search, setSearch] = useState('');
-  const { modalStyles, colors } = useStyles();
-  const { stops: routeStops, isLoading } = useRouteStops(direction);
-  const insets = useSafeAreaInsets();
-
-  const enriched = useMemo<StopInfo[]>(
-    () => routeStops.map(s => ({ id: s.id, label: stopNames[s.id] ?? s.label })),
-    [routeStops, stopNames],
-  );
-
-  const favoriteSet = new Set(favoriteIds);
-  const query = search.trim().toLowerCase();
-
-  const filtered = useMemo(() => {
-    const all = [
-      ...enriched.filter(s => favoriteSet.has(s.id)),
-      ...enriched.filter(s => !favoriteSet.has(s.id)),
-    ];
-    if (!query) return all;
-    return all.filter(s => s.label.toLowerCase().includes(query) || s.id.includes(query));
-  }, [enriched, favoriteSet, query]);
-
-  return (
-    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
-      <View style={[modalStyles.screen, { paddingTop: insets.top }]}>
-        <View style={modalStyles.header}>
-          <Pressable onPress={onClose} style={modalStyles.backBtn} hitSlop={12}>
-            <Text style={modalStyles.backText}>←</Text>
-          </Pressable>
-          <Text style={modalStyles.headerTitle}>{title}</Text>
-          <View style={modalStyles.backBtn} />
-        </View>
-
-        <View style={modalStyles.searchWrap}>
-          <TextInput
-            style={modalStyles.searchInput}
-            placeholder="Search by name or stop ID…"
-            placeholderTextColor={colors.textFaint}
-            value={search}
-            onChangeText={setSearch}
-            autoFocus
-            autoCorrect={false}
-            clearButtonMode="while-editing"
-          />
-          {isLoading ? <ActivityIndicator color={colors.textDim} size="small" style={modalStyles.spinner} /> : null}
-        </View>
-
-        <FlatList
-          data={filtered}
-          keyExtractor={s => s.id}
-          contentContainerStyle={[modalStyles.listContent, { paddingBottom: insets.bottom + 24 }]}
-          keyboardShouldPersistTaps="handled"
-          ItemSeparatorComponent={() => <View style={modalStyles.separator} />}
-          ListEmptyComponent={
-            <Text style={modalStyles.emptyText}>
-              {isLoading ? 'Loading stops…' : 'No stops found'}
-            </Text>
-          }
-          renderItem={({ item }) => {
-            const isFav = favoriteSet.has(item.id);
-            const disabled = isFav && favoriteIds.length === 1;
-            const shortId = item.id.split(':')[1];
-
-            return (
-              <Pressable
-                style={[modalStyles.stopRow, isFav && { backgroundColor: alpha(accentColor, '0C') }, disabled && modalStyles.disabled]}
-                onPress={() => onToggle(item.id)}
-                disabled={disabled}>
-                <View style={[modalStyles.checkbox, isFav && { borderColor: accentColor, backgroundColor: alpha(accentColor, '22') }]}>
-                  {isFav ? <View style={[modalStyles.checkmark, { backgroundColor: accentColor }]} /> : null}
-                </View>
-                <Text style={[modalStyles.stopLabel, isFav && { color: colors.text }]} numberOfLines={1}>
-                  {item.label}
-                </Text>
-                <Text style={[modalStyles.stopCode, { fontFamily: MONO }]}>{shortId}</Text>
-              </Pressable>
-            );
-          }}
-        />
-      </View>
-    </Modal>
-  );
 }
 
 function FavoritesCard({
@@ -898,7 +796,6 @@ export default function SettingsScreen() {
         direction="toTbilisi"
         favoriteIds={settings.kojoriFavorites}
         accentColor={colors.route316}
-        stopNames={stopNames}
         onToggle={toggleKojoriFavorite}
         onClose={() => setModal(null)}
       />
@@ -908,7 +805,6 @@ export default function SettingsScreen() {
         direction="toKojori"
         favoriteIds={settings.tbilisiFavorites}
         accentColor={colors.route380}
-        stopNames={stopNames}
         onToggle={toggleTbilisiFavorite}
         onClose={() => setModal(null)}
       />
