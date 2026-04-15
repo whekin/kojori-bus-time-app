@@ -280,7 +280,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   triggerLabel: {
-    color: C.textFaint,
+    color: C.textDim,
     fontSize: 10,
     fontWeight: '800',
     letterSpacing: 2.1,

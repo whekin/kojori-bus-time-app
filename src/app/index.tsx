@@ -895,7 +895,7 @@ const styles = StyleSheet.create({
   nextContent: { flex: 1, paddingHorizontal: 16, paddingVertical: 14, gap: 12 },
   nextHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
   nextHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 10, minWidth: 0, flexShrink: 1 },
-  nextEyebrow: { color: C.textFaint, fontSize: 10, fontWeight: '700', letterSpacing: 1.8 },
+  nextEyebrow: { color: alpha(C.text, 'B8'), fontSize: 10, fontWeight: '700', letterSpacing: 1.8 },
   nextBodyRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 12 },
   nextMain: { flex: 1, minWidth: 0, justifyContent: 'flex-end' },
   nextTime: { color: C.text, fontSize: 46, fontWeight: '700', letterSpacing: -1.6, lineHeight: 48, flexShrink: 1 },
@@ -918,7 +918,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     justifyContent: 'center',
   },
-  nextCountdownLabel: { color: C.textFaint, fontSize: 9, fontWeight: '700', letterSpacing: 1.4 },
+  nextCountdownLabel: { color: alpha(C.text, 'C4'), fontSize: 9, fontWeight: '700', letterSpacing: 1.4 },
   nextCountdownValue: { fontSize: 16, fontWeight: '800', marginTop: 3 },
   cancelledSlab: {
     borderRadius: 18,
