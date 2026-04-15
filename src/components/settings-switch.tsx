@@ -3,9 +3,28 @@ import { size } from '@expo/ui/jetpack-compose/modifiers';
 import React from 'react';
 import { Platform, StyleSheet, Switch, View, type SwitchProps } from 'react-native';
 
+import { useAppColors } from '@/hooks/use-app-colors';
+
 function hasExpoUISwitch() {
   if (Platform.OS !== 'android') return false;
   return Boolean(globalThis.expo?.getViewConfig?.('ExpoUI', 'SwitchView'));
+}
+
+function withOpacity(color: string, opacity: number): string {
+  const hex = color.replace('#', '');
+  const normalized = hex.length === 3
+    ? hex.split('').map(char => char + char).join('')
+    : hex;
+
+  if (normalized.length !== 6) {
+    return color;
+  }
+
+  const alpha = Math.max(0, Math.min(255, Math.round(opacity * 255)))
+    .toString(16)
+    .padStart(2, '0');
+
+  return `#${alpha}${normalized}`;
 }
 
 type SettingsSwitchProps = Pick<SwitchProps, 'disabled'> & {
@@ -20,6 +39,18 @@ export function SettingsSwitch({
   accentColor,
   onValueChange,
 }: SettingsSwitchProps) {
+  const colors = useAppColors();
+  const checkedTrackColor = withOpacity(accentColor, 0.28);
+  const checkedThumbColor = accentColor;
+  const uncheckedTrackColor = colors.surfaceHigh;
+  const uncheckedBorderColor = colors.borderStrong;
+  const uncheckedThumbColor = colors.textDim;
+  const disabledCheckedTrackColor = withOpacity(accentColor, 0.18);
+  const disabledCheckedThumbColor = withOpacity(accentColor, 0.55);
+  const disabledUncheckedTrackColor = colors.surface;
+  const disabledUncheckedBorderColor = colors.border;
+  const disabledUncheckedThumbColor = colors.textFaint;
+
   if (Platform.OS === 'android' && hasExpoUISwitch()) {
     return (
       <View style={styles.slot}>
@@ -30,22 +61,22 @@ export function SettingsSwitch({
             onCheckedChange={onValueChange}
             modifiers={[size(44, 26)]}
             colors={{
-              checkedTrackColor: `${accentColor}CC`,
+              checkedTrackColor,
               checkedBorderColor: accentColor,
               checkedIconColor: 'transparent',
-              uncheckedTrackColor: '#232830',
-              uncheckedBorderColor: '#343A44',
+              uncheckedTrackColor,
+              uncheckedBorderColor,
               uncheckedIconColor: 'transparent',
-              uncheckedThumbColor: '#D9DDE4',
-              checkedThumbColor: '#F6F7F9',
-              disabledCheckedTrackColor: '#39414A',
-              disabledCheckedBorderColor: '#39414A',
+              uncheckedThumbColor,
+              checkedThumbColor,
+              disabledCheckedTrackColor,
+              disabledCheckedBorderColor: disabledCheckedTrackColor,
               disabledCheckedIconColor: 'transparent',
-              disabledUncheckedTrackColor: '#1B1F26',
-              disabledUncheckedBorderColor: '#2A3038',
+              disabledUncheckedTrackColor,
+              disabledUncheckedBorderColor,
               disabledUncheckedIconColor: 'transparent',
-              disabledUncheckedThumbColor: '#7B818C',
-              disabledCheckedThumbColor: '#AAB1BC',
+              disabledUncheckedThumbColor,
+              disabledCheckedThumbColor,
             }}
           />
         </Host>
@@ -59,9 +90,9 @@ export function SettingsSwitch({
         value={value}
         disabled={disabled}
         onValueChange={onValueChange}
-        trackColor={{ false: '#232830', true: `${accentColor}CC` }}
-        thumbColor="#F6F7F9"
-        ios_backgroundColor="#232830"
+        trackColor={{ false: uncheckedTrackColor, true: checkedTrackColor }}
+        thumbColor={value ? checkedThumbColor : uncheckedThumbColor}
+        ios_backgroundColor={uncheckedTrackColor}
       />
     </View>
   );
