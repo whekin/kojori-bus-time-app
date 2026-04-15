@@ -1,4 +1,4 @@
-import { ExpoConfig, ConfigContext } from 'expo/config';
+import { ConfigContext, ExpoConfig } from 'expo/config';
 
 function dateVersion(): { version: string; buildNumber: string; versionCode: number } {
   const now = new Date();
@@ -16,6 +16,9 @@ export default ({ config }: ConfigContext): ExpoConfig => {
   const isDev = process.env.NODE_ENV !== 'production';
   const v = isDev ? dateVersion() : null;
 
+  const androidGoogleMapsApiKey = process.env.GOOGLE_MAPS_API_KEY_ANDROID;
+  const iosGoogleMapsApiKey = process.env.GOOGLE_MAPS_API_KEY_IOS;
+
   return {
     ...config,
     name: config.name!,
@@ -29,5 +32,15 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       ...config.android,
       versionCode: v?.versionCode ?? config.android?.versionCode,
     },
+    plugins: [
+      ...(config.plugins ?? []),
+      [
+        'react-native-maps',
+        {
+          androidGoogleMapsApiKey,
+          iosGoogleMapsApiKey,
+        },
+      ],
+    ],
   };
 };
