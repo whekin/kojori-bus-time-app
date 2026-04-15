@@ -1,5 +1,6 @@
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import React, { useMemo, useState } from 'react';
-import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Linking, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { StopPickerModal } from '@/components/stop-picker-modal';
@@ -11,6 +12,8 @@ const DISPLAY = Platform.select({ android: 'serif', ios: 'Georgia', default: 'se
 interface StopSelectorItem {
   id: string;
   label: string;
+  lat?: number;
+  lon?: number;
 }
 
 interface StopSelectorProps {
@@ -106,6 +109,14 @@ function stopCode(id: string) {
   return '#' + (id.split(':')[1] ?? id);
 }
 
+function stopDestination(stop: StopSelectorItem) {
+  if (typeof stop.lat === 'number' && typeof stop.lon === 'number') {
+    return `${stop.lat},${stop.lon}`;
+  }
+
+  return `${stop.label}, Tbilisi, Georgia`;
+}
+
 export function StopSelector({
   stops,
   activeStopId,
@@ -150,6 +161,20 @@ export function StopSelector({
 
   if (!activeStop) return null;
 
+  async function handleOpenRoute() {
+    const destination = stopDestination(activeStop);
+    const encodedDestination = encodeURIComponent(destination);
+    const appUrl = `comgooglemaps://?daddr=${encodedDestination}&directionsmode=walking`;
+    const webUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodedDestination}&travelmode=walking`;
+
+    try {
+      const canUseGoogleMaps = await Linking.canOpenURL(appUrl);
+      await Linking.openURL(canUseGoogleMaps ? appUrl : webUrl);
+    } catch {
+      await Linking.openURL(webUrl);
+    }
+  }
+
   return (
     <>
       <Pressable
@@ -176,11 +201,29 @@ export function StopSelector({
           },
         ]}>
         <View style={styles.triggerMain}>
-          <Text style={styles.triggerLabel}>{label}</Text>
+          <View style={styles.triggerTopRow}>
+            <Text style={styles.triggerLabel}>{label}</Text>
+          </View>
           <Text style={[styles.triggerValue, { fontFamily: DISPLAY }]} numberOfLines={1}>
             {activeStop.label}
           </Text>
-          <Text style={[styles.triggerCode, { fontFamily: MONO }]}>{stopCode(activeStop.id)}</Text>
+          <View style={styles.triggerBottomRow}>
+            <Text style={[styles.triggerCode, { fontFamily: MONO }]}>{stopCode(activeStop.id)}</Text>
+            <Pressable
+              accessibilityRole="button"
+              onPress={handleOpenRoute}
+              hitSlop={8}
+              style={[
+                styles.routeButton,
+                {
+                  borderColor: accentColor + '30',
+                  backgroundColor: accentColor + '10',
+                },
+              ]}>
+              <MaterialCommunityIcons name="walk" size={14} color={accentColor} />
+              <Text style={[styles.routeButtonText, { color: accentColor }]}>Route</Text>
+            </Pressable>
+          </View>
         </View>
 
         <View style={styles.triggerSide}>
@@ -201,7 +244,9 @@ export function StopSelector({
               <Text style={[styles.triggerAction, { color: accentColor }]}>Change</Text>
             </>
           ) : (
-            <Text style={[styles.triggerAction, { color: accentColor }]}>+ Add</Text>
+            <View style={styles.triggerActionSolo}>
+              <Text style={[styles.triggerAction, { color: accentColor }]}>+ Add</Text>
+            </View>
           )}
         </View>
       </Pressable>
@@ -307,6 +352,11 @@ function createStyles(C: ReturnType<typeof useAppColors>) {
     minWidth: 0,
     gap: 4,
   },
+  triggerTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
   triggerLabel: {
     color: C.textDim,
     fontSize: 10,
@@ -319,10 +369,16 @@ function createStyles(C: ReturnType<typeof useAppColors>) {
     lineHeight: 22,
     fontWeight: '700',
   },
+  triggerBottomRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   triggerSide: {
     alignItems: 'flex-end',
-    justifyContent: 'flex-end',
+    justifyContent: 'space-between',
     gap: 6,
+    minWidth: 76,
   },
   triggerCount: {
     borderRadius: 999,
@@ -338,6 +394,24 @@ function createStyles(C: ReturnType<typeof useAppColors>) {
     fontSize: 12,
     fontWeight: '700',
     letterSpacing: 0.4,
+  },
+  triggerActionSolo: {
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  routeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+  },
+  routeButtonText: {
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.3,
   },
   modalRoot: {
     flex: 1,
