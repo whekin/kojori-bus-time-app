@@ -20,7 +20,8 @@
     "release:android:build:apk": "NODE_ENV=production bunx eas build --platform android --profile production-apk",
     "release:android:submit": "NODE_ENV=production bunx eas submit --platform android --profile production",
     "release:android:doctor": "NODE_ENV=production node ./scripts/release-android-doctor.js",
-    "release": "bun scripts/release.ts"
+    "release": "bun scripts/release.ts",
+    "release:revert": "sh -c 'TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo \"no-tag\"); if [ \"$TAG\" = \"no-tag\" ]; then echo \"No tags found\"; exit 1; fi; echo \"Reverting release $TAG\"; gh release delete \"$TAG\" --yes && git tag -d \"$TAG\" && git push origin \":refs/tags/$TAG\"'"
   },
   "dependencies": {
     "@expo/ui": "~55.0.2",
