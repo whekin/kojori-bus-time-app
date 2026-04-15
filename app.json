@@ -6,7 +6,7 @@
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "kojoribs",
-    "userInterfaceStyle": "dark",
+    "userInterfaceStyle": "automatic",
     "ios": {
       "bundleIdentifier": "com.whekin.kojoribus",
       "buildNumber": "2026041500",
@@ -39,6 +39,7 @@
     },
     "plugins": [
       "expo-router",
+      "expo-system-ui",
       [
         "expo-dev-client",
         {
