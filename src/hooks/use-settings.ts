@@ -35,6 +35,8 @@ export interface Settings {
   cancelledBusDemo: boolean;
   /** Enable automatic location-based direction suggestions */
   enableSmartDirection: boolean;
+  /** Keep first-run smart direction nudge from repeating forever */
+  hasSeenSmartDirectionPrompt: boolean;
 }
 
 const DEFAULTS: Settings = {
@@ -48,7 +50,8 @@ const DEFAULTS: Settings = {
   paletteId: DEFAULT_APP_PALETTE,
   debugOptionsUnlocked: false,
   cancelledBusDemo: false,
-  enableSmartDirection: true,
+  enableSmartDirection: false,
+  hasSeenSmartDirectionPrompt: false,
 };
 
 interface SettingsCtx {

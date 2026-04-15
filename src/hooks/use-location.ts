@@ -5,6 +5,7 @@ import { KOJORI_BOUNDS } from '@/services/ttc';
 
 type Permission = 'unknown' | 'granted' | 'denied';
 type LocationMode = 'kojori' | 'tbilisi' | null; // null = permission denied / not yet known
+type LocationAccessResult = 'granted' | 'denied' | 'blocked' | 'error';
 
 export function useLocation(enabled = true) {
   const [permission, setPermission] = useState<Permission>('unknown');
@@ -18,9 +19,23 @@ export function useLocation(enabled = true) {
     setLocationError(null);
 
     try {
-      const loc = await Location.getCurrentPositionAsync({
+      // Add 3 second timeout for location detection
+      const timeoutPromise = new Promise<null>((_, reject) =>
+        setTimeout(() => reject(new Error('Location timeout')), 3000)
+      );
+
+      const locationPromise = Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.Balanced,
       });
+
+      const loc = await Promise.race([locationPromise, timeoutPromise]);
+
+      if (!loc) {
+        // Timeout occurred
+        setDetectedMode(null);
+        setLocationError('Location check timed out.');
+        return false;
+      }
 
       const { latitude: lat, longitude: lon } = loc.coords;
       const inKojori =
@@ -31,9 +46,10 @@ export function useLocation(enabled = true) {
 
       setDetectedMode(inKojori ? 'kojori' : 'tbilisi');
       return true;
-    } catch {
+    } catch (error) {
       setDetectedMode(null);
-      setLocationError('Could not determine your location.');
+      const isTimeout = error instanceof Error && error.message === 'Location timeout';
+      setLocationError(isTimeout ? 'Location check timed out.' : 'Could not determine your location.');
       return false;
     } finally {
       setIsLocating(false);
@@ -71,23 +87,44 @@ export function useLocation(enabled = true) {
   }, [detectCurrentMode, enabled]);
 
   const requestLocationAccess = useCallback(async () => {
-    if (!enabled) return false;
     setLocationError(null);
 
-    const { status, canAskAgain: nextCanAskAgain } =
-      await Location.requestForegroundPermissionsAsync();
+    try {
+      const currentPermission = await Location.getForegroundPermissionsAsync();
+      setCanAskAgain(currentPermission.canAskAgain);
 
-    setCanAskAgain(nextCanAskAgain);
+      if (currentPermission.status === 'granted') {
+        setPermission('granted');
+        await detectCurrentMode();
+        return 'granted' satisfies LocationAccessResult;
+      }
 
-    if (status !== 'granted') {
-      setPermission('denied');
+      if (currentPermission.status === 'denied' && !currentPermission.canAskAgain) {
+        setPermission('denied');
+        setDetectedMode(null);
+        return 'blocked' satisfies LocationAccessResult;
+      }
+
+      const { status, canAskAgain: nextCanAskAgain } =
+        await Location.requestForegroundPermissionsAsync();
+
+      setCanAskAgain(nextCanAskAgain);
+
+      if (status !== 'granted') {
+        setPermission('denied');
+        setDetectedMode(null);
+        return nextCanAskAgain ? 'denied' : 'blocked';
+      }
+
+      setPermission('granted');
+      await detectCurrentMode();
+      return 'granted';
+    } catch {
       setDetectedMode(null);
-      return false;
+      setLocationError('Could not determine your location.');
+      return 'error';
     }
-
-    setPermission('granted');
-    return detectCurrentMode();
-  }, [detectCurrentMode, enabled]);
+  }, [detectCurrentMode]);
 
   const refreshLocation = useCallback(async () => {
     if (!enabled) return false;

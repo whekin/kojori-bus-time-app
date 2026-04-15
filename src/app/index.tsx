@@ -1,5 +1,5 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, AppState, Linking, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View, ViewStyle } from 'react-native';
 import { useQueryClient } from '@tanstack/react-query';
 import { useLocalSearchParams } from 'expo-router';
@@ -164,6 +164,7 @@ type IslandStatusItem = {
   textColor: string;
   actionLabel?: string;
   onAction?: () => void;
+  onDismiss?: () => void;
 };
 
 function StatusIsland({
@@ -187,6 +188,7 @@ function StatusIsland({
   const expandedItem = visibleItems.find(item => item.key === expandedKey) ?? null;
 
   function handleDismiss(item: IslandStatusItem) {
+    item.onDismiss?.();
     setDismissedTokens(current => ({ ...current, [item.key]: item.dismissToken }));
     setExpandedKey(current => current === item.key ? null : current);
   }
@@ -744,26 +746,55 @@ export default function HomeScreen() {
   const activeDirection = settings.sharedDirection;
   const activeStopId = mode === 'kojori' ? settings.activeTbilisiStopId : settings.activeKojoriStopId;
   const showLocationStatus =
-    settings.enableSmartDirection && (
-    (permission !== 'granted' && permission !== 'unknown') ||
-    hasManualDirectionOverride ||
-    isLocating ||
-    Boolean(locationError));
+    (!settings.hasSeenSmartDirectionPrompt && !settings.enableSmartDirection) ||
+    (settings.enableSmartDirection && (
+      (permission !== 'granted' && permission !== 'unknown') ||
+      hasManualDirectionOverride ||
+      isLocating ||
+      Boolean(locationError)));
 
   function handleModeToggle(next: SharedMode) {
     setSharedDirection(modeToDirection(next));
   }
 
-  async function handleEnableLocation() {
+  const handleEnableLocation = useCallback(async () => {
     setSharedDirection(settings.sharedDirection, false);
+
+    if (!settings.enableSmartDirection) {
+      const result = await requestLocationAccess();
+
+      if (result === 'granted') {
+        update({
+          enableSmartDirection: true,
+          hasSeenSmartDirectionPrompt: true,
+        });
+        return;
+      }
+
+      if (result === 'denied' || result === 'blocked') {
+        update({ hasSeenSmartDirectionPrompt: true });
+      }
+      return;
+    }
 
     if (permission === 'granted') {
       await refreshLocation();
       return;
     }
 
-    await requestLocationAccess();
-  }
+    const result = await requestLocationAccess();
+    if (result === 'denied' || result === 'blocked') {
+      update({ hasSeenSmartDirectionPrompt: true });
+    }
+  }, [
+    permission,
+    refreshLocation,
+    requestLocationAccess,
+    setSharedDirection,
+    settings.enableSmartDirection,
+    settings.sharedDirection,
+    update,
+  ]);
 
   async function handleRefresh() {
     if (isRefreshing) return;
@@ -834,6 +865,23 @@ export default function HomeScreen() {
     }
 
     if (!showLocationStatus) return items;
+
+    if (!settings.enableSmartDirection && !settings.hasSeenSmartDirectionPrompt) {
+      items.push({
+        key: 'location',
+        dismissToken: 'location:first-run',
+        label: 'Try smart direction',
+        detail: 'First run: turn on smart direction and allow location if you want app to suggest Kojori or Tbilisi automatically.',
+        actionLabel: 'Turn on',
+        onAction: handleEnableLocation,
+        onDismiss: () => {
+          update({ hasSeenSmartDirectionPrompt: true });
+        },
+        accentColor: colors.primary,
+        textColor: colors.text,
+      });
+      return items;
+    }
 
     if (isLocating) {
       items.push({
@@ -931,9 +979,12 @@ export default function HomeScreen() {
     locationError,
     permission,
     queryClient,
+    settings.enableSmartDirection,
+    settings.hasSeenSmartDirectionPrompt,
     showLocationStatus,
     ttcStatus,
     accentColor,
+    update,
   ]);
 
   return (

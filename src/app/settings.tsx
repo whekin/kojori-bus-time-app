@@ -27,8 +27,8 @@ import Animated, {
 import Carousel, { ICarouselInstance } from 'react-native-reanimated-carousel';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { StopPickerModal } from '@/components/stop-picker-modal';
 import { SettingsSwitch } from '@/components/settings-switch';
+import { StopPickerModal } from '@/components/stop-picker-modal';
 import { alpha, APP_PALETTES, BottomTabInset, type AppColors, type AppPaletteId } from '@/constants/theme';
 import { useAppColors } from '@/hooks/use-app-colors';
 import { useLocation } from '@/hooks/use-location';
@@ -79,6 +79,11 @@ const LEGAL_DOC_MODULES = {
 } as const;
 
 type LegalDocument = keyof typeof LEGAL_DOC_MODULES;
+type NoticeModalState = {
+  icon: string;
+  title: string;
+  message: string;
+};
 
 async function readBundledTextAsset(moduleId: number) {
   const asset = Asset.fromModule(moduleId);
@@ -409,11 +414,13 @@ export default function SettingsScreen() {
   const queryClient = useQueryClient();
   const {
     permission,
-    isLocating,
     locationError,
+    requestLocationAccess,
   } = useLocation(settings.enableSmartDirection);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [modal, setModal] = useState<'kojori' | 'tbilisi' | 'widget-kojori' | 'widget-tbilisi' | null>(null);
+  const [showPermissionModal, setShowPermissionModal] = useState(false);
+  const [noticeModal, setNoticeModal] = useState<NoticeModalState | null>(null);
   const [easterEggTaps, setEasterEggTaps] = useState(0);
   const easterEggTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const paletteCarouselRef = useRef<ICarouselInstance>(null);
@@ -501,12 +508,20 @@ export default function SettingsScreen() {
     if (next >= EASTER_EGG_TAPS) {
       if (!settings.debugOptionsUnlocked) {
         update({ debugOptionsUnlocked: true });
-        Alert.alert('🛠️', 'Debug options unlocked.');
+        setNoticeModal({
+          icon: '🛠️',
+          title: 'Debug Options Unlocked',
+          message: 'Extra debug controls are now visible in Settings.',
+        });
         setEasterEggTaps(0);
         return;
       }
       const msg = EASTER_EGG_MESSAGES[Math.floor(Math.random() * EASTER_EGG_MESSAGES.length)];
-      Alert.alert('🚌', msg);
+      setNoticeModal({
+        icon: '🚌',
+        title: 'Kojori Time',
+        message: msg,
+      });
       setEasterEggTaps(0);
     } else {
       setEasterEggTaps(next);
@@ -514,14 +529,32 @@ export default function SettingsScreen() {
     }
   }
 
-  const smartDirectionStatus = (() => {
-    if (isLocating) {
-      return {
-        title: 'Checking location now',
-        note: 'Refreshing your position for smart direction.',
-      };
-    }
+  async function handleSmartDirectionToggle(value: boolean) {
+    if (value) {
+      const result = permission === 'granted' ? 'granted' : await requestLocationAccess();
 
+      if (result === 'blocked') {
+        setShowPermissionModal(true);
+        return;
+      }
+
+      if (result !== 'granted') {
+        return;
+      }
+
+      update({
+        enableSmartDirection: true,
+        hasSeenSmartDirectionPrompt: true,
+      });
+    } else {
+      update({
+        enableSmartDirection: false,
+        hasSeenSmartDirectionPrompt: true,
+      });
+    }
+  }
+
+  const smartDirectionStatus = (() => {
     if (!settings.enableSmartDirection) {
       return {
         title: 'Smart direction is off',
@@ -635,7 +668,7 @@ export default function SettingsScreen() {
             </View>
             <SettingsSwitch
               value={settings.enableSmartDirection}
-              onValueChange={value => update({ enableSmartDirection: value })}
+              onValueChange={handleSmartDirectionToggle}
               accentColor={colors.primary}
             />
           </View>
@@ -904,6 +937,23 @@ export default function SettingsScreen() {
         colors={colors}
         onClose={() => setLegalModal(null)}
       />
+      <PermissionModal
+        visible={showPermissionModal}
+        colors={colors}
+        onClose={() => setShowPermissionModal(false)}
+        onOpenSettings={() => {
+          setShowPermissionModal(false);
+          Linking.openSettings();
+        }}
+      />
+      <NoticeModal
+        visible={noticeModal !== null}
+        colors={colors}
+        icon={noticeModal?.icon ?? 'ℹ️'}
+        title={noticeModal?.title ?? ''}
+        message={noticeModal?.message ?? ''}
+        onClose={() => setNoticeModal(null)}
+      />
     </View>
   );
 }
@@ -1069,6 +1119,180 @@ function createStyles(C: AppColors) {
     buildLink: { textDecorationLine: 'underline' },
   });
 }
+
+function PermissionModal({
+  visible,
+  colors,
+  onClose,
+  onOpenSettings,
+}: {
+  visible: boolean;
+  colors: AppColors;
+  onClose: () => void;
+  onOpenSettings: () => void;
+}) {
+  const insets = useSafeAreaInsets();
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={onClose}>
+      <View style={styles.permissionOverlay}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
+        <View style={[styles.permissionCard, { marginBottom: insets.bottom + 20 }]}>
+          <View style={[styles.permissionIconWrap, { backgroundColor: alpha(colors.primary, '18') }]}>
+            <Text style={styles.permissionIcon}>📍</Text>
+          </View>
+          <Text style={[styles.permissionTitle, { color: colors.text }]}>
+            Location Permission Required
+          </Text>
+          <Text style={[styles.permissionMessage, { color: colors.textDim }]}>
+            Smart direction needs location access to automatically suggest whether you&apos;re heading to Kojori or Tbilisi. Please enable it in your device settings.
+          </Text>
+          <View style={styles.permissionButtons}>
+            <Pressable
+              style={[styles.permissionButton, styles.permissionButtonSecondary, { borderColor: colors.border }]}
+              onPress={onClose}>
+              <Text style={[styles.permissionButtonText, { color: colors.textDim }]}>
+                Cancel
+              </Text>
+            </Pressable>
+            <Pressable
+              style={[styles.permissionButton, styles.permissionButtonPrimary, { backgroundColor: colors.primary }]}
+              onPress={onOpenSettings}>
+              <Text style={[styles.permissionButtonText, styles.permissionButtonTextPrimary, { color: colors.bg }]}>
+                Open Settings
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+function NoticeModal({
+  visible,
+  colors,
+  icon,
+  title,
+  message,
+  onClose,
+}: {
+  visible: boolean;
+  colors: AppColors;
+  icon: string;
+  title: string;
+  message: string;
+  onClose: () => void;
+}) {
+  const insets = useSafeAreaInsets();
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={onClose}>
+      <View style={styles.permissionOverlay}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
+        <View style={[styles.permissionCard, { marginBottom: insets.bottom + 20 }]}>
+          <View style={[styles.permissionIconWrap, { backgroundColor: alpha(colors.primary, '18') }]}>
+            <Text style={styles.permissionIcon}>{icon}</Text>
+          </View>
+          <Text style={[styles.permissionTitle, { color: colors.text }]}>
+            {title}
+          </Text>
+          <Text style={[styles.permissionMessage, { color: colors.textDim }]}>
+            {message}
+          </Text>
+          <View style={styles.permissionButtons}>
+            <Pressable
+              style={[styles.permissionButton, styles.permissionButtonPrimary, { backgroundColor: colors.primary }]}
+              onPress={onClose}>
+              <Text style={[styles.permissionButtonText, styles.permissionButtonTextPrimary, { color: colors.bg }]}>
+                Nice
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+const styles = StyleSheet.create({
+  permissionOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'flex-end',
+    paddingHorizontal: 20,
+  },
+  permissionCard: {
+    backgroundColor: '#18191E',
+    borderRadius: 24,
+    padding: 24,
+    alignItems: 'center',
+    gap: 16,
+    shadowColor: '#000',
+    shadowOpacity: 0.4,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 12 },
+    elevation: 16,
+  },
+  permissionIconWrap: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  permissionIcon: {
+    fontSize: 32,
+  },
+  permissionTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    letterSpacing: -0.4,
+    textAlign: 'center',
+  },
+  permissionMessage: {
+    fontSize: 14,
+    lineHeight: 20,
+    textAlign: 'center',
+  },
+  permissionButtons: {
+    flexDirection: 'row',
+    gap: 12,
+    width: '100%',
+    marginTop: 8,
+  },
+  permissionButton: {
+    flex: 1,
+    minHeight: 48,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+  },
+  permissionButtonSecondary: {
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+  },
+  permissionButtonPrimary: {
+    borderWidth: 0,
+  },
+  permissionButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+    letterSpacing: 0.2,
+  },
+  permissionButtonTextPrimary: {
+    fontWeight: '700',
+  },
+});
 
 function createModalStyles(C: AppColors) {
   return StyleSheet.create({
