@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Platform,
@@ -17,6 +17,7 @@ import { BottomTabInset, alpha } from '@/constants/theme';
 import { useAppColors } from '@/hooks/use-app-colors';
 import { useSchedule } from '@/hooks/use-schedule';
 import { useSettings } from '@/hooks/use-settings';
+import { useTabNav } from '@/hooks/use-tab-nav';
 import {
   BusLine,
   extractStopTimes,
@@ -42,7 +43,6 @@ const C = {
 
 const MONO = Platform.select({ android: 'monospace', ios: 'Menlo', default: 'monospace' });
 
-type Direction = 'toKojori' | 'toTbilisi';
 type Filter = 'all' | BusLine;
 
 interface TimetableEntry {
@@ -81,6 +81,7 @@ export default function TimetableScreen() {
   const colors = useAppColors();
   const insets = useSafeAreaInsets();
   const { settings, setSharedDirection, update } = useSettings();
+  const navigateToTab = useTabNav();
   const [filter, setFilter] = useState<Filter>('all');
   const direction = settings.sharedDirection;
 
@@ -177,6 +178,7 @@ export default function TimetableScreen() {
                 activeStopId={stopId}
                 accentColor={accentColor}
                 onSelectStop={handleSelectStop}
+                onAddStop={() => navigateToTab?.('settings')}
                 label="TIMETABLE STOP"
               />
             </View>

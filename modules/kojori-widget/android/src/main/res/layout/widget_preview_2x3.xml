@@ -6,7 +6,6 @@
   android:orientation="vertical"
   android:padding="14dp">
 
-  <!-- Title row -->
   <LinearLayout
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
@@ -43,7 +42,6 @@
       android:textStyle="bold" />
   </LinearLayout>
 
-  <!-- Toggle row -->
   <LinearLayout
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
@@ -79,7 +77,6 @@
       android:textStyle="bold" />
   </LinearLayout>
 
-  <!-- Header row -->
   <LinearLayout
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
@@ -105,7 +102,6 @@
       android:importantForAccessibility="no" />
   </LinearLayout>
 
-  <!-- Sample departure 1 -->
   <LinearLayout
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
@@ -149,7 +145,6 @@
     android:background="@color/widget_border"
     android:importantForAccessibility="no" />
 
-  <!-- Sample departure 2 -->
   <LinearLayout
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
@@ -193,7 +188,6 @@
     android:background="@color/widget_border"
     android:importantForAccessibility="no" />
 
-  <!-- Sample departure 3 -->
   <LinearLayout
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
@@ -237,7 +231,6 @@
     android:background="@color/widget_border"
     android:importantForAccessibility="no" />
 
-  <!-- Sample departure 4 -->
   <LinearLayout
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
@@ -267,6 +260,92 @@
       android:layout_weight="1"
       android:gravity="end"
       android:text="10:30"
+      android:textColor="@color/widget_text"
+      android:textSize="18sp"
+      android:textStyle="bold"
+      android:fontFamily="monospace"
+      android:letterSpacing="0.04" />
+  </LinearLayout>
+
+  <ImageView
+    android:layout_width="match_parent"
+    android:layout_height="1dp"
+    android:layout_marginStart="54dp"
+    android:background="@color/widget_border"
+    android:importantForAccessibility="no" />
+
+  <LinearLayout
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:paddingVertical="8dp"
+    android:paddingHorizontal="2dp">
+
+    <TextView
+      android:layout_width="wrap_content"
+      android:layout_height="wrap_content"
+      android:minWidth="44dp"
+      android:background="@drawable/widget_bus_chip"
+      android:gravity="center"
+      android:paddingHorizontal="8dp"
+      android:paddingVertical="5dp"
+      android:text="380"
+      android:textColor="@color/widget_amber"
+      android:textSize="13sp"
+      android:textStyle="bold"
+      android:fontFamily="monospace" />
+
+    <TextView
+      android:layout_marginStart="10dp"
+      android:layout_width="0dp"
+      android:layout_height="wrap_content"
+      android:layout_weight="1"
+      android:gravity="end"
+      android:text="10:45"
+      android:textColor="@color/widget_text"
+      android:textSize="18sp"
+      android:textStyle="bold"
+      android:fontFamily="monospace"
+      android:letterSpacing="0.04" />
+  </LinearLayout>
+
+  <ImageView
+    android:layout_width="match_parent"
+    android:layout_height="1dp"
+    android:layout_marginStart="54dp"
+    android:background="@color/widget_border"
+    android:importantForAccessibility="no" />
+
+  <LinearLayout
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:paddingVertical="8dp"
+    android:paddingHorizontal="2dp">
+
+    <TextView
+      android:layout_width="wrap_content"
+      android:layout_height="wrap_content"
+      android:minWidth="44dp"
+      android:background="@drawable/widget_bus_chip"
+      android:gravity="center"
+      android:paddingHorizontal="8dp"
+      android:paddingVertical="5dp"
+      android:text="316"
+      android:textColor="@color/widget_teal"
+      android:textSize="13sp"
+      android:textStyle="bold"
+      android:fontFamily="monospace" />
+
+    <TextView
+      android:layout_marginStart="10dp"
+      android:layout_width="0dp"
+      android:layout_height="wrap_content"
+      android:layout_weight="1"
+      android:gravity="end"
+      android:text="11:00"
       android:textColor="@color/widget_text"
       android:textSize="18sp"
       android:textStyle="bold"

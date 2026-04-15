@@ -4,6 +4,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import React, { useEffect } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
+import { AnimatedSplashOverlay, AppReveal } from '@/components/animated-icon';
 import AppTabs from '@/components/app-tabs';
 import { AppColorsProvider } from '@/hooks/use-app-colors';
 import { SettingsProvider, useSettings } from '@/hooks/use-settings';
@@ -65,7 +66,10 @@ function AppReady() {
   return (
     <>
       <CachePrefiller />
-      <AppTabs />
+      <AppReveal>
+        <AppTabs />
+      </AppReveal>
+      <AnimatedSplashOverlay />
     </>
   );
 }

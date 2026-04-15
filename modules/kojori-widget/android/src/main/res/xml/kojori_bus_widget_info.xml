@@ -4,7 +4,7 @@
   android:initialLayout="@layout/kojori_bus_widget"
   android:minWidth="110dp"
   android:minHeight="180dp"
-  android:previewLayout="@layout/widget_preview"
+  android:previewLayout="@layout/widget_preview_2x3"
   android:resizeMode="horizontal|vertical"
   android:targetCellWidth="2"
   android:targetCellHeight="3"

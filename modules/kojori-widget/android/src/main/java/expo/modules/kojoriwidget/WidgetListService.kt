@@ -124,6 +124,7 @@ class WidgetListFactory(
     views.setTextColor(R.id.title_dot, dotColor)
     views.setTextColor(R.id.title_refresh_text, palette.textDim)
     views.setViewVisibility(R.id.title_refresh_spinner, if (isRefreshing) View.VISIBLE else View.GONE)
+    views.setOnClickFillInIntent(R.id.title_root, openAppIntent())
     views.setOnClickFillInIntent(R.id.title_refresh, baseActionIntent(KojoriBusWidgetProvider::class.java.name).apply {
       action = "expo.modules.kojoriwidget.REFRESH"
     })

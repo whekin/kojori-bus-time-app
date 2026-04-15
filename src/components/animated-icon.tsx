@@ -44,6 +44,10 @@ export function AnimatedSplashOverlay() {
         }
       })}
       style={styles.backgroundSolidColor}>
+      <View style={[styles.glowOrb, styles.glowOrbAmber]} />
+      <View style={[styles.glowOrb, styles.glowOrbTeal]} />
+      <View style={[styles.glowBand, styles.glowBandTop]} />
+      <View style={[styles.glowBand, styles.glowBandBottom]} />
       <Animated.View entering={logoKeyframe.duration(totalDuration)} style={styles.splashLogoWrap}>
         <Image
           source={require('@/assets/images/splash-icon.png')}
@@ -160,10 +164,46 @@ const styles = StyleSheet.create({
   },
   backgroundSolidColor: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: '#09090B',
+    backgroundColor: '#111316',
     zIndex: 1000,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  glowOrb: {
+    position: 'absolute',
+    borderRadius: 999,
+  },
+  glowOrbAmber: {
+    width: 240,
+    height: 240,
+    top: -70,
+    left: -60,
+    backgroundColor: 'rgba(245, 162, 10, 0.16)',
+  },
+  glowOrbTeal: {
+    width: 260,
+    height: 260,
+    right: -80,
+    bottom: -90,
+    backgroundColor: 'rgba(16, 184, 163, 0.14)',
+  },
+  glowBand: {
+    position: 'absolute',
+    left: -20,
+    right: -20,
+    height: 120,
+    opacity: 0.9,
+  },
+  glowBandTop: {
+    top: 120,
+    backgroundColor: 'rgba(245, 162, 10, 0.05)',
+    transform: [{ rotate: '-8deg' }],
+  },
+  glowBandBottom: {
+    bottom: 110,
+    backgroundColor: 'rgba(16, 184, 163, 0.05)',
+    transform: [{ rotate: '7deg' }],
   },
   splashLogoWrap: {
     alignItems: 'center',
