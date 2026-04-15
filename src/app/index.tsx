@@ -291,47 +291,59 @@ function DepartureRow({ dep, isLast }: { dep: Departure; isLast: boolean }) {
   const countdown = formatMins(dep.minsUntil);
   const realtimeStatus = getRealtimeStatus(dep, colors);
   const isCancelled = dep.status === 'cancelled';
+
   return (
     <View style={[styles.row, isCancelled && styles.rowCancelled, !isLast && styles.rowDivider]}>
       <BusTag bus={dep.bus} />
-      <Text style={[styles.rowTime, isCancelled && styles.rowTimeCancelled, { fontFamily: MONO }]}>
-        {dep.time}
-      </Text>
-      {realtimeStatus ? (
-        <View
+      <View style={styles.rowMain}>
+        <Text
+          style={[styles.rowTime, isCancelled && styles.rowTimeCancelled, { fontFamily: MONO }]}
+          numberOfLines={1}>
+          {dep.time}
+        </Text>
+      </View>
+      <View style={styles.rowMeta}>
+        {realtimeStatus ? (
+          <View
+            style={[
+              styles.liveBadgeSmall,
+              styles.rowMetaBadge,
+              {
+                backgroundColor: realtimeStatus.backgroundColor,
+                borderColor: realtimeStatus.borderColor,
+              },
+            ]}>
+            <LiveDot color={realtimeStatus.textColor} />
+            <Text style={[styles.liveBadgeSmallText, { color: realtimeStatus.textColor }]} numberOfLines={1}>
+              {realtimeStatus.label}
+            </Text>
+          </View>
+        ) : isCancelled ? (
+          <View
+            style={[
+              styles.cancelledBadgeSmall,
+              styles.rowMetaBadge,
+              {
+                backgroundColor: alpha(colors.warning, '12'),
+                borderColor: alpha(colors.warning, '30'),
+              },
+            ]}>
+            <Text style={[styles.cancelledBadgeSmallText, { color: colors.warning }]} numberOfLines={1}>
+              Likely cancelled
+            </Text>
+          </View>
+        ) : null}
+        <Text
           style={[
-            styles.liveBadgeSmall,
-            {
-              backgroundColor: realtimeStatus.backgroundColor,
-              borderColor: realtimeStatus.borderColor,
-            },
-          ]}>
-          <LiveDot color={realtimeStatus.textColor} />
-          <Text style={[styles.liveBadgeSmallText, { color: realtimeStatus.textColor }]}>
-            {realtimeStatus.label}
-          </Text>
-        </View>
-      ) : isCancelled ? (
-        <View
-          style={[
-            styles.cancelledBadgeSmall,
-            {
-              backgroundColor: alpha(colors.warning, '12'),
-              borderColor: alpha(colors.warning, '30'),
-            },
-          ]}>
-          <Text style={[styles.cancelledBadgeSmallText, { color: colors.warning }]}>Likely cancelled</Text>
-        </View>
-      ) : null}
-      <Text
-        style={[
-          styles.rowCountdown,
-          isCancelled && styles.rowCountdownCancelled,
-          isCancelled && { color: colors.warning },
-          { fontFamily: MONO },
-        ]}>
-        {isCancelled ? 'skip' : countdown}
-      </Text>
+            styles.rowCountdown,
+            isCancelled && styles.rowCountdownCancelled,
+            isCancelled && { color: colors.warning },
+            { fontFamily: MONO },
+          ]}
+          numberOfLines={1}>
+          {isCancelled ? 'skip' : countdown}
+        </Text>
+      </View>
     </View>
   );
 }
@@ -409,6 +421,7 @@ function NextCard({
       ? `in ${dep.minsUntil} min`
       : `in ${Math.floor(dep.minsUntil / 60)}h ${dep.minsUntil % 60}min`;
   const realtimeStatus = getRealtimeStatus(dep, colors);
+  const busColor = routeColor(dep.bus, colors);
   return (
     <View style={styles.nextBlock}>
       <View style={[styles.nextCard, { borderColor: alpha(accentColor, '30') }]}>
@@ -416,9 +429,6 @@ function NextCard({
         <View style={styles.nextContent}>
           <View style={styles.nextHeaderRow}>
             <View style={styles.nextHeaderLeft}>
-              {(() => {
-                const busColor = routeColor(dep.bus, colors);
-                return (
               <View
                 style={[
                   styles.nextRouteBadge,
@@ -428,27 +438,8 @@ function NextCard({
                   {dep.bus}
                 </Text>
               </View>
-                );
-              })()}
               <Text style={styles.nextEyebrow}>NEXT DEPARTURE</Text>
             </View>
-
-            {realtimeStatus ? (
-              <View
-                style={[
-                  styles.liveBadge,
-                  styles.nextStatusBadge,
-                  {
-                    backgroundColor: realtimeStatus.backgroundColor,
-                    borderColor: realtimeStatus.borderColor,
-                  },
-                ]}>
-                <LiveDot color={realtimeStatus.textColor} />
-                <Text style={[styles.liveBadgeText, { color: realtimeStatus.textColor }]}>
-                  {realtimeStatus.label}
-                </Text>
-              </View>
-            ) : null}
           </View>
 
           <View style={styles.nextBodyRow}>
@@ -461,22 +452,38 @@ function NextCard({
                 {dep.time}
               </Text>
             </View>
-
-            {(() => {
-              const busColor = routeColor(dep.bus, colors);
-              return (
             <View
               style={[
-                styles.nextCountdownBadge,
+                styles.nextArrivalPanel,
                 { backgroundColor: alpha(busColor, '16'), borderColor: alpha(busColor, '45') },
               ]}>
-              <Text style={styles.nextCountdownLabel}>ARRIVES</Text>
-              <Text style={[styles.nextCountdownValue, { color: busColor, fontFamily: MONO }]}>
+              <View style={styles.nextArrivalHeader}>
+                <Text style={styles.nextCountdownLabel}>ARRIVAL SIGNAL</Text>
+                {realtimeStatus ? (
+                  <View
+                    style={[
+                      styles.nextSignalDot,
+                      { backgroundColor: realtimeStatus.textColor },
+                    ]}
+                  />
+                ) : null}
+              </View>
+              <Text
+                style={[styles.nextCountdownValue, { color: busColor, fontFamily: MONO }]}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.8}>
                 {minsLabel}
               </Text>
+              <Text
+                style={[
+                  styles.nextArrivalMeta,
+                  { color: realtimeStatus ? realtimeStatus.textColor : colors.textDim },
+                ]}
+                numberOfLines={1}>
+                {realtimeStatus ? realtimeStatus.label : 'Scheduled estimate'}
+              </Text>
             </View>
-              );
-            })()}
           </View>
         </View>
       </View>
@@ -1262,18 +1269,26 @@ function createStyles(C: AppColors) {
     alignItems: 'center',
   },
   nextRouteBadgeText: { fontSize: 14, fontWeight: '800', letterSpacing: 0.8 },
-  nextStatusBadge: { flexShrink: 1 },
-  nextCountdownBadge: {
-    minWidth: 84,
+  nextArrivalPanel: {
+    minWidth: 118,
+    maxWidth: 148,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    borderRadius: 14,
+    borderRadius: 16,
     borderWidth: 1,
     alignItems: 'flex-end',
-    justifyContent: 'center',
+    justifyContent: 'space-between',
+    gap: 5,
+    shadowColor: C.bg,
+    shadowOpacity: 0.14,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
   },
+  nextArrivalHeader: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  nextSignalDot: { width: 7, height: 7, borderRadius: 3.5 },
   nextCountdownLabel: { color: alpha(C.text, 'C4'), fontSize: 9, fontWeight: '700', letterSpacing: 1.4 },
-  nextCountdownValue: { fontSize: 16, fontWeight: '800', marginTop: 3 },
+  nextCountdownValue: { fontSize: 16, fontWeight: '800', marginTop: 1 },
+  nextArrivalMeta: { fontSize: 11, fontWeight: '700', letterSpacing: 0.2, textAlign: 'right' },
   cancelledSlab: {
     borderRadius: 18,
     borderWidth: 1,
@@ -1325,13 +1340,16 @@ function createStyles(C: AppColors) {
   row: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 15, gap: 14 },
   rowCancelled: { opacity: 0.86 },
   rowDivider: { borderBottomWidth: 1, borderBottomColor: C.border },
-  rowTime: { flex: 1, color: C.text, fontSize: 22, fontWeight: '600', letterSpacing: -0.3 },
+  rowMain: { flex: 1, minWidth: 0 },
+  rowTime: { color: C.text, fontSize: 22, fontWeight: '600', letterSpacing: -0.3, minWidth: 0 },
   rowTimeCancelled: {
     color: alpha(C.text, '8F'),
     textDecorationLine: 'line-through',
     textDecorationColor: alpha(C.warning, 'B0'),
   },
-  rowCountdown: { color: C.textDim, fontSize: 13, fontWeight: '500' },
+  rowMeta: { width: 112, flexShrink: 0, alignItems: 'flex-end', justifyContent: 'center', gap: 7 },
+  rowMetaBadge: { alignSelf: 'flex-end', maxWidth: '100%' },
+  rowCountdown: { color: C.textDim, fontSize: 13, fontWeight: '500', textAlign: 'right' },
   rowCountdownCancelled: { color: C.warning },
 
   liveBadge: {
