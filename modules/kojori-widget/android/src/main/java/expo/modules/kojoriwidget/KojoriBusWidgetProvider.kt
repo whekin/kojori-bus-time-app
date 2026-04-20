@@ -145,8 +145,6 @@ open class KojoriBusWidgetProvider : AppWidgetProvider() {
       val stateJson = WidgetPrefs.getStateJson(context)
       val root = stateJson?.let { runCatching { JSONObject(it) }.getOrNull() }
       val palette = readPalette(context, root)
-      val narrow = isNarrow(appWidgetManager, appWidgetId)
-      val isRefreshing = WidgetPrefs.getRefreshingUntil(context) > System.currentTimeMillis()
 
       val listIntent = Intent(context, WidgetListService::class.java).apply {
         putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
@@ -171,12 +169,18 @@ open class KojoriBusWidgetProvider : AppWidgetProvider() {
         return
       }
 
-      val stopId = snapshot.optString("stopId", "")
       val message = snapshot.optString("message", "")
       val items = snapshot.optJSONArray("items")
-      val hasItems = items != null && items.length() > 0
+      val hadSnapshotItems = items != null && items.length() > 0
+      val hasItems = hasUpcomingItems(snapshot, System.currentTimeMillis())
+      val displayMessage = when {
+        snapshot.optString("status") == "error" -> message.ifBlank { "Open app to refresh" }
+        !hasItems && hadSnapshotItems -> "Open app to refresh"
+        message.isBlank() -> "No departures soon"
+        else -> message
+      }
 
-      views.setTextViewText(R.id.widget_message, message)
+      views.setTextViewText(R.id.widget_message, displayMessage)
       views.setTextColor(
         R.id.widget_message,
         if (snapshot.optString("status") == "error") {
@@ -189,6 +193,24 @@ open class KojoriBusWidgetProvider : AppWidgetProvider() {
       views.setViewVisibility(R.id.widget_message, if (hasItems) View.GONE else View.VISIBLE)
       views.setViewVisibility(R.id.widget_list, if (hasItems) View.VISIBLE else View.GONE)
       appWidgetManager.updateAppWidget(appWidgetId, views)
+    }
+
+    private fun hasUpcomingItems(snapshot: JSONObject, nowMs: Long): Boolean {
+      val items = snapshot.optJSONArray("items") ?: return false
+      val syncedAtEpochMs = snapshot.optLong("syncedAtEpochMs", 0L)
+
+      for (index in 0 until items.length()) {
+        val item = items.optJSONObject(index) ?: continue
+        val departureEpochMs = item.optLong("departureEpochMs", 0L)
+        if (departureEpochMs > nowMs) return true
+
+        if (departureEpochMs <= 0L && syncedAtEpochMs > 0L && item.has("minsUntilAtSync")) {
+          val legacyDepartureEpochMs = syncedAtEpochMs + item.optInt("minsUntilAtSync", Int.MIN_VALUE) * 60_000L
+          if (legacyDepartureEpochMs > nowMs) return true
+        }
+      }
+
+      return false
     }
 
     private fun bindEmptyState(

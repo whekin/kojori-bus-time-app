@@ -44,6 +44,9 @@ class WidgetListFactory(
   override fun onCreate() {}
 
   override fun onDataSetChanged() {
+    rows = emptyList()
+    stopId = ""
+    stopLabel = ""
     val stateJson = WidgetPrefs.getStateJson(context) ?: return
     val root = runCatching { JSONObject(stateJson) }.getOrNull() ?: return
     direction = WidgetPrefs.getDirection(context)
@@ -58,8 +61,9 @@ class WidgetListFactory(
     val syncedAtEpochMs = snapshot.optLong("syncedAtEpochMs", 0L)
     val stopCode = stopId.substringAfter(":", stopId)
     stopLabel = if (stopCode.isNotBlank()) "from $label [#$stopCode]" else "from $label"
+    val nowMs = System.currentTimeMillis()
     val elapsedMins = if (syncedAtEpochMs > 0L) {
-      ((System.currentTimeMillis() - syncedAtEpochMs) / 60_000L).toInt().coerceAtLeast(0)
+      ((nowMs - syncedAtEpochMs) / 60_000L).toInt().coerceAtLeast(0)
     } else {
       0
     }
@@ -67,7 +71,12 @@ class WidgetListFactory(
     val departures = (0 until items.length()).mapNotNull { i ->
       val item = items.optJSONObject(i) ?: return@mapNotNull null
       val time = item.optString("time", "--:--")
-      val remainingMins = item.optInt("minsUntilAtSync", Int.MAX_VALUE) - elapsedMins
+      val departureEpochMs = item.optLong("departureEpochMs", 0L)
+      val remainingMins = when {
+        departureEpochMs > 0L -> Math.floorDiv(departureEpochMs - nowMs, 60_000L).toInt()
+        item.has("minsUntilAtSync") -> item.optInt("minsUntilAtSync", Int.MAX_VALUE) - elapsedMins
+        else -> Int.MAX_VALUE
+      }
       if (remainingMins < 0) return@mapNotNull null
       DepartureRow(
         bus = item.optString("bus", "--"),

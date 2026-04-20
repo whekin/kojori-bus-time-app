@@ -4,10 +4,12 @@ import { BAKED_SCHEDULES, BAKED_STOP_NAMES } from '@/assets/ttc-baked';
 import { getAppColors, type AppPaletteId, type AppResolvedThemeMode } from '@/constants/theme';
 import {
   BusLine,
-  computeUpcomingDepartures,
-  Departure,
+  extractStopTimes,
   findStop,
+  formatTime,
+  parseTimeToMins,
   ROUTES,
+  SCHEDULE_STOP_PROXY,
   SchedulePeriod
 } from '@/services/ttc';
 import {
@@ -28,7 +30,7 @@ interface WidgetSyncSettings {
 interface WidgetItemPayload {
   bus: BusLine;
   time: string;
-  minsUntilAtSync: number;
+  departureEpochMs: number;
 }
 
 interface WidgetDirectionPayload {
@@ -53,14 +55,67 @@ interface WidgetStatePayload {
   directions: Record<WidgetMode, WidgetDirectionPayload>;
 }
 
-function mapWidgetItems(departures: Departure[]): WidgetItemPayload[] {
-  return departures
-    .filter(dep => dep.minsUntil >= 0)
-    .map(dep => ({
-      bus: dep.bus,
-      time: dep.time,
-      minsUntilAtSync: dep.minsUntil,
-    }));
+const WIDGET_FUTURE_DAYS = 3;
+const WIDGET_MAX_ITEMS = 24;
+const LATE_DEPARTURE_GRACE_MS = 5 * 60_000;
+
+function formatLocalServiceDate(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function buildWidgetItems(
+  stopId: string,
+  schedule380: SchedulePeriod[] | undefined,
+  schedule316: SchedulePeriod[] | undefined,
+  now: Date,
+): WidgetItemPayload[] {
+  const lookupStopId = SCHEDULE_STOP_PROXY[stopId] ?? stopId;
+  const nowMs = now.getTime();
+  const baseDate = new Date(now);
+  baseDate.setHours(0, 0, 0, 0);
+  const items: WidgetItemPayload[] = [];
+
+  const entries: [BusLine, SchedulePeriod[] | undefined][] = [
+    ['380', schedule380],
+    ['316', schedule316],
+  ];
+
+  for (const [bus, schedule] of entries) {
+    if (!schedule?.length) continue;
+
+    for (let dayOffset = 0; dayOffset < WIDGET_FUTURE_DAYS; dayOffset += 1) {
+      const serviceDate = new Date(baseDate);
+      serviceDate.setDate(baseDate.getDate() + dayOffset);
+      const period =
+        schedule.find(candidate => candidate.serviceDates.includes(formatLocalServiceDate(serviceDate)))
+        ?? schedule[0];
+      if (!period) continue;
+
+      const stopTimes = extractStopTimes(period, lookupStopId);
+      for (const stopTime of stopTimes) {
+        const mins = parseTimeToMins(stopTime);
+        if (!Number.isFinite(mins)) continue;
+
+        const departure = new Date(serviceDate);
+        departure.setHours(Math.floor(mins / 60), mins % 60, 0, 0);
+        const departureEpochMs = departure.getTime();
+        if (departureEpochMs < nowMs - LATE_DEPARTURE_GRACE_MS) continue;
+
+        items.push({
+          bus,
+          time: formatTime(mins),
+          departureEpochMs,
+        });
+      }
+    }
+  }
+
+  return items
+    .sort((left, right) => left.departureEpochMs - right.departureEpochMs)
+    .slice(0, WIDGET_MAX_ITEMS);
 }
 
 async function loadSchedule(routeId: string, patternSuffix: string): Promise<SchedulePeriod[] | undefined> {
@@ -104,8 +159,7 @@ async function buildDirectionPayload(
       loadSchedule(ROUTES['316'].id, ROUTES['316'][direction]),
     ]);
 
-    const rawDepartures = computeUpcomingDepartures(schedule380, schedule316, stopId, 24 * 60, now);
-    const items = mapWidgetItems(rawDepartures);
+    const items = buildWidgetItems(stopId, schedule380, schedule316, now);
 
     if (items.length === 0) {
       return {
