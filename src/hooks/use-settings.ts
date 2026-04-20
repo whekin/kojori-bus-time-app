@@ -17,6 +17,13 @@ import {
 
 const STORAGE_KEY = '@kojori_settings_v2';
 export type SharedDirection = 'toKojori' | 'toTbilisi';
+/**
+ * Governs what happens when the user opens the app:
+ * - 'ask': show the start screen so the user picks a destination manually.
+ * - 'smart': use the device location to auto-pick (falls back to 'ask' if detection fails or is slow).
+ * - 'remember': bypass the start screen and resume the last chosen direction.
+ */
+export type LaunchBehavior = 'ask' | 'smart' | 'remember';
 
 export interface Settings {
   /** Stop IDs shown as chips on home screen (→ Tbilisi direction) */
@@ -41,10 +48,8 @@ export interface Settings {
   debugOptionsUnlocked: boolean;
   /** Force one inferred cancelled-bus case on Home for UI testing */
   cancelledBusDemo: boolean;
-  /** Enable automatic location-based direction suggestions */
-  enableSmartDirection: boolean;
-  /** Keep first-run smart direction nudge from repeating forever */
-  hasSeenSmartDirectionPrompt: boolean;
+  /** What to do on launch: ask, use location, or restore last direction */
+  launchBehavior: LaunchBehavior;
 }
 
 const DEFAULTS: Settings = {
@@ -59,9 +64,18 @@ const DEFAULTS: Settings = {
   themeMode: DEFAULT_APP_THEME_MODE,
   debugOptionsUnlocked: false,
   cancelledBusDemo: false,
-  enableSmartDirection: false,
-  hasSeenSmartDirectionPrompt: false,
+  launchBehavior: 'ask',
 };
+
+// Collapse the legacy two-toggle model (enableSmartDirection + skipStartScreen) onto the new enum.
+function migrateLaunchBehavior(raw: Record<string, unknown>): LaunchBehavior {
+  if (raw.launchBehavior === 'ask' || raw.launchBehavior === 'smart' || raw.launchBehavior === 'remember') {
+    return raw.launchBehavior;
+  }
+  if (raw.enableSmartDirection) return 'smart';
+  if (raw.skipStartScreen) return 'remember';
+  return 'ask';
+}
 
 interface SettingsCtx {
   settings: Settings;
@@ -93,7 +107,16 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     AsyncStorage.getItem(STORAGE_KEY)
       .then(raw => {
-        if (raw) setSettings({ ...DEFAULTS, ...JSON.parse(raw) });
+        if (!raw) return;
+        const parsed = JSON.parse(raw) as Record<string, unknown>;
+        const {
+          enableSmartDirection: _legacySmart,
+          skipStartScreen: _legacySkip,
+          hasSeenSmartDirectionPrompt: _legacyPrompt,
+          ...rest
+        } = parsed;
+        const launchBehavior = migrateLaunchBehavior(parsed);
+        setSettings({ ...DEFAULTS, ...(rest as Partial<Settings>), launchBehavior });
       })
       .catch(() => { })
       .finally(() => setIsLoaded(true));

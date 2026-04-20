@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { DirectionToggle } from '@/components/direction-toggle';
+import { DirectionPickerSheet, DirectionPill } from '@/components/direction-picker';
 import { StopSelector } from '@/components/stop-selector';
 import { TtcStatusHeaderBadge } from '@/components/ttc-status-banner';
 import { BottomTabInset, alpha, type AppColors } from '@/constants/theme';
@@ -68,8 +68,9 @@ export default function TimetableScreen() {
   const colors = useAppColors();
   const styles = useTimetableStyles();
   const insets = useSafeAreaInsets();
-  const { settings, setSharedDirection, update, toggleKojoriFavorite, toggleTbilisiFavorite } = useSettings();
+  const { settings, update, toggleKojoriFavorite, toggleTbilisiFavorite } = useSettings();
   const [filter, setFilter] = useState<Filter>('all');
+  const [directionSheetOpen, setDirectionSheetOpen] = useState(false);
   const direction = settings.sharedDirection;
 
   const favoriteIds = direction === 'toKojori' ? settings.tbilisiFavorites : settings.kojoriFavorites;
@@ -126,7 +127,10 @@ export default function TimetableScreen() {
     <View style={[styles.screen, { paddingTop: insets.top }]}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Timetable</Text>
+        <DirectionPill
+          accentColor={accentColor}
+          onPress={() => setDirectionSheetOpen(true)}
+        />
         <TtcStatusHeaderBadge />
         <View style={styles.headerRight}>
           {isLoading ? (
@@ -137,16 +141,10 @@ export default function TimetableScreen() {
         </View>
       </View>
 
-      <View style={styles.toggleWrap}>
-        <DirectionToggle
-          value={direction}
-          onChange={setSharedDirection}
-          options={[
-            { value: 'toKojori', label: '→ Kojori', accentColor: colors.route380 },
-            { value: 'toTbilisi', label: '→ Tbilisi', accentColor: colors.route316 },
-          ]}
-        />
-      </View>
+      <DirectionPickerSheet
+        visible={directionSheetOpen}
+        onClose={() => setDirectionSheetOpen(false)}
+      />
 
       <SectionList
         sections={sections}
@@ -234,13 +232,10 @@ function createStyles(C: AppColors) {
     paddingHorizontal: 20,
     paddingVertical: 14,
   },
-  headerTitle: { color: C.text, fontSize: 20, fontWeight: '700', letterSpacing: -0.3 },
   headerRight: { minWidth: 72, alignItems: 'flex-end' },
   headerCount: { color: C.textDim, fontSize: 13, fontWeight: '500' },
 
-  toggleWrap: { paddingHorizontal: 20, paddingBottom: 12 },
-
-  stopSelectorWrap: { paddingBottom: 10 },
+  stopSelectorWrap: { paddingTop: 6, paddingBottom: 10 },
 
   filterRow: { flexDirection: 'row', gap: 8, paddingBottom: 12 },
   filterChip: {

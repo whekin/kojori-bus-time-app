@@ -314,6 +314,27 @@ export function StopSelector({
               showsVerticalScrollIndicator={false}
               contentContainerStyle={styles.optionsContent}>
               {optionList}
+              {addStopModal ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Add another stop"
+                  onPress={() => {
+                    setOpen(false);
+                    setAddOpen(true);
+                  }}
+                  style={({ pressed }) => [
+                    styles.addStopBtn,
+                    {
+                      borderColor: accentColor + '55',
+                      backgroundColor: pressed ? accentColor + '18' : accentColor + '0C',
+                    },
+                  ]}>
+                  <Text style={[styles.addStopPlus, { color: accentColor }]}>+</Text>
+                  <Text style={[styles.addStopText, { color: accentColor }]}>
+                    Add another stop
+                  </Text>
+                </Pressable>
+              ) : null}
             </ScrollView>
           </View>
         </View>

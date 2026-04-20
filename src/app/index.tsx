@@ -1,16 +1,15 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { useQueryClient } from '@tanstack/react-query';
 import { useLocalSearchParams } from 'expo-router';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, AppState, Linking, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View, ViewStyle } from 'react-native';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, AppState, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View, ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { DirectionToggle } from '@/components/direction-toggle';
+import { DirectionPickerSheet, DirectionPill } from '@/components/direction-picker';
 import { StopSelector } from '@/components/stop-selector';
 import { alpha, BottomTabInset, type AppColors } from '@/constants/theme';
 import { useAppColors } from '@/hooks/use-app-colors';
 import { useArrivals } from '@/hooks/use-arrivals';
-import { useLocation } from '@/hooks/use-location';
 import { useSchedule } from '@/hooks/use-schedule';
 import { useSettings } from '@/hooks/use-settings';
 import { useStopNames } from '@/hooks/use-stop-names';
@@ -712,20 +711,9 @@ export default function HomeScreen({ isActive = false }: { isActive?: boolean })
     settings,
     update,
     setSharedDirection,
-    hasManualDirectionOverride,
-    isLoaded,
     toggleKojoriFavorite,
     toggleTbilisiFavorite,
   } = useSettings();
-  const {
-    detectedMode,
-    permission,
-    canAskAgain,
-    isLocating,
-    locationError,
-    requestLocationAccess,
-    refreshLocation,
-  } = useLocation(settings.enableSmartDirection);
   const { status: ttcStatus, lastSuccessAt } = useTtcHealth();
   const { widgetMode, widgetStopId } = useLocalSearchParams<{
     widgetMode?: string;
@@ -734,14 +722,9 @@ export default function HomeScreen({ isActive = false }: { isActive?: boolean })
 
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [now, setNow] = useState(() => new Date());
+  const [directionSheetOpen, setDirectionSheetOpen] = useState(false);
   const handledWidgetLink = useRef<string | null>(null);
   const mode = directionToMode(settings.sharedDirection);
-
-  useEffect(() => {
-    if (!isLoaded || !settings.enableSmartDirection || hasManualDirectionOverride || !detectedMode) return;
-
-    setSharedDirection(modeToDirection(detectedMode), false);
-  }, [detectedMode, hasManualDirectionOverride, isLoaded, setSharedDirection, settings.enableSmartDirection]);
 
   useEffect(() => {
     if (widgetMode !== 'kojori' && widgetMode !== 'tbilisi') return;
@@ -804,56 +787,6 @@ export default function HomeScreen({ isActive = false }: { isActive?: boolean })
   const accentColor = mode === 'kojori' ? colors.route380 : colors.route316;
   const activeDirection = settings.sharedDirection;
   const activeStopId = mode === 'kojori' ? settings.activeTbilisiStopId : settings.activeKojoriStopId;
-  const showLocationStatus =
-    (!settings.hasSeenSmartDirectionPrompt && !settings.enableSmartDirection) ||
-    (settings.enableSmartDirection && (
-      (permission !== 'granted' && permission !== 'unknown') ||
-      hasManualDirectionOverride ||
-      isLocating ||
-      Boolean(locationError)));
-
-  function handleModeToggle(next: SharedMode) {
-    setSharedDirection(modeToDirection(next));
-  }
-
-  const handleEnableLocation = useCallback(async () => {
-    setSharedDirection(settings.sharedDirection, false);
-
-    if (!settings.enableSmartDirection) {
-      const result = await requestLocationAccess();
-
-      if (result === 'granted') {
-        update({
-          enableSmartDirection: true,
-          hasSeenSmartDirectionPrompt: true,
-        });
-        return;
-      }
-
-      if (result === 'denied' || result === 'blocked') {
-        update({ hasSeenSmartDirectionPrompt: true });
-      }
-      return;
-    }
-
-    if (permission === 'granted') {
-      await refreshLocation();
-      return;
-    }
-
-    const result = await requestLocationAccess();
-    if (result === 'denied' || result === 'blocked') {
-      update({ hasSeenSmartDirectionPrompt: true });
-    }
-  }, [
-    permission,
-    refreshLocation,
-    requestLocationAccess,
-    setSharedDirection,
-    settings.enableSmartDirection,
-    settings.sharedDirection,
-    update,
-  ]);
 
   async function handleRefresh() {
     if (isRefreshing) return;
@@ -923,127 +856,15 @@ export default function HomeScreen({ isActive = false }: { isActive?: boolean })
       });
     }
 
-    if (!showLocationStatus) return items;
-
-    if (!settings.enableSmartDirection && !settings.hasSeenSmartDirectionPrompt) {
-      items.push({
-        key: 'location',
-        dismissToken: 'location:first-run',
-        label: 'Try smart direction',
-        detail: 'First run: turn on smart direction and allow location if you want app to suggest Kojori or Tbilisi automatically.',
-        actionLabel: 'Turn on',
-        onAction: handleEnableLocation,
-        onDismiss: () => {
-          update({ hasSeenSmartDirectionPrompt: true });
-        },
-        accentColor: colors.primary,
-        textColor: colors.text,
-      });
-      return items;
-    }
-
-    if (isLocating) {
-      items.push({
-        key: 'location',
-        dismissToken: 'location:checking',
-        label: 'Checking location',
-        detail: 'Finding whether you are closer to Kojori or Tbilisi for automatic direction.',
-        accentColor: colors.primary,
-        textColor: colors.text,
-      });
-      return items;
-    }
-
-    if (hasManualDirectionOverride) {
-      items.push({
-        key: 'location',
-        dismissToken: 'location:manual',
-        label: 'Manual direction',
-        detail: 'You switched direction manually. Use location again if you want the app to suggest the right side automatically.',
-        actionLabel: permission === 'granted' ? 'Use my location' : 'Enable location',
-        onAction: handleEnableLocation,
-        accentColor,
-        textColor: colors.text,
-      });
-      return items;
-    }
-
-    if (permission === 'denied' && !canAskAgain) {
-      items.push({
-        key: 'location',
-        dismissToken: 'location:blocked',
-        label: 'Location blocked',
-        detail: 'Open system settings to turn location back on for automatic direction suggestions. Manual switching still works.',
-        actionLabel: 'Open settings',
-        onAction: () => {
-          void Linking.openSettings();
-        },
-        accentColor: colors.warning,
-        textColor: colors.sand,
-      });
-      return items;
-    }
-
-    if (permission === 'denied') {
-      items.push({
-        key: 'location',
-        dismissToken: 'location:denied',
-        label: 'Location off',
-        detail: 'Allow location if you want the app to switch between Kojori and Tbilisi automatically. You can still control it manually.',
-        actionLabel: 'Allow location',
-        onAction: handleEnableLocation,
-        accentColor: colors.warning,
-        textColor: colors.sand,
-      });
-      return items;
-    }
-
-    if (locationError) {
-      items.push({
-        key: 'location',
-        dismissToken: 'location:error',
-        label: 'Location error',
-        detail: 'Automatic direction is available, but the last location check failed. Try again or keep using the manual toggle.',
-        actionLabel: 'Try again',
-        onAction: handleEnableLocation,
-        accentColor: colors.warning,
-        textColor: colors.sand,
-      });
-      return items;
-    }
-
-    items.push({
-      key: 'location',
-      dismissToken: 'location:enable',
-      label: 'Enable location',
-      detail: 'Allow location to suggest whether you are heading to Kojori or Tbilisi automatically. You can keep using the toggle whenever you want.',
-      actionLabel: 'Enable location',
-      onAction: handleEnableLocation,
-      accentColor: colors.primary,
-      textColor: colors.text,
-    });
     return items;
   }, [
-    canAskAgain,
     colors.error,
-    colors.primary,
     colors.rose,
     colors.sand,
     colors.warning,
-    colors.text,
-    handleEnableLocation,
-    hasManualDirectionOverride,
-    isLocating,
     lastSuccessAt,
-    locationError,
-    permission,
     queryClient,
-    settings.enableSmartDirection,
-    settings.hasSeenSmartDirectionPrompt,
-    showLocationStatus,
     ttcStatus,
-    accentColor,
-    update,
   ]);
 
   return (
@@ -1051,8 +872,10 @@ export default function HomeScreen({ isActive = false }: { isActive?: boolean })
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <View style={[styles.locationDot, { backgroundColor: accentColor }]} />
-          <Text style={styles.headerCity}>{mode === 'kojori' ? 'Tbilisi' : 'Kojori'}</Text>
+          <DirectionPill
+            accentColor={accentColor}
+            onPress={() => setDirectionSheetOpen(true)}
+          />
         </View>
         <View style={styles.headerCenter}>
           <StatusIsland items={statusItems} />
@@ -1072,17 +895,12 @@ export default function HomeScreen({ isActive = false }: { isActive?: boolean })
         </View>
       </View>
 
-      {/* Mode toggle */}
-      <View style={styles.toggleWrap}>
-        <DirectionToggle
-          value={mode}
-          onChange={handleModeToggle}
-          options={[
-            { value: 'kojori', label: '→ Kojori', accentColor: colors.route380 },
-            { value: 'tbilisi', label: '→ Tbilisi', accentColor: colors.route316 },
-          ]}
-        />
-      </View>
+      <DirectionPickerSheet
+        visible={directionSheetOpen}
+        onClose={() => setDirectionSheetOpen(false)}
+      />
+
+      <View style={styles.contentTopSpacer} />
 
       {mode === 'kojori' ? (
           <ToKojoriView
@@ -1127,11 +945,10 @@ function createStyles(C: AppColors) {
     paddingTop: 14,
     paddingBottom: 12,
   },
-  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 8, width: 92 },
+  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 8, minWidth: 128, flexShrink: 0 },
   headerCenter: { flex: 1, alignItems: 'center', paddingHorizontal: 8 },
-  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 8, width: 92, justifyContent: 'flex-end' },
-  locationDot: { width: 8, height: 8, borderRadius: 4 },
-  headerCity: { color: C.text, fontSize: 16, fontWeight: '600', letterSpacing: 0.2 },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 8, minWidth: 92, justifyContent: 'flex-end', flexShrink: 0 },
+  contentTopSpacer: { height: 12 },
   headerClock: { color: C.textDim, fontSize: 15, letterSpacing: 0.4 },
   statusIslandWrap: { alignItems: 'center', gap: 8, maxWidth: '100%' },
   statusIslandRow: {
@@ -1224,12 +1041,6 @@ function createStyles(C: AppColors) {
     justifyContent: 'center',
   },
   refreshGlyph: { fontSize: 16, fontWeight: '700', color: C.textDim },
-
-  toggleWrap: {
-    paddingHorizontal: CONTENT_SIDE,
-    paddingTop: 4,
-    paddingBottom: CONTENT_SIDE,
-  },
 
   modeContainer: { flex: 1 },
   pageScroll: { flex: 1 },

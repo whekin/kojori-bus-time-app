@@ -5,12 +5,12 @@ import { Animated, Easing, Image, Pressable, StyleSheet, Text, View } from 'reac
 import MapView, { Marker, Polyline, type Region } from 'react-native-maps';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { DirectionToggle } from '@/components/direction-toggle';
+import { DirectionPickerSheet, DirectionPill } from '@/components/direction-picker';
 import { TtcStatusChip } from '@/components/ttc-status-banner';
 import { BottomTabInset } from '@/constants/theme';
 import { useAppColors, useResolvedAppThemeMode } from '@/hooks/use-app-colors';
 import { useRoutePolylines } from '@/hooks/use-route-polylines';
-import { useTtcHealth } from '@/hooks/use-ttc-health';
+import { useSettings } from '@/hooks/use-settings';
 import { useVehiclePositions } from '@/hooks/use-vehicle-positions';
 import { splitPolylinesByOverlap } from '@/utils/polyline-offset';
 
@@ -27,8 +27,6 @@ const MAP_BOUNDS = {
   lonMin: 44.65,
   lonMax: 44.87,
 };
-
-type Direction = 'toKojori' | 'toTbilisi';
 
 type ExploreScreenProps = {
   isActive?: boolean;
@@ -69,7 +67,9 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
   const styles = useMemo(() => createStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
   const mapRef = useRef<MapView>(null);
-  const [direction, setDirection] = useState<Direction>('toKojori');
+  const { settings } = useSettings();
+  const direction = settings.sharedDirection;
+  const [directionSheetOpen, setDirectionSheetOpen] = useState(false);
   const lastFitKeyRef = useRef<string | null>(null);
 
   const [mapReady, setMapReady] = useState(false);
@@ -87,7 +87,6 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
 
   const { data: routeData } = useRoutePolylines(direction);
   const { data: livePositions = [], refetch, isFetching } = useVehiclePositions(direction, isActive);
-  const { status: ttcStatus, lastSuccessAt } = useTtcHealth();
 
   const spinAnim = useRef(new Animated.Value(0)).current;
 
@@ -349,14 +348,10 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
 
       {/* Top controls */}
       <View style={[styles.topPanel, { top: insets.top + 12 }]}>
-        <DirectionToggle
-          value={direction}
-          onChange={setDirection}
-          options={[
-            { value: 'toKojori', label: '→ Kojori', accentColor: colors.route380 },
-            { value: 'toTbilisi', label: '→ Tbilisi', accentColor: colors.route316 },
-          ]}
-          style={styles.directionToggle}
+        <DirectionPill
+          accentColor={direction === 'toKojori' ? colors.route380 : colors.route316}
+          onPress={() => setDirectionSheetOpen(true)}
+          style={styles.directionPill}
         />
 
         <View style={styles.legendRow}>
@@ -409,6 +404,11 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
         </View>
       ) : null}
 
+      <DirectionPickerSheet
+        visible={directionSheetOpen}
+        onClose={() => setDirectionSheetOpen(false)}
+      />
+
       {mapTimedOut ? (
         <View style={styles.configOverlay} pointerEvents="none">
           <Text style={styles.configTitle}>Map not loading</Text>
@@ -431,8 +431,9 @@ function createStyles(C: ReturnType<typeof useAppColors>) {
     right: 16,
     gap: 8,
   },
-  directionToggle: {
-    backgroundColor: `${C.panel}E0`,
+  directionPill: {
+    alignSelf: 'flex-start',
+    backgroundColor: `${C.panel}E6`,
   },
   legendRow: {
     flexDirection: 'row',

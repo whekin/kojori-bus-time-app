@@ -1,5 +1,26 @@
 # Changelog
 
+## v2026.4.21
+
+### New
+
+- **Start screen** — first-launch destination picker with hand-drawn landmark illustrations (Azeula fortress ruins for Kojori, Sameba Cathedral for Tbilisi); preloads arrivals so the departures screen lands without a spinner
+- **Direction pill** — single header control across Departures, Map, and Timetable; tap to switch direction, enable smart detection, or refresh location. Replaces the ambiguous arrow toggle with an explicit "to <destination>" label
+- **Add stop from the picker sheet** — reorder sheet now has an "Add another stop" action, so you can add new stops without needing exactly one already
+
+### Improved
+
+- Map tab now respects the shared direction instead of resetting on every open
+- Smart direction rechecks on every launch and foreground instead of riding a 30-min cache; cache (15 min) only seeds the UI instantly while a fresh fetch runs in parallel
+- Settings now has a single **On launch** choice: ask every time, use location, or remember the last direction
+- Smart direction auto-skips the start screen when it resolves within ~1.8 s of launch; slow or failed detection still falls back to the manual picker
+
+### Fixed
+
+- Direction arrow was ambiguous about which side you were going to — dedicated destination picker removes the guesswork
+- Smart direction was inverted — detecting you in Tbilisi set the direction *to* Tbilisi instead of suggesting Kojori. Now suggests the opposite side from your location.
+- "Checking location" no longer lingers — location detection now falls back within 2 seconds instead of hanging on the loading state
+
 ## v2026.4.15
 
 First public release of **Kojoring Time** — a real-time transit companion for Kojori–Tbilisi bus routes 380 and 316.

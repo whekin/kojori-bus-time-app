@@ -1,6 +1,7 @@
 import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useCallback, useEffect, useState } from 'react';
+import { AppState } from 'react-native';
 
 import { KOJORI_BOUNDS } from '@/services/ttc';
 
@@ -16,8 +17,9 @@ type CachedLocation = {
 };
 
 const LOCATION_CACHE_KEY = '@kojori_last_location_v1';
-const FRESH_LOCATION_TTL_MS = 30 * 60 * 1000;
-const LOCATION_TIMEOUT_MS = 3000;
+// Cache seeds UI instantly but never substitutes for a fresh fetch on open/foreground.
+const FRESH_LOCATION_TTL_MS = 15 * 60 * 1000;
+const LOCATION_TIMEOUT_MS = 2000;
 const STARTUP_QUERY_DELAY_MS = 300;
 const LIVE_QUERY_COOLDOWN_MS = 6000;
 
@@ -69,6 +71,25 @@ function delay(ms: number) {
   return new Promise<void>(resolve => setTimeout(resolve, ms));
 }
 
+function remainingTimeMs(startedAt: number) {
+  return Math.max(1, LOCATION_TIMEOUT_MS - (Date.now() - startedAt));
+}
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number) {
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+  try {
+    return await Promise.race<T>([
+      promise,
+      new Promise<T>((_, reject) => {
+        timeoutId = setTimeout(() => reject(new Error('Location timeout')), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+}
+
 export function useLocation(enabled = true) {
   const [permission, setPermission] = useState<Permission>('unknown');
   const [detectedMode, setDetectedMode] = useState<LocationMode>(null);
@@ -76,31 +97,41 @@ export function useLocation(enabled = true) {
   const [isLocating, setIsLocating] = useState(false);
   const [locationError, setLocationError] = useState<string | null>(null);
 
-  const detectCurrentMode = useCallback(async (options?: { allowFreshCache?: boolean; startupDelayMs?: number }) => {
-    setIsLocating(true);
+  const detectCurrentMode = useCallback(async (options?: { startupDelayMs?: number }) => {
     setLocationError(null);
+    const startedAt = Date.now();
 
     try {
       const cached = await readCachedLocation();
+      const cacheFresh = Boolean(cached && isFreshCachedLocation(cached));
 
-      if (options?.allowFreshCache && cached && isFreshCachedLocation(cached)) {
+      // Seed UI from fresh cache immediately — user sees a direction without waiting.
+      if (cached && cacheFresh) {
         setDetectedMode(cached.mode);
-        return true;
       }
 
-      if (cached && shouldCooldownLiveQuery(cached) && isFreshCachedLocation(cached)) {
-        setDetectedMode(cached.mode);
-        return true;
+      // Prevent rapid back-to-back fetches (e.g. tap refresh twice, foreground churn).
+      if (cached && shouldCooldownLiveQuery(cached)) {
+        return cacheFresh;
       }
+
+      setIsLocating(true);
 
       if ((options?.startupDelayMs ?? 0) > 0) {
-        await delay(options?.startupDelayMs ?? 0);
+        const delayMs = Math.min(options?.startupDelayMs ?? 0, remainingTimeMs(startedAt));
+        await delay(delayMs);
       }
 
-      const lastKnown = await Location.getLastKnownPositionAsync({
-        maxAge: FRESH_LOCATION_TTL_MS,
-        requiredAccuracy: 1000,
-      });
+      // Mark the attempt now so concurrent calls hit the cooldown guard above.
+      await markLocationAttempt(cached);
+
+      const lastKnown = await withTimeout(
+        Location.getLastKnownPositionAsync({
+          maxAge: FRESH_LOCATION_TTL_MS,
+          requiredAccuracy: 1000,
+        }),
+        remainingTimeMs(startedAt),
+      );
 
       if (lastKnown) {
         const mode = getModeFromCoords(lastKnown.coords.latitude, lastKnown.coords.longitude);
@@ -114,23 +145,19 @@ export function useLocation(enabled = true) {
         return true;
       }
 
-      await markLocationAttempt(cached);
-
-      const timeoutPromise = new Promise<null>((_, reject) =>
-        setTimeout(() => reject(new Error('Location timeout')), LOCATION_TIMEOUT_MS)
+      const loc = await withTimeout(
+        Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+        }),
+        remainingTimeMs(startedAt),
       );
 
-      const locationPromise = Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Balanced,
-      });
-
-      const loc = await Promise.race([locationPromise, timeoutPromise]);
-
       if (!loc) {
-        // Timeout occurred
-        setDetectedMode(null);
-        setLocationError('Location check timed out.');
-        return false;
+        if (!cacheFresh) {
+          setDetectedMode(null);
+          setLocationError('Location check timed out.');
+        }
+        return cacheFresh;
       }
 
       const mode = getModeFromCoords(loc.coords.latitude, loc.coords.longitude);
@@ -178,7 +205,7 @@ export function useLocation(enabled = true) {
 
       if (status === 'granted') {
         setPermission('granted');
-        void detectCurrentMode({ allowFreshCache: true, startupDelayMs: STARTUP_QUERY_DELAY_MS });
+        void detectCurrentMode({ startupDelayMs: STARTUP_QUERY_DELAY_MS });
         return;
       }
 
@@ -187,6 +214,20 @@ export function useLocation(enabled = true) {
 
     void hydratePermission();
     return () => { cancelled = true; };
+  }, [detectCurrentMode, enabled]);
+
+  useEffect(() => {
+    if (!enabled) return;
+
+    const sub = AppState.addEventListener('change', async state => {
+      if (state !== 'active') return;
+      const { status } = await Location.getForegroundPermissionsAsync();
+      if (status !== 'granted') return;
+      // Always recheck on foreground — cooldown inside detectCurrentMode prevents thrash.
+      void detectCurrentMode();
+    });
+
+    return () => sub.remove();
   }, [detectCurrentMode, enabled]);
 
   const requestLocationAccess = useCallback(async () => {
@@ -198,7 +239,7 @@ export function useLocation(enabled = true) {
 
       if (currentPermission.status === 'granted') {
         setPermission('granted');
-        await detectCurrentMode({ allowFreshCache: true, startupDelayMs: STARTUP_QUERY_DELAY_MS });
+        await detectCurrentMode({ startupDelayMs: STARTUP_QUERY_DELAY_MS });
         return 'granted' satisfies LocationAccessResult;
       }
 
@@ -235,9 +276,15 @@ export function useLocation(enabled = true) {
     return detectCurrentMode();
   }, [detectCurrentMode, enabled, permission]);
 
+  // detectedMode = where the user currently is.
+  // suggestedMode = where they most likely want to go (the opposite side).
+  const suggestedMode: LocationMode =
+    detectedMode === 'kojori' ? 'tbilisi' : detectedMode === 'tbilisi' ? 'kojori' : null;
+
   return {
     permission,
     detectedMode,
+    suggestedMode,
     canAskAgain,
     isLocating,
     locationError,

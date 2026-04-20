@@ -42,7 +42,7 @@ import {
 import { useAppColors, useResolvedAppThemeMode } from '@/hooks/use-app-colors';
 import { useLocation } from '@/hooks/use-location';
 import { useRouteStops } from '@/hooks/use-route-stops';
-import { useSettings } from '@/hooks/use-settings';
+import { useSettings, type LaunchBehavior } from '@/hooks/use-settings';
 import { useStopNames } from '@/hooks/use-stop-names';
 import { useTtcQueryLog } from '@/hooks/use-ttc-query-log';
 import { useTtcOfflineStatus } from '@/hooks/use-ttc-offline';
@@ -85,6 +85,11 @@ const THEME_MODE_OPTIONS: { value: AppThemeMode; label: string; caption: string 
   { value: 'system', label: 'System', caption: 'Follow device' },
   { value: 'light', label: 'Light', caption: 'Always bright' },
   { value: 'dark', label: 'Dark', caption: 'Always moody' },
+];
+const LAUNCH_BEHAVIOR_OPTIONS: { value: LaunchBehavior; label: string; caption: string }[] = [
+  { value: 'ask', label: 'Ask me each time', caption: 'Always show the destination screen on open.' },
+  { value: 'smart', label: 'Use my location', caption: 'Try location first, then fall back to asking if needed.' },
+  { value: 'remember', label: 'Remember last direction', caption: 'Open straight into the last direction you used.' },
 ];
 const LEGAL_BASE_URL = 'https://github.com/whekin/kojori-bus-time-app/blob/main/release/google-play';
 const LEGAL_URLS = {
@@ -731,7 +736,8 @@ export default function SettingsScreen() {
     permission,
     locationError,
     requestLocationAccess,
-  } = useLocation(settings.enableSmartDirection);
+    isLocating,
+  } = useLocation(settings.launchBehavior === 'smart');
   const [modal, setModal] = useState<'kojori' | 'tbilisi' | 'widget-kojori' | 'widget-tbilisi' | null>(null);
   const [showPermissionModal, setShowPermissionModal] = useState(false);
   const [noticeModal, setNoticeModal] = useState<NoticeModalState | null>(null);
@@ -788,12 +794,6 @@ export default function SettingsScreen() {
   useEffect(() => {
     paletteCarouselRef.current?.scrollTo({ index: paletteIndex, animated: true });
   }, [paletteIndex]);
-
-  useEffect(() => {
-    if (permission !== 'denied' || !settings.enableSmartDirection) return;
-
-    update({ enableSmartDirection: false });
-  }, [permission, settings.enableSmartDirection, update]);
 
   async function handleClearCache() {
     Alert.alert(
@@ -866,63 +866,58 @@ export default function SettingsScreen() {
     }
   }
 
-  async function handleSmartDirectionToggle(value: boolean) {
-    if (value) {
-      const result = permission === 'granted' ? 'granted' : await requestLocationAccess();
+  async function handleLaunchBehaviorSelect(value: LaunchBehavior) {
+    update({ launchBehavior: value });
 
-      if (result === 'blocked') {
-        setShowPermissionModal(true);
-        return;
-      }
+    if (value !== 'smart' || permission === 'granted') {
+      return;
+    }
 
-      if (result !== 'granted') {
-        return;
-      }
-
-      update({
-        enableSmartDirection: true,
-        hasSeenSmartDirectionPrompt: true,
-      });
-    } else {
-      update({
-        enableSmartDirection: false,
-        hasSeenSmartDirectionPrompt: true,
-      });
+    const result = await requestLocationAccess();
+    if (result === 'blocked') {
+      setShowPermissionModal(true);
     }
   }
 
-  const smartDirectionStatus = (() => {
-    if (!settings.enableSmartDirection) {
+  const launchBehaviorStatus = (() => {
+    if (settings.launchBehavior === 'ask') {
       return {
-        title: 'Smart direction is off',
-        note: 'Direction stays manual only. The app will not suggest Kojori or Tbilisi automatically.',
+        title: 'Ask every time',
+        note: 'The start screen opens on each launch so the destination stays explicit.',
+      };
+    }
+
+    if (settings.launchBehavior === 'remember') {
+      return {
+        title: 'Restore last direction',
+        note: 'The app skips the start screen and opens directly into the last direction you used.',
       };
     }
 
     if (permission === 'granted') {
       if (hasManualDirectionOverride) {
         return {
-          title: 'Manual direction is active',
-          note: 'The app can switch back automatically once you use location again from Departures.',
+          title: 'Using location with manual override',
+          note: 'Launch will still try location first. Your current in-app direction stays manual until you ask for location again.',
         };
       }
 
       return {
-        title: 'Smart direction is on',
-        note: 'Kojori and Tbilisi direction can update automatically from your current location.',
+        title: 'Using location on launch',
+        note: 'The app will try your location first, then fall back to asking if detection is slow or unclear.',
       };
     }
 
     if (permission === 'denied') {
       return {
         title: 'Location permission is off',
-        note: 'Smart direction is enabled, but Android location access is unavailable.',
+        note: 'Use my location is selected, but launch will fall back to asking until permission is granted.',
       };
     }
 
     return {
       title: 'Location is not ready yet',
-      note: 'Smart direction is enabled and will start working once location becomes available.',
+      note: 'Use my location is selected. Permission will be requested inline when available.',
     };
   })();
 
@@ -1022,22 +1017,67 @@ export default function SettingsScreen() {
         </View>
 
         <View style={styles.sectionMeta}>
-          <Text style={styles.sectionHeader}>SMART DIRECTION</Text>
-          <Text style={styles.sectionNote}>Turn automatic location-based direction switching on or off.</Text>
+          <Text style={styles.sectionHeader}>ON LAUNCH</Text>
+          <Text style={styles.sectionNote}>Choose whether the app should ask, use location, or restore your last direction.</Text>
         </View>
         <View style={styles.card}>
-          <View style={styles.toggleRow}>
-            <View style={styles.toggleCopy}>
-              <Text style={styles.toggleLabel}>{smartDirectionStatus.title}</Text>
-              <Text style={styles.toggleNote}>
-                {locationError ?? smartDirectionStatus.note}
-              </Text>
-            </View>
-            <SettingsSwitch
-              value={settings.enableSmartDirection}
-              onValueChange={handleSmartDirectionToggle}
-              accentColor={colors.primary}
-            />
+          {LAUNCH_BEHAVIOR_OPTIONS.map((option, index) => {
+            const selected = settings.launchBehavior === option.value;
+
+            return (
+              <React.Fragment key={option.value}>
+                {index > 0 ? <View style={styles.itemDivider} /> : null}
+                <Pressable
+                  onPress={() => {
+                    void handleLaunchBehaviorSelect(option.value);
+                  }}
+                  style={({ pressed }) => [
+                    styles.launchBehaviorRow,
+                    {
+                      backgroundColor: selected
+                        ? alpha(colors.primary, '12')
+                        : pressed
+                          ? colors.panel
+                          : colors.surface,
+                    },
+                  ]}>
+                  <View style={styles.launchBehaviorCopy}>
+                    <Text style={styles.launchBehaviorLabel}>{option.label}</Text>
+                    <Text style={styles.launchBehaviorNote}>{option.caption}</Text>
+                  </View>
+                  <View style={styles.launchBehaviorControl}>
+                    {option.value === 'smart' && isLocating ? (
+                      <ActivityIndicator color={colors.primary} size="small" />
+                    ) : (
+                      <View
+                        style={[
+                          styles.launchBehaviorRadio,
+                          selected && {
+                            borderColor: colors.primary,
+                            backgroundColor: alpha(colors.primary, '18'),
+                          },
+                        ]}>
+                        {selected ? (
+                          <View
+                            style={[
+                              styles.launchBehaviorRadioDot,
+                              { backgroundColor: colors.primary },
+                            ]}
+                          />
+                        ) : null}
+                      </View>
+                    )}
+                  </View>
+                </Pressable>
+              </React.Fragment>
+            );
+          })}
+          <View style={styles.itemDivider} />
+          <View style={styles.launchBehaviorFooter}>
+            <Text style={styles.launchBehaviorFooterTitle}>{launchBehaviorStatus.title}</Text>
+            <Text style={styles.launchBehaviorFooterNote}>
+              {locationError ?? launchBehaviorStatus.note}
+            </Text>
           </View>
         </View>
 
@@ -1485,6 +1525,44 @@ function createStyles(C: AppColors) {
     toggleCopy: { flex: 1, gap: 3 },
     toggleLabel: { color: C.text, fontSize: 15, fontWeight: '500' },
     toggleNote: { color: C.textDim, fontSize: 12, lineHeight: 17 },
+    launchBehaviorRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 14,
+      paddingHorizontal: 16,
+      paddingVertical: 15,
+    },
+    launchBehaviorCopy: { flex: 1, gap: 3 },
+    launchBehaviorLabel: { color: C.text, fontSize: 15, fontWeight: '600' },
+    launchBehaviorNote: { color: C.textDim, fontSize: 12, lineHeight: 17 },
+    launchBehaviorControl: {
+      width: 22,
+      alignItems: 'center',
+      justifyContent: 'center',
+      flexShrink: 0,
+    },
+    launchBehaviorRadio: {
+      width: 20,
+      height: 20,
+      borderRadius: 999,
+      borderWidth: 1.5,
+      borderColor: C.borderStrong,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: C.panel,
+    },
+    launchBehaviorRadioDot: {
+      width: 8,
+      height: 8,
+      borderRadius: 999,
+    },
+    launchBehaviorFooter: {
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      gap: 3,
+    },
+    launchBehaviorFooterTitle: { color: C.text, fontSize: 13, fontWeight: '600' },
+    launchBehaviorFooterNote: { color: C.textDim, fontSize: 12, lineHeight: 17 },
     themeModeRow: { flexDirection: 'row', gap: 10, padding: 12 },
     themeModePressable: { flex: 1 },
     themeModeButton: {
