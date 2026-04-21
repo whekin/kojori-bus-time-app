@@ -145,10 +145,10 @@ class WidgetListFactory(
     views.setViewVisibility(R.id.toggle_row_h, if (narrow) View.GONE else View.VISIBLE)
     views.setViewVisibility(R.id.toggle_row_v, if (narrow) View.VISIBLE else View.GONE)
 
-    styleToggleButton(views, R.id.toggle_kojori, "Kojori", direction == "kojori", palette.route380)
-    styleToggleButton(views, R.id.toggle_tbilisi, "Tbilisi", direction == "tbilisi", palette.route316)
-    styleToggleButton(views, R.id.toggle_kojori_v, "→ Kojori", direction == "kojori", palette.route380)
-    styleToggleButton(views, R.id.toggle_tbilisi_v, "→ Tbilisi", direction == "tbilisi", palette.route316)
+    styleToggleButton(views, R.id.toggle_kojori, "to Kojori", direction == "kojori", palette.route380)
+    styleToggleButton(views, R.id.toggle_tbilisi, "to Tbilisi", direction == "tbilisi", palette.route316)
+    styleToggleButton(views, R.id.toggle_kojori_v, "to Kojori", direction == "kojori", palette.route380)
+    styleToggleButton(views, R.id.toggle_tbilisi_v, "to Tbilisi", direction == "tbilisi", palette.route316)
 
     val kojoriIntent = baseActionIntent("kojori").apply {
       action = "expo.modules.kojoriwidget.SET_DIRECTION"

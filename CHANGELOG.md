@@ -14,6 +14,7 @@
 - Smart direction rechecks on every launch and foreground instead of riding a 30-min cache; cache (15 min) only seeds the UI instantly while a fresh fetch runs in parallel
 - Settings now has a single **On launch** choice: ask every time, use location, or remember the last direction
 - Smart direction auto-skips the start screen when it resolves within ~1.8 s of launch; slow or failed detection still falls back to the manual picker
+- Android widget now uses `to Kojori` / `to Tbilisi` wording instead of arrow-based direction labels, matching the app UI
 
 ### Fixed
 

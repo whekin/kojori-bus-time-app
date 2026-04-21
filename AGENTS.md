@@ -46,6 +46,8 @@ Native module at `modules/kojori-widget/`. Three sizes (2x2, 2x3, 3x3). Schedule
 
 **CHANGELOG.md**: Must have a `## vX.Y.Z` section matching release version. Release script extracts this section for GitHub release notes. Group changes under `### New`, `### Improved`, `### Fixed`, `### Infra`.
 
+Keep `CHANGELOG.md` current during normal development too. Before creating a commit, add or update the relevant user-facing notes instead of deferring changelog work until release time.
+
 ## Common Pitfalls
 
 - TTC API omits the actual first Tbilisi stop (Elene Akhvlediani `1:2994`) — app adds it as fallback

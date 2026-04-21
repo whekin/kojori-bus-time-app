@@ -60,7 +60,7 @@
       android:gravity="center"
       android:paddingHorizontal="8dp"
       android:paddingVertical="5dp"
-      android:text="Kojori"
+      android:text="to Kojori"
       android:textColor="@color/widget_amber"
       android:textSize="11sp"
       android:textStyle="bold" />
@@ -73,7 +73,7 @@
       android:gravity="center"
       android:paddingHorizontal="8dp"
       android:paddingVertical="5dp"
-      android:text="Tbilisi"
+      android:text="to Tbilisi"
       android:textColor="@color/widget_text_dim"
       android:textSize="11sp"
       android:textStyle="bold" />
