@@ -271,16 +271,17 @@ export function loadBakedData(client: QueryClient) {
 
   // Route stops
   for (const direction of ['toKojori', 'toTbilisi'] as Direction[]) {
-    type StopEntry = { stop: { id: string; name: string } };
+    type StopEntry = { stop: { id: string; name: string; lat?: number; lon?: number } };
     const stopsForDir380 = (BAKED_STOPS[`380_${direction}` as keyof typeof BAKED_STOPS] as unknown as StopEntry[]) ?? [];
     const stopsForDir316 = (BAKED_STOPS[`316_${direction}` as keyof typeof BAKED_STOPS] as unknown as StopEntry[]) ?? [];
     const merged = dedupeStops([
-      ...stopsForDir380.map(s => ({ id: s.stop.id, label: s.stop.name })),
-      ...stopsForDir316.map(s => ({ id: s.stop.id, label: s.stop.name })),
+      ...stopsForDir380.map(s => ({ id: s.stop.id, label: s.stop.name, lat: s.stop.lat, lon: s.stop.lon })),
+      ...stopsForDir316.map(s => ({ id: s.stop.id, label: s.stop.name, lat: s.stop.lat, lon: s.stop.lon })),
     ]);
     // TTC omits the actual first Tbilisi stop — prepend it
     if (direction === 'toKojori' && !merged.some(s => s.id === '1:2994')) {
-      merged.unshift({ id: '1:2994', label: 'Elene Akhvlediani Street' });
+      const firstTbilisiStop = ALL_TBILISI_STOPS.find(stop => stop.id === '1:2994');
+      merged.unshift(firstTbilisiStop ?? { id: '1:2994', label: 'Elene Akhvlediani Street' });
     }
     client.setQueryData(['route-stops', direction], merged);
   }
@@ -295,17 +296,18 @@ export function getBakedSchedule(routeId: string, patternSuffix: string): Schedu
 }
 
 export function getBakedRouteStops(direction: Direction): StopInfo[] {
-  type StopEntry = { stop: { id: string; name: string } };
+  type StopEntry = { stop: { id: string; name: string; lat?: number; lon?: number } };
 
   const stopsForDir380 = (BAKED_STOPS[`380_${direction}` as keyof typeof BAKED_STOPS] as unknown as StopEntry[]) ?? [];
   const stopsForDir316 = (BAKED_STOPS[`316_${direction}` as keyof typeof BAKED_STOPS] as unknown as StopEntry[]) ?? [];
   const merged = dedupeStops([
-    ...stopsForDir380.map(s => ({ id: s.stop.id, label: s.stop.name })),
-    ...stopsForDir316.map(s => ({ id: s.stop.id, label: s.stop.name })),
+    ...stopsForDir380.map(s => ({ id: s.stop.id, label: s.stop.name, lat: s.stop.lat, lon: s.stop.lon })),
+    ...stopsForDir316.map(s => ({ id: s.stop.id, label: s.stop.name, lat: s.stop.lat, lon: s.stop.lon })),
   ]);
 
   if (direction === 'toKojori' && !merged.some(s => s.id === '1:2994')) {
-    merged.unshift({ id: '1:2994', label: 'Elene Akhvlediani Street' });
+    const firstTbilisiStop = ALL_TBILISI_STOPS.find(stop => stop.id === '1:2994');
+    merged.unshift(firstTbilisiStop ?? { id: '1:2994', label: 'Elene Akhvlediani Street' });
   }
 
   return merged;
@@ -347,7 +349,8 @@ export async function fetchRouteStopsForDirection(direction: Direction): Promise
   const merged = dedupeStops([...stops380, ...stops316]);
   // TTC omits the actual first Tbilisi stop (Elene Akhvlediani) — prepend it
   if (direction === 'toKojori' && !merged.some(s => s.id === '1:2994')) {
-    merged.unshift({ id: '1:2994', label: 'Elene Akhvlediani Street' });
+    const firstTbilisiStop = ALL_TBILISI_STOPS.find(stop => stop.id === '1:2994');
+    merged.unshift(firstTbilisiStop ?? { id: '1:2994', label: 'Elene Akhvlediani Street' });
   }
   return merged;
 }

@@ -1,9 +1,10 @@
-import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import React, { useMemo } from 'react';
-import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, View, ViewStyle } from 'react-native';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import { Modal, Pressable, StyleSheet, Text, View, ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { alpha, type AppColors } from '@/constants/theme';
+import { LocationActionCard } from '@/components/location-action-card';
 import { useAppColors } from '@/hooks/use-app-colors';
 import { useLocation } from '@/hooks/use-location';
 import { useSettings, type SharedDirection } from '@/hooks/use-settings';
@@ -91,8 +92,7 @@ function DirectionPickerSheetInner({ onClose }: { onClose: () => void }) {
     permission,
     isLocating,
     locationError,
-    requestLocationAccess,
-    refreshLocation,
+    requestLocationSelection,
   } = useLocation(true);
 
   const activeMode = directionToMode(settings.sharedDirection);
@@ -103,15 +103,9 @@ function DirectionPickerSheetInner({ onClose }: { onClose: () => void }) {
   }
 
   async function handleUseLocation() {
-    if (permission === 'granted') {
-      const ok = await refreshLocation();
-      if (ok && suggestedMode) setSharedDirection(modeToDirection(suggestedMode), false);
-      return;
-    }
-
-    const result = await requestLocationAccess();
-    if (result === 'granted') {
-      if (suggestedMode) setSharedDirection(modeToDirection(suggestedMode), false);
+    const result = await requestLocationSelection({ forceFresh: true });
+    if (result.access === 'granted' && result.suggestedMode) {
+      setSharedDirection(modeToDirection(result.suggestedMode), false);
     }
   }
 
@@ -162,37 +156,24 @@ function DirectionPickerSheetInner({ onClose }: { onClose: () => void }) {
             })}
           </View>
 
-          <Pressable
+          <LocationActionCard
+            title={locationError ? 'Location unavailable' : 'Use my location'}
+            subtitle={
+              isLocating
+                ? 'Detecting where you are…'
+                : locationError
+                  ? 'Timed out. Tap to retry, or choose a direction manually.'
+                  : suggestedMode
+                    ? `Suggested: ${suggestedMode === 'kojori' ? 'Kojori' : 'Tbilisi'}. Tap to refresh.`
+                    : permission === 'granted'
+                      ? 'Tap to refresh location'
+                      : 'Auto-pick direction once from where you are'
+            }
             onPress={handleUseLocation}
-            disabled={isLocating}
-            style={({ pressed }) => [
-              styles.smartRow,
-              {
-                borderColor: permission === 'granted' ? alpha(colors.primary, '55') : colors.border,
-                backgroundColor: pressed ? colors.surfaceHigh : colors.surface,
-              },
-            ]}>
-            <MaterialCommunityIcons
-              name={permission === 'granted' ? 'crosshairs-gps' : 'crosshairs'}
-              size={18}
-              color={permission === 'granted' ? colors.primary : colors.textDim}
-            />
-            <View style={styles.smartCopy}>
-              <Text style={styles.smartTitle}>Use my location</Text>
-              <Text style={styles.smartSub} numberOfLines={2}>
-                {isLocating
-                  ? 'Checking…'
-                  : locationError
-                    ? locationError
-                    : suggestedMode
-                      ? `Suggested: ${suggestedMode === 'kojori' ? 'Kojori' : 'Tbilisi'}. Tap to refresh.`
-                      : permission === 'granted'
-                        ? 'Tap to refresh location'
-                        : 'Auto-pick direction once from where you are'}
-              </Text>
-            </View>
-            {isLocating ? <ActivityIndicator size="small" color={colors.primary} /> : null}
-          </Pressable>
+            isLocating={isLocating}
+            tone={locationError ? 'error' : permission === 'granted' ? 'active' : 'default'}
+            compact
+          />
         </View>
       </View>
     </Modal>
@@ -280,18 +261,6 @@ function createSheetStyles(C: AppColors) {
     optionLabel: { fontSize: 18, fontWeight: '700' },
     optionTo: { fontSize: 15, fontWeight: '500', fontStyle: 'italic' },
     optionSub: { color: C.textDim, fontSize: 12 },
-    smartRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 12,
-      paddingHorizontal: 14,
-      paddingVertical: 12,
-      borderRadius: 16,
-      borderWidth: 1,
-    },
-    smartCopy: { flex: 1, minWidth: 0, gap: 2 },
-    smartTitle: { color: C.text, fontSize: 14, fontWeight: '700' },
-    smartSub: { color: C.textDim, fontSize: 12, lineHeight: 16 },
   });
 }
 

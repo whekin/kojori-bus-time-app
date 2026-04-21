@@ -21,6 +21,10 @@ interface StopSelectorProps {
   activeStopId: string;
   accentColor: string;
   onSelectStop: (id: string) => void;
+  locationSuggestion?: {
+    stop: StopSelectorItem;
+    distanceMeters: number;
+  };
   onAddStop?: () => void;
   addStopModal?: {
     title: string;
@@ -36,7 +40,12 @@ function formatIndex(index: number) {
 }
 
 function formatCount(currentIndex: number, total: number) {
-  return `${formatIndex(currentIndex)} / ${formatIndex(total - 1)}`;
+  return `${formatIndex(currentIndex)} / ${formatIndex(total)}`;
+}
+
+function formatDistance(distanceMeters: number) {
+  if (distanceMeters < 1000) return `${Math.round(distanceMeters)} m away`;
+  return `${(distanceMeters / 1000).toFixed(distanceMeters < 10_000 ? 1 : 0)} km away`;
 }
 
 function StopOption({
@@ -122,6 +131,7 @@ export function StopSelector({
   activeStopId,
   accentColor,
   onSelectStop,
+  locationSuggestion,
   onAddStop,
   addStopModal,
   label = 'BOARDING STOP',
@@ -313,6 +323,36 @@ export function StopSelector({
             <ScrollView
               showsVerticalScrollIndicator={false}
               contentContainerStyle={styles.optionsContent}>
+              {locationSuggestion ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Use closest stop ${locationSuggestion.stop.label}`}
+                  onPress={() => {
+                    onSelectStop(locationSuggestion.stop.id);
+                    setOpen(false);
+                  }}
+                  style={({ pressed }) => [
+                    styles.closestStopCard,
+                    {
+                      borderColor: accentColor + '45',
+                      backgroundColor: pressed ? accentColor + '18' : accentColor + '10',
+                    },
+                  ]}>
+                  <View style={styles.closestStopIcon}>
+                    <MaterialCommunityIcons name="crosshairs-gps" size={18} color={accentColor} />
+                  </View>
+                  <View style={styles.closestStopCopy}>
+                    <Text style={styles.closestStopEyebrow}>CLOSEST STOP</Text>
+                    <Text style={[styles.closestStopTitle, { fontFamily: DISPLAY }]} numberOfLines={2}>
+                      {locationSuggestion.stop.label}
+                    </Text>
+                    <Text style={[styles.closestStopDistance, { fontFamily: MONO }]}>
+                      {formatDistance(locationSuggestion.distanceMeters)}
+                    </Text>
+                  </View>
+                  <MaterialCommunityIcons name="chevron-right" size={18} color={accentColor} />
+                </Pressable>
+              ) : null}
               {optionList}
               {addStopModal ? (
                 <Pressable
@@ -545,6 +585,42 @@ function createStyles(C: ReturnType<typeof useAppColors>) {
   optionsContent: {
     gap: 10,
     paddingBottom: 6,
+  },
+  closestStopCard: {
+    minHeight: 88,
+    borderRadius: 20,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  closestStopIcon: {
+    width: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  closestStopCopy: {
+    flex: 1,
+    minWidth: 0,
+    gap: 5,
+  },
+  closestStopEyebrow: {
+    color: C.textFaint,
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 2.1,
+  },
+  closestStopTitle: {
+    color: C.text,
+    fontSize: 18,
+    lineHeight: 22,
+    fontWeight: '700',
+  },
+  closestStopDistance: {
+    color: C.textDim,
+    fontSize: 11,
   },
   option: {
     minHeight: 92,

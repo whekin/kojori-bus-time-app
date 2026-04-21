@@ -1,13 +1,24 @@
 import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 
-import { KOJORI_BOUNDS } from '@/services/ttc';
+import { ALL_KOJORI_STOPS, ALL_TBILISI_STOPS, type StopInfo } from '@/services/ttc';
 
 type Permission = 'unknown' | 'granted' | 'denied';
 type LocationMode = 'kojori' | 'tbilisi' | null; // null = permission denied / not yet known
 type LocationAccessResult = 'granted' | 'denied' | 'blocked' | 'error';
+type ResolvedLocation = {
+  latitude: number;
+  longitude: number;
+  timestamp: number;
+};
+type LocationResolutionResult = {
+  ok: boolean;
+  detectedMode: LocationMode;
+  suggestedMode: LocationMode;
+  resolvedLocation: ResolvedLocation | null;
+};
 type CachedLocation = {
   latitude: number;
   longitude: number;
@@ -22,15 +33,59 @@ const FRESH_LOCATION_TTL_MS = 15 * 60 * 1000;
 const LOCATION_TIMEOUT_MS = 2000;
 const STARTUP_QUERY_DELAY_MS = 300;
 const LIVE_QUERY_COOLDOWN_MS = 6000;
+const MAX_CLASSIFICATION_DISTANCE_METERS = 25_000;
+const MIN_CLASSIFICATION_GAP_METERS = 2_500;
+const FRESH_LAST_KNOWN_MAX_AGE_MS = 2 * 60 * 1000;
 
-function getModeFromCoords(latitude: number, longitude: number): Exclude<LocationMode, null> {
-  const inKojori =
-    latitude >= KOJORI_BOUNDS.latMin &&
-    latitude <= KOJORI_BOUNDS.latMax &&
-    longitude >= KOJORI_BOUNDS.lonMin &&
-    longitude <= KOJORI_BOUNDS.lonMax;
+type GeoStop = StopInfo & Required<Pick<StopInfo, 'lat' | 'lon'>>;
 
-  return inKojori ? 'kojori' : 'tbilisi';
+const KOJORI_LOCATION_STOPS = ALL_KOJORI_STOPS.filter(
+  (stop): stop is GeoStop => typeof stop.lat === 'number' && typeof stop.lon === 'number',
+);
+const TBILISI_LOCATION_STOPS = ALL_TBILISI_STOPS.filter(
+  (stop): stop is GeoStop => typeof stop.lat === 'number' && typeof stop.lon === 'number',
+);
+
+function distanceMeters(
+  latitudeA: number,
+  longitudeA: number,
+  latitudeB: number,
+  longitudeB: number,
+) {
+  const earthRadiusMeters = 6_371_000;
+  const toRadians = (degrees: number) => (degrees * Math.PI) / 180;
+  const deltaLat = toRadians(latitudeB - latitudeA);
+  const deltaLon = toRadians(longitudeB - longitudeA);
+  const latA = toRadians(latitudeA);
+  const latB = toRadians(latitudeB);
+
+  const haversine =
+    Math.sin(deltaLat / 2) ** 2 +
+    Math.cos(latA) * Math.cos(latB) * Math.sin(deltaLon / 2) ** 2;
+
+  return 2 * earthRadiusMeters * Math.asin(Math.sqrt(haversine));
+}
+
+function nearestStopDistanceMeters(latitude: number, longitude: number, stops: GeoStop[]) {
+  return Math.min(
+    ...stops.map(stop => distanceMeters(latitude, longitude, stop.lat, stop.lon)),
+  );
+}
+
+function getModeFromCoords(latitude: number, longitude: number): LocationMode {
+  const kojoriDistance = nearestStopDistanceMeters(latitude, longitude, KOJORI_LOCATION_STOPS);
+  const tbilisiDistance = nearestStopDistanceMeters(latitude, longitude, TBILISI_LOCATION_STOPS);
+  const closestDistance = Math.min(kojoriDistance, tbilisiDistance);
+
+  if (!Number.isFinite(closestDistance) || closestDistance > MAX_CLASSIFICATION_DISTANCE_METERS) {
+    return null;
+  }
+
+  if (Math.abs(kojoriDistance - tbilisiDistance) < MIN_CLASSIFICATION_GAP_METERS) {
+    return null;
+  }
+
+  return kojoriDistance < tbilisiDistance ? 'kojori' : 'tbilisi';
 }
 
 function isFreshCachedLocation(cached: CachedLocation | null, now = Date.now()) {
@@ -75,6 +130,27 @@ function remainingTimeMs(startedAt: number) {
   return Math.max(1, LOCATION_TIMEOUT_MS - (Date.now() - startedAt));
 }
 
+function isRecentTimestamp(timestamp: number | null | undefined, maxAgeMs: number) {
+  if (!timestamp) return false;
+  return Date.now() - timestamp <= maxAgeMs;
+}
+
+function getSuggestedMode(detectedMode: LocationMode): LocationMode {
+  return detectedMode === 'kojori' ? 'tbilisi' : detectedMode === 'tbilisi' ? 'kojori' : null;
+}
+
+function createLocationResolutionResult(
+  detectedMode: LocationMode,
+  resolvedLocation: ResolvedLocation | null,
+): LocationResolutionResult {
+  return {
+    ok: Boolean(detectedMode && resolvedLocation),
+    detectedMode,
+    suggestedMode: getSuggestedMode(detectedMode),
+    resolvedLocation,
+  };
+}
+
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number) {
   let timeoutId: ReturnType<typeof setTimeout> | null = null;
 
@@ -93,26 +169,56 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number) {
 export function useLocation(enabled = true) {
   const [permission, setPermission] = useState<Permission>('unknown');
   const [detectedMode, setDetectedMode] = useState<LocationMode>(null);
+  const [resolvedLocation, setResolvedLocation] = useState<ResolvedLocation | null>(null);
   const [canAskAgain, setCanAskAgain] = useState(true);
   const [isLocating, setIsLocating] = useState(false);
   const [locationError, setLocationError] = useState<string | null>(null);
+  const latestRequestIdRef = useRef(0);
 
-  const detectCurrentMode = useCallback(async (options?: { startupDelayMs?: number }) => {
+  const detectCurrentMode = useCallback(async (options?: { startupDelayMs?: number; forceFresh?: boolean }) => {
+    const requestId = ++latestRequestIdRef.current;
+    let didTimeout = false;
+    const watchdogId = setTimeout(() => {
+      if (latestRequestIdRef.current !== requestId) return;
+      didTimeout = true;
+      setIsLocating(false);
+      setLocationError('Location check timed out.');
+    }, LOCATION_TIMEOUT_MS);
+
+    const isExpired = () => didTimeout || latestRequestIdRef.current !== requestId;
+
     setLocationError(null);
     const startedAt = Date.now();
+    const forceFresh = Boolean(options?.forceFresh);
 
     try {
       const cached = await readCachedLocation();
       const cacheFresh = Boolean(cached && isFreshCachedLocation(cached));
 
-      // Seed UI from fresh cache immediately — user sees a direction without waiting.
-      if (cached && cacheFresh) {
+      if (cached && cacheFresh && !forceFresh) {
         setDetectedMode(cached.mode);
+        setResolvedLocation({
+          latitude: cached.latitude,
+          longitude: cached.longitude,
+          timestamp: cached.timestamp,
+        });
+      } else if (forceFresh) {
+        setDetectedMode(null);
+        setResolvedLocation(null);
       }
 
-      // Prevent rapid back-to-back fetches (e.g. tap refresh twice, foreground churn).
-      if (cached && shouldCooldownLiveQuery(cached)) {
-        return cacheFresh;
+      if (!forceFresh && cached && shouldCooldownLiveQuery(cached)) {
+        if (!cacheFresh) {
+          setLocationError('Location check timed out.');
+          setIsLocating(false);
+        }
+        return cacheFresh
+          ? createLocationResolutionResult(cached.mode, {
+              latitude: cached.latitude,
+              longitude: cached.longitude,
+              timestamp: cached.timestamp,
+            })
+          : createLocationResolutionResult(null, null);
       }
 
       setIsLocating(true);
@@ -120,29 +226,54 @@ export function useLocation(enabled = true) {
       if ((options?.startupDelayMs ?? 0) > 0) {
         const delayMs = Math.min(options?.startupDelayMs ?? 0, remainingTimeMs(startedAt));
         await delay(delayMs);
+        if (isExpired()) return createLocationResolutionResult(null, null);
       }
 
-      // Mark the attempt now so concurrent calls hit the cooldown guard above.
       await markLocationAttempt(cached);
+      if (isExpired()) return createLocationResolutionResult(null, null);
 
-      const lastKnown = await withTimeout(
-        Location.getLastKnownPositionAsync({
-          maxAge: FRESH_LOCATION_TTL_MS,
-          requiredAccuracy: 1000,
-        }),
-        remainingTimeMs(startedAt),
-      );
+      let lastKnown: Location.LocationObject | null = null;
+      let lastKnownMode: LocationMode = null;
 
-      if (lastKnown) {
-        const mode = getModeFromCoords(lastKnown.coords.latitude, lastKnown.coords.longitude);
-        setDetectedMode(mode);
-        void writeCachedLocation({
-          latitude: lastKnown.coords.latitude,
-          longitude: lastKnown.coords.longitude,
-          mode,
-          timestamp: lastKnown.timestamp || Date.now(),
-        });
-        return true;
+      if (!forceFresh) {
+        lastKnown = await withTimeout(
+          Location.getLastKnownPositionAsync({
+            maxAge: FRESH_LOCATION_TTL_MS,
+            requiredAccuracy: 1000,
+          }),
+          remainingTimeMs(startedAt),
+        );
+        if (isExpired()) return createLocationResolutionResult(null, null);
+
+        lastKnownMode = lastKnown
+          ? getModeFromCoords(lastKnown.coords.latitude, lastKnown.coords.longitude)
+          : null;
+
+        if (lastKnown) {
+          setResolvedLocation({
+            latitude: lastKnown.coords.latitude,
+            longitude: lastKnown.coords.longitude,
+            timestamp: lastKnown.timestamp || Date.now(),
+          });
+
+          if (lastKnownMode) {
+            setDetectedMode(lastKnownMode);
+            void writeCachedLocation({
+              latitude: lastKnown.coords.latitude,
+              longitude: lastKnown.coords.longitude,
+              mode: lastKnownMode,
+              timestamp: lastKnown.timestamp || Date.now(),
+            });
+          }
+
+          if (lastKnownMode && isRecentTimestamp(lastKnown.timestamp, FRESH_LAST_KNOWN_MAX_AGE_MS)) {
+            return createLocationResolutionResult(lastKnownMode, {
+              latitude: lastKnown.coords.latitude,
+              longitude: lastKnown.coords.longitude,
+              timestamp: lastKnown.timestamp || Date.now(),
+            });
+          }
+        }
       }
 
       const loc = await withTimeout(
@@ -151,16 +282,66 @@ export function useLocation(enabled = true) {
         }),
         remainingTimeMs(startedAt),
       );
+      if (isExpired()) return createLocationResolutionResult(null, null);
 
       if (!loc) {
-        if (!cacheFresh) {
-          setDetectedMode(null);
-          setLocationError('Location check timed out.');
+        if (!forceFresh && (lastKnownMode || cacheFresh)) {
+          if (lastKnownMode && lastKnown) {
+            return createLocationResolutionResult(lastKnownMode, {
+              latitude: lastKnown.coords.latitude,
+              longitude: lastKnown.coords.longitude,
+              timestamp: lastKnown.timestamp || Date.now(),
+            });
+          }
+
+          if (cacheFresh && cached) {
+            return createLocationResolutionResult(cached.mode, {
+              latitude: cached.latitude,
+              longitude: cached.longitude,
+              timestamp: cached.timestamp,
+            });
+          }
         }
-        return cacheFresh;
+
+        setDetectedMode(null);
+        setResolvedLocation(null);
+        setLocationError('Location check timed out.');
+        return createLocationResolutionResult(null, null);
       }
 
+      const nextResolvedLocation = {
+        latitude: loc.coords.latitude,
+        longitude: loc.coords.longitude,
+        timestamp: loc.timestamp || Date.now(),
+      };
       const mode = getModeFromCoords(loc.coords.latitude, loc.coords.longitude);
+      setResolvedLocation(nextResolvedLocation);
+
+      if (!mode) {
+        if (!forceFresh && (lastKnownMode || cacheFresh)) {
+          if (lastKnownMode && lastKnown) {
+            return createLocationResolutionResult(lastKnownMode, {
+              latitude: lastKnown.coords.latitude,
+              longitude: lastKnown.coords.longitude,
+              timestamp: lastKnown.timestamp || Date.now(),
+            });
+          }
+
+          if (cacheFresh && cached) {
+            return createLocationResolutionResult(cached.mode, {
+              latitude: cached.latitude,
+              longitude: cached.longitude,
+              timestamp: cached.timestamp,
+            });
+          }
+        }
+
+        setDetectedMode(null);
+        setResolvedLocation(null);
+        setLocationError('Could not confidently place you near Kojori or Tbilisi.');
+        return createLocationResolutionResult(null, null);
+      }
+
       setDetectedMode(mode);
       void writeCachedLocation({
         latitude: loc.coords.latitude,
@@ -168,21 +349,36 @@ export function useLocation(enabled = true) {
         mode,
         timestamp: loc.timestamp || Date.now(),
       });
-      return true;
+      return createLocationResolutionResult(mode, nextResolvedLocation);
     } catch (error) {
+      if (isExpired()) return createLocationResolutionResult(null, null);
+
       const cached = await readCachedLocation();
-      if (cached && isFreshCachedLocation(cached)) {
+      if (!forceFresh && cached && isFreshCachedLocation(cached)) {
         setDetectedMode(cached.mode);
+        setResolvedLocation({
+          latitude: cached.latitude,
+          longitude: cached.longitude,
+          timestamp: cached.timestamp,
+        });
         setLocationError(null);
-        return true;
+        return createLocationResolutionResult(cached.mode, {
+          latitude: cached.latitude,
+          longitude: cached.longitude,
+          timestamp: cached.timestamp,
+        });
       }
 
       setDetectedMode(null);
+      setResolvedLocation(null);
       const isTimeout = error instanceof Error && error.message === 'Location timeout';
       setLocationError(isTimeout ? 'Location check timed out.' : 'Could not determine your location.');
-      return false;
+      return createLocationResolutionResult(null, null);
     } finally {
-      setIsLocating(false);
+      clearTimeout(watchdogId);
+      if (latestRequestIdRef.current === requestId && !didTimeout) {
+        setIsLocating(false);
+      }
     }
   }, []);
 
@@ -191,6 +387,7 @@ export function useLocation(enabled = true) {
       setIsLocating(false);
       setLocationError(null);
       setDetectedMode(null);
+      setResolvedLocation(null);
       return;
     }
 
@@ -210,6 +407,7 @@ export function useLocation(enabled = true) {
       }
 
       setPermission(status === 'denied' ? 'denied' : 'unknown');
+      setResolvedLocation(null);
     }
 
     void hydratePermission();
@@ -230,8 +428,9 @@ export function useLocation(enabled = true) {
     return () => sub.remove();
   }, [detectCurrentMode, enabled]);
 
-  const requestLocationAccess = useCallback(async () => {
+  const requestLocationAccess = useCallback(async (options?: { forceFresh?: boolean }) => {
     setLocationError(null);
+    const forceFresh = Boolean(options?.forceFresh);
 
     try {
       const currentPermission = await Location.getForegroundPermissionsAsync();
@@ -239,13 +438,17 @@ export function useLocation(enabled = true) {
 
       if (currentPermission.status === 'granted') {
         setPermission('granted');
-        await detectCurrentMode({ startupDelayMs: STARTUP_QUERY_DELAY_MS });
-        return 'granted' satisfies LocationAccessResult;
+        const result = await detectCurrentMode({
+          startupDelayMs: forceFresh ? 0 : STARTUP_QUERY_DELAY_MS,
+          forceFresh,
+        });
+        return result.ok ? ('granted' satisfies LocationAccessResult) : ('error' satisfies LocationAccessResult);
       }
 
       if (currentPermission.status === 'denied' && !currentPermission.canAskAgain) {
         setPermission('denied');
         setDetectedMode(null);
+        setResolvedLocation(null);
         return 'blocked' satisfies LocationAccessResult;
       }
 
@@ -257,14 +460,16 @@ export function useLocation(enabled = true) {
       if (status !== 'granted') {
         setPermission('denied');
         setDetectedMode(null);
+        setResolvedLocation(null);
         return nextCanAskAgain ? 'denied' : 'blocked';
       }
 
       setPermission('granted');
-      await detectCurrentMode();
-      return 'granted';
+      const result = await detectCurrentMode({ forceFresh });
+      return result.ok ? 'granted' : 'error';
     } catch {
       setDetectedMode(null);
+      setResolvedLocation(null);
       setLocationError('Could not determine your location.');
       return 'error';
     }
@@ -273,22 +478,94 @@ export function useLocation(enabled = true) {
   const refreshLocation = useCallback(async () => {
     if (!enabled) return false;
     if (permission !== 'granted') return false;
-    return detectCurrentMode();
+    const result = await detectCurrentMode();
+    return result.ok;
   }, [detectCurrentMode, enabled, permission]);
+
+  const refreshLocationFresh = useCallback(async () => {
+    if (!enabled) return false;
+    if (permission !== 'granted') return false;
+    const result = await detectCurrentMode({ forceFresh: true });
+    return result.ok;
+  }, [detectCurrentMode, enabled, permission]);
+
+  const requestLocationSelection = useCallback(async (options?: { forceFresh?: boolean }) => {
+    const forceFresh = Boolean(options?.forceFresh);
+    setLocationError(null);
+
+    try {
+      const currentPermission = await Location.getForegroundPermissionsAsync();
+      setCanAskAgain(currentPermission.canAskAgain);
+
+      if (currentPermission.status === 'granted') {
+        setPermission('granted');
+        const result = await detectCurrentMode({
+          startupDelayMs: forceFresh ? 0 : STARTUP_QUERY_DELAY_MS,
+          forceFresh,
+        });
+        return {
+          access: result.ok ? ('granted' satisfies LocationAccessResult) : ('error' satisfies LocationAccessResult),
+          ...result,
+        };
+      }
+
+      if (currentPermission.status === 'denied' && !currentPermission.canAskAgain) {
+        setPermission('denied');
+        setDetectedMode(null);
+        setResolvedLocation(null);
+        return {
+          access: 'blocked' as const,
+          ...createLocationResolutionResult(null, null),
+        };
+      }
+
+      const { status, canAskAgain: nextCanAskAgain } =
+        await Location.requestForegroundPermissionsAsync();
+
+      setCanAskAgain(nextCanAskAgain);
+
+      if (status !== 'granted') {
+        setPermission('denied');
+        setDetectedMode(null);
+        setResolvedLocation(null);
+        return {
+          access: nextCanAskAgain ? ('denied' as const) : ('blocked' as const),
+          ...createLocationResolutionResult(null, null),
+        };
+      }
+
+      setPermission('granted');
+      const result = await detectCurrentMode({ forceFresh });
+      return {
+        access: result.ok ? ('granted' as const) : ('error' as const),
+        ...result,
+      };
+    } catch {
+      setDetectedMode(null);
+      setResolvedLocation(null);
+      setLocationError('Could not determine your location.');
+      return {
+        access: 'error' as const,
+        ...createLocationResolutionResult(null, null),
+      };
+    }
+  }, [detectCurrentMode]);
 
   // detectedMode = where the user currently is.
   // suggestedMode = where they most likely want to go (the opposite side).
-  const suggestedMode: LocationMode =
-    detectedMode === 'kojori' ? 'tbilisi' : detectedMode === 'tbilisi' ? 'kojori' : null;
+  const suggestedMode: LocationMode = getSuggestedMode(detectedMode);
 
   return {
     permission,
     detectedMode,
     suggestedMode,
+    resolvedLocation,
     canAskAgain,
     isLocating,
     locationError,
     requestLocationAccess,
+    requestLocationSelection,
     refreshLocation,
+    refreshLocationFresh,
   };
 }

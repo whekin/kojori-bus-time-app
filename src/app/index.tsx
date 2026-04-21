@@ -10,6 +10,8 @@ import { StopSelector } from '@/components/stop-selector';
 import { alpha, BottomTabInset, type AppColors } from '@/constants/theme';
 import { useAppColors } from '@/hooks/use-app-colors';
 import { useArrivals } from '@/hooks/use-arrivals';
+import { useClosestStop } from '@/hooks/use-closest-stop';
+import { useRouteStops } from '@/hooks/use-route-stops';
 import { useSchedule } from '@/hooks/use-schedule';
 import { useSettings } from '@/hooks/use-settings';
 import { useStopNames } from '@/hooks/use-stop-names';
@@ -22,6 +24,7 @@ import {
     injectCancelledDemo,
     mergeArrivalsIntoSchedule,
     ROUTES,
+    type StopInfo,
 } from '@/services/ttc';
 
 const MONO = Platform.select({ android: 'monospace', ios: 'Menlo', default: 'monospace' });
@@ -95,6 +98,28 @@ function getDisplayedDepartures(departures: Departure[]) {
     next,
     upcoming: departures.filter(dep => !hiddenKeys.has(`${dep.key}:${dep.status}`)),
   };
+}
+
+function buildStopSelectorStops({
+  favoriteIds,
+  activeStopId,
+  routeStops,
+  stopNames,
+}: {
+  favoriteIds: string[];
+  activeStopId: string;
+  routeStops: StopInfo[];
+  stopNames: Record<string, string>;
+}) {
+  const routeStopMap = new Map(routeStops.map(stop => [stop.id, stop]));
+  const ids = favoriteIds.includes(activeStopId)
+    ? favoriteIds
+    : [...favoriteIds, activeStopId];
+
+  return ids.map(id => {
+    const base = routeStopMap.get(id) ?? findStop(id) ?? { id, label: `Stop #${id.split(':')[1]}` };
+    return { ...base, label: stopNames[id] ?? base.label };
+  });
 }
 
 // ── Atoms ─────────────────────────────────────────────────────────────────────
@@ -518,10 +543,35 @@ function ToKojoriView({
   const colors = useAppColors();
   const styles = useHomeStyles();
   const stopNames = useStopNames();
-  const favoriteStops = favoriteIds.map(id => {
-    const base = findStop(id) ?? { id, label: `Stop #${id.split(':')[1]}` };
-    return { ...base, label: stopNames[id] ?? base.label };
-  });
+  const { stops: routeStops } = useRouteStops('toKojori');
+  const {
+    closestStop,
+    distanceMeters: closestStopDistance,
+    status: closestStopStatus,
+  } = useClosestStop('toKojori', activeStopId, isActive);
+  const favoriteStops = useMemo(
+    () =>
+      buildStopSelectorStops({
+        favoriteIds,
+        activeStopId,
+        routeStops,
+        stopNames,
+      }),
+    [activeStopId, favoriteIds, routeStops, stopNames],
+  );
+  const locationSuggestion = useMemo(
+    () =>
+      closestStopStatus === 'available' && closestStop && closestStopDistance != null
+        ? {
+            stop: {
+              ...closestStop,
+              label: stopNames[closestStop.id] ?? closestStop.label,
+            },
+            distanceMeters: closestStopDistance,
+          }
+        : undefined,
+    [closestStop, closestStopDistance, closestStopStatus, stopNames],
+  );
 
   const { data: s380, isLoading: l380, isError: e380 } = useSchedule(ROUTES['380'].id, ROUTES['380'].toKojori);
   const { data: s316, isLoading: l316, isError: e316 } = useSchedule(ROUTES['316'].id, ROUTES['316'].toKojori);
@@ -562,6 +612,7 @@ function ToKojoriView({
             activeStopId={activeStopId}
             accentColor={colors.route380}
             onSelectStop={onSelectStop}
+            locationSuggestion={locationSuggestion}
             addStopModal={{
               title: 'Tbilisi Departure Stops',
               direction: 'toKojori',
@@ -623,10 +674,35 @@ function ToTbilisiView({
   const colors = useAppColors();
   const styles = useHomeStyles();
   const stopNames = useStopNames();
-  const favoriteStops = favoriteIds.map(id => {
-    const base = findStop(id) ?? { id, label: `Stop #${id.split(':')[1]}` };
-    return { ...base, label: stopNames[id] ?? base.label };
-  });
+  const { stops: routeStops } = useRouteStops('toTbilisi');
+  const {
+    closestStop,
+    distanceMeters: closestStopDistance,
+    status: closestStopStatus,
+  } = useClosestStop('toTbilisi', activeStopId, isActive);
+  const favoriteStops = useMemo(
+    () =>
+      buildStopSelectorStops({
+        favoriteIds,
+        activeStopId,
+        routeStops,
+        stopNames,
+      }),
+    [activeStopId, favoriteIds, routeStops, stopNames],
+  );
+  const locationSuggestion = useMemo(
+    () =>
+      closestStopStatus === 'available' && closestStop && closestStopDistance != null
+        ? {
+            stop: {
+              ...closestStop,
+              label: stopNames[closestStop.id] ?? closestStop.label,
+            },
+            distanceMeters: closestStopDistance,
+          }
+        : undefined,
+    [closestStop, closestStopDistance, closestStopStatus, stopNames],
+  );
 
   const { data: s380, isLoading: l380, isError: e380 } = useSchedule(ROUTES['380'].id, ROUTES['380'].toTbilisi);
   const { data: s316, isLoading: l316, isError: e316 } = useSchedule(ROUTES['316'].id, ROUTES['316'].toTbilisi);
@@ -667,6 +743,7 @@ function ToTbilisiView({
             activeStopId={activeStopId}
             accentColor={colors.route316}
             onSelectStop={onSelectStop}
+            locationSuggestion={locationSuggestion}
             addStopModal={{
               title: 'Kojori Stops',
               direction: 'toTbilisi',

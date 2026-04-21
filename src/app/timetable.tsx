@@ -15,8 +15,11 @@ import { StopSelector } from '@/components/stop-selector';
 import { TtcStatusHeaderBadge } from '@/components/ttc-status-banner';
 import { BottomTabInset, alpha, type AppColors } from '@/constants/theme';
 import { useAppColors } from '@/hooks/use-app-colors';
+import { useClosestStop } from '@/hooks/use-closest-stop';
+import { useRouteStops } from '@/hooks/use-route-stops';
 import { useSchedule } from '@/hooks/use-schedule';
 import { useSettings } from '@/hooks/use-settings';
+import { useStopNames } from '@/hooks/use-stop-names';
 import {
   BusLine,
   extractStopTimes,
@@ -25,6 +28,7 @@ import {
   parseTimeToMins,
   ROUTES,
   SCHEDULE_STOP_PROXY,
+  type StopInfo,
 } from '@/services/ttc';
 
 const MONO = Platform.select({ android: 'monospace', ios: 'Menlo', default: 'monospace' });
@@ -53,6 +57,28 @@ function groupByPeriod(entries: TimetableEntry[]): TimetableSection[] {
     .filter(s => s.data.length > 0);
 }
 
+function buildStopSelectorStops({
+  favoriteIds,
+  activeStopId,
+  routeStops,
+  stopNames,
+}: {
+  favoriteIds: string[];
+  activeStopId: string;
+  routeStops: StopInfo[];
+  stopNames: Record<string, string>;
+}) {
+  const routeStopMap = new Map(routeStops.map(stop => [stop.id, stop]));
+  const ids = favoriteIds.includes(activeStopId)
+    ? favoriteIds
+    : [...favoriteIds, activeStopId];
+
+  return ids.map(id => {
+    const base = routeStopMap.get(id) ?? findStop(id) ?? { id, label: `Stop #${id.split(':')[1]}` };
+    return { ...base, label: stopNames[id] ?? base.label };
+  });
+}
+
 function BusTag({ bus }: { bus: BusLine }) {
   const colors = useAppColors();
   const styles = useTimetableStyles();
@@ -69,13 +95,42 @@ export default function TimetableScreen() {
   const styles = useTimetableStyles();
   const insets = useSafeAreaInsets();
   const { settings, update, toggleKojoriFavorite, toggleTbilisiFavorite } = useSettings();
+  const stopNames = useStopNames();
   const [filter, setFilter] = useState<Filter>('all');
   const [directionSheetOpen, setDirectionSheetOpen] = useState(false);
   const direction = settings.sharedDirection;
 
   const favoriteIds = direction === 'toKojori' ? settings.tbilisiFavorites : settings.kojoriFavorites;
-  const stops = favoriteIds.map(id => findStop(id) ?? { id, label: `Stop #${id.split(':')[1]}` });
   const stopId = direction === 'toKojori' ? settings.activeTbilisiStopId : settings.activeKojoriStopId;
+  const { stops: routeStops } = useRouteStops(direction);
+  const {
+    closestStop,
+    distanceMeters: closestStopDistance,
+    status: closestStopStatus,
+  } = useClosestStop(direction, stopId);
+  const stops = useMemo(
+    () =>
+      buildStopSelectorStops({
+        favoriteIds,
+        activeStopId: stopId,
+        routeStops,
+        stopNames,
+      }),
+    [favoriteIds, routeStops, stopId, stopNames],
+  );
+  const locationSuggestion = useMemo(
+    () =>
+      closestStopStatus === 'available' && closestStop && closestStopDistance != null
+        ? {
+            stop: {
+              ...closestStop,
+              label: stopNames[closestStop.id] ?? closestStop.label,
+            },
+            distanceMeters: closestStopDistance,
+          }
+        : undefined,
+    [closestStop, closestStopDistance, closestStopStatus, stopNames],
+  );
 
   function handleSelectStop(id: string) {
     if (direction === 'toKojori') {
@@ -163,6 +218,7 @@ export default function TimetableScreen() {
                 activeStopId={stopId}
                 accentColor={accentColor}
                 onSelectStop={handleSelectStop}
+                locationSuggestion={locationSuggestion}
                 addStopModal={{
                   title: direction === 'toKojori' ? 'Tbilisi Departure Stops' : 'Kojori Stops',
                   direction,

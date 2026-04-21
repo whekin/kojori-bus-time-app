@@ -218,9 +218,9 @@ export interface StopInfo {
  * First entry = recommended default.
  */
 export const ALL_TBILISI_STOPS: StopInfo[] = [
-  { id: '1:2994', label: 'Elene Akhvlediani Street' }, // actual first stop — TTC API omits it from schedule
-  { id: '1:3932', label: 'Nikoloz Baratashvili Street' },
-  { id: '1:853', label: 'Sulkhan-Saba Street' },
+  { id: '1:2994', label: 'Elene Akhvlediani Street', lat: 41.697618, lon: 44.809107 }, // actual first stop — TTC API omits it from schedule
+  { id: '1:3932', label: 'Nikoloz Baratashvili Street', lat: 41.696601, lon: 44.803955 },
+  { id: '1:4673', label: 'Mikheil Lermontov Street', lat: 41.691163, lon: 44.798781 },
 ];
 
 /**
@@ -232,10 +232,10 @@ export const SCHEDULE_STOP_PROXY: Record<string, string> = {
 };
 
 export const ALL_KOJORI_STOPS: StopInfo[] = [
-  { id: '1:3078', label: 'Kojori Center' },
-  { id: '1:2856', label: 'Kojori, Vazha-Pshavela St #56' },
-  { id: '1:3782', label: 'Kojori, Alexandre Chkheidze Street' },
-  { id: '1:3537', label: 'Kojori, Nikoloz Baratashvili Street' },
+  { id: '1:3078', label: 'Kojori Center', lat: 41.663244, lon: 44.707207 },
+  { id: '1:2856', label: 'Kojori, Vazha-Pshavela St #56', lat: 41.649232, lon: 44.728292 },
+  { id: '1:3782', label: 'Kojori, Alexandre Chkheidze Street', lat: 41.661244, lon: 44.714077 },
+  { id: '1:3537', label: 'Kojori, Nikoloz Baratashvili Street', lat: 41.659625, lon: 44.719993 },
 ];
 
 /** Default favourite stop IDs shown as chips on home screen */
@@ -251,14 +251,6 @@ export const BUS_COLORS: Record<BusLine, string> = {
   '380': '#F5A20A',
   '316': '#10B8A3',
 };
-
-// Kojori geographic bounding box for location detection
-export const KOJORI_BOUNDS = {
-  latMin: 41.55,
-  latMax: 41.60,
-  lonMin: 44.77,
-  lonMax: 44.82,
-} as const;
 
 // ── API functions ─────────────────────────────────────────────────────────────
 

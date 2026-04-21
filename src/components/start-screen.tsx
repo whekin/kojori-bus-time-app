@@ -1,8 +1,6 @@
-import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { useQueryClient } from '@tanstack/react-query';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import {
-  ActivityIndicator,
   Platform,
   Pressable,
   ScrollView,
@@ -14,9 +12,12 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { KojoriIllustration, TbilisiIllustration } from '@/components/onboarding-illustrations';
+import { LocationActionCard } from '@/components/location-action-card';
 import { alpha, type AppColors } from '@/constants/theme';
 import { useAppColors } from '@/hooks/use-app-colors';
+import { getClosestStopCandidate } from '@/hooks/use-closest-stop';
 import { useLocation } from '@/hooks/use-location';
+import { useRouteStops } from '@/hooks/use-route-stops';
 import { useSettings, type SharedDirection } from '@/hooks/use-settings';
 import { fetchArrivalTimes, SCHEDULE_STOP_PROXY } from '@/services/ttc';
 
@@ -37,14 +38,12 @@ export function StartScreen({ onDone }: { onDone: () => void }) {
   const { settings, update, setSharedDirection } = useSettings();
   const smartEnabled = settings.launchBehavior === 'smart';
   const {
-    suggestedMode,
-    permission,
     isLocating,
     locationError,
-    requestLocationAccess,
+    requestLocationSelection,
   } = useLocation(smartEnabled);
-
-  const [hint, setHint] = useState<Mode | null>(null);
+  const { stops: toKojoriStops } = useRouteStops('toKojori');
+  const { stops: toTbilisiStops } = useRouteStops('toTbilisi');
 
   useEffect(() => {
     // Preload arrivals for both likely-active stops so landing is instant.
@@ -64,26 +63,38 @@ export function StartScreen({ onDone }: { onDone: () => void }) {
     }
   }, [queryClient, settings.activeKojoriStopId, settings.activeTbilisiStopId]);
 
-  useEffect(() => {
-    if (smartEnabled && suggestedMode) {
-      setHint(suggestedMode);
-    }
-  }, [suggestedMode, smartEnabled]);
-
   function handlePick(mode: Mode) {
     setSharedDirection(modeToDirection(mode));
     onDone();
   }
 
   async function handleEnableSmart() {
-    if (smartEnabled) return;
-    const result = await requestLocationAccess();
-    if (result === 'granted') {
-      update({ launchBehavior: 'smart' });
+    const result = await requestLocationSelection({ forceFresh: true });
+    if (result.access !== 'granted' || !result.suggestedMode || !result.resolvedLocation) return;
+
+    const direction = modeToDirection(result.suggestedMode);
+    const routeStops = direction === 'toKojori' ? toKojoriStops : toTbilisiStops;
+    const closestStopResult = getClosestStopCandidate(routeStops, result.resolvedLocation);
+    if (closestStopResult.status !== 'available' || !closestStopResult.closestStop) return;
+
+    if (direction === 'toKojori') {
+      update({
+        launchBehavior: 'smart',
+        activeTbilisiStopId: closestStopResult.closestStop.id,
+      });
+    } else {
+      update({
+        launchBehavior: 'smart',
+        activeKojoriStopId: closestStopResult.closestStop.id,
+      });
     }
+
+    setSharedDirection(direction, false);
+    onDone();
   }
 
   const cardHeight = Math.min(170, Math.max(140, width * 0.42));
+  const smartIssue = Boolean(locationError);
 
   return (
     <View style={[styles.root, { paddingTop: insets.top + 20 }]}>
@@ -100,7 +111,6 @@ export function StartScreen({ onDone }: { onDone: () => void }) {
 
         <View style={styles.cards}>
           {(['kojori', 'tbilisi'] as Mode[]).map(mode => {
-            const isHint = hint === mode;
             const label = mode === 'kojori' ? 'Kojori' : 'Tbilisi';
             const sub = mode === 'kojori' ? 'Up the mountain · 1340 m' : 'Down in the city';
             const accent = mode === 'kojori' ? colors.route380 : colors.route316;
@@ -113,7 +123,7 @@ export function StartScreen({ onDone }: { onDone: () => void }) {
                 style={({ pressed }) => [
                   styles.card,
                   {
-                    borderColor: isHint ? accent : alpha(accent, '35'),
+                    borderColor: alpha(accent, '35'),
                     backgroundColor: pressed ? colors.surfaceHigh : colors.surface,
                     transform: [{ scale: pressed ? 0.99 : 1 }],
                   },
@@ -138,12 +148,6 @@ export function StartScreen({ onDone }: { onDone: () => void }) {
                       dim={colors.textFaint}
                     />
                   )}
-                  {isHint ? (
-                    <View style={[styles.hintBadge, { borderColor: accent, backgroundColor: alpha(accent, '18') }]}>
-                      <MaterialCommunityIcons name="crosshairs-gps" size={12} color={accent} />
-                      <Text style={[styles.hintBadgeText, { color: accent }]}>Near you</Text>
-                    </View>
-                  ) : null}
                 </View>
                 <View style={styles.cardCopy}>
                   <View style={styles.cardHeaderRow}>
@@ -157,39 +161,19 @@ export function StartScreen({ onDone }: { onDone: () => void }) {
           })}
         </View>
 
-        <Pressable
+        <LocationActionCard
+          title={smartIssue ? 'Location unavailable' : smartEnabled ? 'Smart direction on' : 'Use my location'}
+          subtitle={
+            isLocating
+              ? 'Detecting where you are and finding the closest stop…'
+              : locationError
+                ? 'Timed out. Tap to retry, or just choose a destination.'
+                : 'We will detect your direction and closest boarding stop automatically'
+          }
           onPress={handleEnableSmart}
-          disabled={isLocating || (smartEnabled && permission === 'granted')}
-          style={({ pressed }) => [
-            styles.smartCard,
-            {
-              borderColor: smartEnabled ? alpha(colors.primary, '55') : colors.border,
-              backgroundColor: pressed ? colors.surfaceHigh : colors.surface,
-            },
-          ]}>
-          <MaterialCommunityIcons
-            name={smartEnabled ? 'crosshairs-gps' : 'crosshairs'}
-            size={20}
-            color={smartEnabled ? colors.primary : colors.textDim}
-          />
-          <View style={styles.smartCopy}>
-            <Text style={styles.smartTitle}>
-              {smartEnabled ? 'Smart direction on' : 'Use my location'}
-            </Text>
-            <Text style={styles.smartSub}>
-              {isLocating
-                ? 'Detecting where you are…'
-                : locationError
-                  ? locationError
-                  : smartEnabled
-                    ? suggestedMode
-                      ? `Suggested: ${suggestedMode === 'kojori' ? 'Kojori' : 'Tbilisi'}`
-                      : 'Checking location…'
-                    : 'We can highlight the closest destination'}
-            </Text>
-          </View>
-          {isLocating ? <ActivityIndicator size="small" color={colors.primary} /> : null}
-        </Pressable>
+          isLocating={isLocating}
+          tone={smartIssue ? 'error' : smartEnabled ? 'active' : 'default'}
+        />
       </ScrollView>
     </View>
   );
@@ -214,19 +198,6 @@ function createStyles(C: AppColors) {
       justifyContent: 'center',
       overflow: 'hidden',
     },
-    hintBadge: {
-      position: 'absolute',
-      top: 10,
-      right: 10,
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 5,
-      paddingHorizontal: 9,
-      paddingVertical: 5,
-      borderRadius: 999,
-      borderWidth: 1,
-    },
-    hintBadgeText: { fontSize: 11, fontWeight: '800', letterSpacing: 0.4 },
     cardCopy: {
       paddingHorizontal: 18,
       paddingVertical: 14,
@@ -236,18 +207,6 @@ function createStyles(C: AppColors) {
     cardTo: { fontSize: 26, fontWeight: '400', fontStyle: 'italic', letterSpacing: -0.3 },
     cardLabel: { color: C.text, fontSize: 26, fontWeight: '700', letterSpacing: -0.3 },
     cardSub: { color: C.textDim, fontSize: 13, lineHeight: 18 },
-    smartCard: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 12,
-      paddingHorizontal: 14,
-      paddingVertical: 14,
-      borderRadius: 18,
-      borderWidth: 1,
-    },
-    smartCopy: { flex: 1, minWidth: 0, gap: 2 },
-    smartTitle: { color: C.text, fontSize: 14, fontWeight: '700' },
-    smartSub: { color: C.textDim, fontSize: 12, lineHeight: 16 },
     skipRow: {
       flexDirection: 'row',
       alignItems: 'center',

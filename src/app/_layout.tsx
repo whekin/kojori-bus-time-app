@@ -9,7 +9,9 @@ import { AnimatedSplashOverlay, AppReveal } from '@/components/animated-icon';
 import AppTabs from '@/components/app-tabs';
 import { StartScreen } from '@/components/start-screen';
 import { AppColorsProvider, useAppColors, useResolvedAppThemeMode } from '@/hooks/use-app-colors';
+import { getClosestStopCandidate } from '@/hooks/use-closest-stop';
 import { useLocation } from '@/hooks/use-location';
+import { useRouteStops } from '@/hooks/use-route-stops';
 import { SettingsProvider, useSettings, type SharedDirection } from '@/hooks/use-settings';
 import { prefillStopNames } from '@/hooks/use-stop-names';
 import {
@@ -48,12 +50,14 @@ function CachePrefiller() {
 const SMART_DIRECTION_GRACE_MS = 1800;
 
 function AppReady() {
-  const { isLoaded, settings, setSharedDirection } = useSettings();
+  const { isLoaded, settings, setSharedDirection, update } = useSettings();
   const [dismissedStart, setDismissedStart] = useState(false);
   const [waitingForSmart, setWaitingForSmart] = useState(false);
   const graceInitialized = useRef(false);
   const { widgetMode } = useGlobalSearchParams<{ widgetMode?: string }>();
-  const { suggestedMode } = useLocation(settings.launchBehavior === 'smart');
+  const { suggestedMode, resolvedLocation } = useLocation(settings.launchBehavior === 'smart');
+  const { stops: toKojoriStops } = useRouteStops('toKojori');
+  const { stops: toTbilisiStops } = useRouteStops('toTbilisi');
 
   const launchedFromWidget = widgetMode === 'kojori' || widgetMode === 'tbilisi';
 
@@ -72,12 +76,22 @@ function AppReady() {
 
   // If smart direction resolves during the grace window, auto-skip to the app.
   useEffect(() => {
-    if (!waitingForSmart || !suggestedMode) return;
+    if (!waitingForSmart || !suggestedMode || !resolvedLocation) return;
     const direction: SharedDirection = suggestedMode === 'kojori' ? 'toKojori' : 'toTbilisi';
+    const routeStops = direction === 'toKojori' ? toKojoriStops : toTbilisiStops;
+    const closestStopResult = getClosestStopCandidate(routeStops, resolvedLocation);
+    if (closestStopResult.status !== 'available' || !closestStopResult.closestStop) return;
+
+    if (direction === 'toKojori') {
+      update({ activeTbilisiStopId: closestStopResult.closestStop.id });
+    } else {
+      update({ activeKojoriStopId: closestStopResult.closestStop.id });
+    }
+
     setSharedDirection(direction, false);
     setDismissedStart(true);
     setWaitingForSmart(false);
-  }, [suggestedMode, setSharedDirection, waitingForSmart]);
+  }, [resolvedLocation, setSharedDirection, suggestedMode, toKojoriStops, toTbilisiStops, update, waitingForSmart]);
 
   useEffect(() => {
     if (isLoaded && !waitingForSmart) {
