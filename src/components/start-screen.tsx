@@ -1,5 +1,4 @@
-import { useQueryClient } from '@tanstack/react-query';
-import React, { useEffect, useMemo } from 'react';
+import React, { useMemo, useRef } from 'react';
 import {
   Platform,
   Pressable,
@@ -19,7 +18,6 @@ import { getClosestStopCandidate } from '@/hooks/use-closest-stop';
 import { useLocation } from '@/hooks/use-location';
 import { useRouteStops } from '@/hooks/use-route-stops';
 import { useSettings, type SharedDirection } from '@/hooks/use-settings';
-import { fetchArrivalTimes, SCHEDULE_STOP_PROXY } from '@/services/ttc';
 
 const DISPLAY = Platform.select({ android: 'serif', ios: 'Georgia', default: 'serif' });
 
@@ -33,9 +31,9 @@ export function StartScreen({ onDone }: { onDone: () => void }) {
   const colors = useAppColors();
   const styles = useStyles();
   const insets = useSafeAreaInsets();
-  const queryClient = useQueryClient();
   const { width } = useWindowDimensions();
   const { settings, update, setSharedDirection } = useSettings();
+  const pickedRef = useRef(false);
   const smartEnabled = settings.launchBehavior === 'smart';
   const {
     isLocating,
@@ -45,27 +43,13 @@ export function StartScreen({ onDone }: { onDone: () => void }) {
   const { stops: toKojoriStops } = useRouteStops('toKojori');
   const { stops: toTbilisiStops } = useRouteStops('toTbilisi');
 
-  useEffect(() => {
-    // Preload arrivals for both likely-active stops so landing is instant.
-    const stops = [settings.activeTbilisiStopId, settings.activeKojoriStopId]
-      .filter(Boolean)
-      .map(id => SCHEDULE_STOP_PROXY[id] ?? id);
-    const seen = new Set<string>();
-    for (const stopId of stops) {
-      if (seen.has(stopId)) continue;
-      seen.add(stopId);
-      void queryClient.prefetchQuery({
-        queryKey: ['arrivals', stopId],
-        queryFn: () => fetchArrivalTimes(stopId),
-        staleTime: 20_000,
-        meta: { source: 'ttc' },
-      });
-    }
-  }, [queryClient, settings.activeKojoriStopId, settings.activeTbilisiStopId]);
-
   function handlePick(mode: Mode) {
-    setSharedDirection(modeToDirection(mode));
+    if (pickedRef.current) return;
+    pickedRef.current = true;
     onDone();
+    requestAnimationFrame(() => {
+      setSharedDirection(modeToDirection(mode));
+    });
   }
 
   async function handleEnableSmart() {
@@ -119,7 +103,7 @@ export function StartScreen({ onDone }: { onDone: () => void }) {
                 key={mode}
                 accessibilityRole="button"
                 accessibilityLabel={`Go to ${label}`}
-                onPress={() => handlePick(mode)}
+                onPressIn={() => handlePick(mode)}
                 style={({ pressed }) => [
                   styles.card,
                   {

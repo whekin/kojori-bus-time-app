@@ -1,7 +1,7 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import PagerView from 'react-native-pager-view';
-import React, { useCallback, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { InteractionManager, Pressable, StyleSheet, View } from 'react-native';
 import Animated, {
   interpolateColor,
   useAnimatedStyle,
@@ -32,6 +32,8 @@ type TabItem = {
 const NAV_GAP = 10;
 const NAV_PADDING = 10;
 const NAV_HIGHLIGHT_EXTRA = 8;
+const TAB_ROUTES: TabRoute[] = ['index', 'explore', 'timetable', 'settings'];
+const ALL_TAB_INDEXES = new Set(TAB_ROUTES.map((_, index) => index));
 
 const AnimatedIcon = Animated.createAnimatedComponent(MaterialCommunityIcons);
 const AnimatedPagerView = Animated.createAnimatedComponent(PagerView);
@@ -108,12 +110,13 @@ function TabButton({
   );
 }
 
-export default function AppTabs() {
+export default function AppTabs({ deferInactiveTabs = false }: { deferInactiveTabs?: boolean }) {
   const C = useAppColors();
   const styles = React.useMemo(() => createStyles(C), [C]);
   const insets = useSafeAreaInsets();
   const pagerRef = useRef<PagerView>(null);
   const [activeIndex, setActiveIndex] = useState(0);
+  const [mountedIndexes, setMountedIndexes] = useState<ReadonlySet<number>>(() => new Set([0]));
   const [navWidth, setNavWidth] = useState(0);
   const pagerProgress = useSharedValue(0);
   const tabs: TabItem[] = [
@@ -123,10 +126,32 @@ export default function AppTabs() {
     { route: 'settings', title: 'Settings', icon: 'cog', accent: C.primary, render: () => <SettingsScreen /> },
   ];
 
-  const navigateToTab = useCallback((route: TabRoute) => {
-    const idx = tabs.findIndex(t => t.route === route);
-    if (idx >= 0) pagerRef.current?.setPage(idx);
+  useEffect(() => {
+    if (deferInactiveTabs) return;
+
+    const handle = InteractionManager.runAfterInteractions(() => {
+      setMountedIndexes(ALL_TAB_INDEXES);
+    });
+
+    return () => handle.cancel();
+  }, [deferInactiveTabs]);
+
+  const mountTab = useCallback((index: number) => {
+    setMountedIndexes(prev => {
+      if (prev.has(index)) return prev;
+      const next = new Set(prev);
+      next.add(index);
+      return next;
+    });
   }, []);
+
+  const navigateToTab = useCallback((route: TabRoute) => {
+    const idx = TAB_ROUTES.indexOf(route);
+    if (idx >= 0) {
+      mountTab(idx);
+      pagerRef.current?.setPage(idx);
+    }
+  }, [mountTab]);
 
   const pageScrollHandler = usePagerScrollHandler(event => {
     'worklet';
@@ -147,64 +172,66 @@ export default function AppTabs() {
 
   return (
     <TabNavProvider value={navigateToTab}>
-    <View style={styles.shell}>
-      <AnimatedPagerView
-        ref={pagerRef}
-        style={styles.pager}
-        initialPage={0}
-        offscreenPageLimit={3}
-        overScrollMode="never"
-        onPageScroll={pageScrollHandler}
-        onPageSelected={event => {
-          const nextIndex = event.nativeEvent.position;
-          pagerProgress.value = nextIndex;
-          if (nextIndex === activeIndex) return;
-          setActiveIndex(nextIndex);
-        }}>
-        {tabs.map((tab, index) => {
-          return (
-            <View key={tab.route} style={styles.page}>
-              {tab.render(activeIndex === index)}
-            </View>
-          );
-        })}
-      </AnimatedPagerView>
-
-      <View style={[styles.navWrap, { paddingBottom: Math.max(insets.bottom, 10) }]}>
-        <View
-          style={styles.navBar}
-          onLayout={event => {
-            setNavWidth(event.nativeEvent.layout.width);
+      <View style={styles.shell}>
+        <AnimatedPagerView
+          ref={pagerRef}
+          style={styles.pager}
+          initialPage={0}
+          offscreenPageLimit={3}
+          overScrollMode="never"
+          onPageScroll={pageScrollHandler}
+          onPageSelected={event => {
+            const nextIndex = event.nativeEvent.position;
+            pagerProgress.value = nextIndex;
+            mountTab(nextIndex);
+            if (nextIndex === activeIndex) return;
+            setActiveIndex(nextIndex);
           }}>
-          {tabWidth > 0 ? (
-            <Animated.View
-              pointerEvents="none"
-              style={[
-                styles.navHighlight,
-                {
-                  width: tabWidth + NAV_HIGHLIGHT_EXTRA,
-                },
-                highlightStyle,
-              ]}
-            />
-          ) : null}
           {tabs.map((tab, index) => {
             return (
-              <TabButton
-                key={tab.route}
-                tab={tab}
-                index={index}
-                activeIndex={activeIndex}
-                pagerProgress={pagerProgress}
-                onPress={() => {
-                  pagerRef.current?.setPage(index);
-                }}
-              />
+              <View key={tab.route} style={styles.page}>
+                {mountedIndexes.has(index) ? tab.render(activeIndex === index) : null}
+              </View>
             );
           })}
+        </AnimatedPagerView>
+
+        <View style={[styles.navWrap, { paddingBottom: Math.max(insets.bottom, 10) }]}>
+          <View
+            style={styles.navBar}
+            onLayout={event => {
+              setNavWidth(event.nativeEvent.layout.width);
+            }}>
+            {tabWidth > 0 ? (
+              <Animated.View
+                pointerEvents="none"
+                style={[
+                  styles.navHighlight,
+                  {
+                    width: tabWidth + NAV_HIGHLIGHT_EXTRA,
+                  },
+                  highlightStyle,
+                ]}
+              />
+            ) : null}
+            {tabs.map((tab, index) => {
+              return (
+                <TabButton
+                  key={tab.route}
+                  tab={tab}
+                  index={index}
+                  activeIndex={activeIndex}
+                  pagerProgress={pagerProgress}
+                  onPress={() => {
+                    mountTab(index);
+                    pagerRef.current?.setPage(index);
+                  }}
+                />
+              );
+            })}
+          </View>
         </View>
       </View>
-    </View>
     </TabNavProvider>
   );
 }

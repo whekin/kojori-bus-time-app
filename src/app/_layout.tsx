@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useGlobalSearchParams } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import React, { useEffect, useRef, useState } from 'react';
+import { StyleSheet, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { AnimatedSplashOverlay, AppReveal } from '@/components/animated-icon';
@@ -107,17 +108,28 @@ function AppReady() {
   return (
     <>
       <CachePrefiller />
-      {waitingForSmart ? null : showStart ? (
-        <StartScreen onDone={() => setDismissedStart(true)} />
-      ) : (
+      {!waitingForSmart ? (
         <AppReveal>
-          <AppTabs />
+          <AppTabs deferInactiveTabs={showStart} />
         </AppReveal>
-      )}
+      ) : null}
+      {!waitingForSmart && showStart ? (
+        <View style={styles.startOverlay}>
+          <StartScreen onDone={() => setDismissedStart(true)} />
+        </View>
+      ) : null}
       <AnimatedSplashOverlay />
     </>
   );
 }
+
+const styles = StyleSheet.create({
+  startOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 10,
+    elevation: 10,
+  },
+});
 
 function AppThemeShell() {
   const colors = useAppColors();
