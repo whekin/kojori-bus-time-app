@@ -21,6 +21,7 @@ const pkgJsonPath = resolve(root, 'package.json');
 const changelogPath = resolve(root, 'CHANGELOG.md');
 const apkPath = resolve(root, 'android/app/build/outputs/apk/release/app-release.apk');
 const statePath = resolve(root, '.release-state.json');
+const toolPath = ['/opt/homebrew/bin', '/usr/local/bin', process.env.PATH].filter(Boolean).join(':');
 
 type Phase =
   | 'preflight'
@@ -47,6 +48,10 @@ function run(cmd: string, opts: { stdio?: 'inherit' | 'pipe'; allowFailure?: boo
   try {
     return execSync(cmd, {
       cwd: root,
+      env: {
+        ...process.env,
+        PATH: toolPath,
+      },
       stdio: opts.stdio ?? 'inherit',
       encoding: opts.stdio === 'pipe' ? 'utf-8' : undefined,
     });
@@ -248,6 +253,7 @@ if (!isDone(state, 'prebuild')) {
 step('5/7  Build APK');
 
 if (!isDone(state, 'build')) {
+  run('cd android && ./gradlew --stop', { allowFailure: true });
   run('bun android:apk:release');
 
   if (!existsSync(apkPath)) {

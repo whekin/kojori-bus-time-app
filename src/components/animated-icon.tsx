@@ -7,8 +7,8 @@ import { scheduleOnRN } from 'react-native-worklets';
 import type { ReactNode } from 'react';
 
 const INITIAL_SCALE_FACTOR = Dimensions.get('screen').height / 90;
-const SPLASH_DELAY = 400;
-const FADE_DURATION = 500;
+const SPLASH_DELAY = 120;
+const FADE_DURATION = 220;
 const TOTAL_DURATION = SPLASH_DELAY + FADE_DURATION;
 const DURATION = TOTAL_DURATION;
 
@@ -61,12 +61,12 @@ export function AnimatedSplashOverlay() {
 
 const appRevealKeyframe = new Keyframe({
   0: {
-    opacity: 0,
-    transform: [{ scale: 0.95 }],
+    opacity: 0.75,
+    transform: [{ scale: 0.99 }],
   },
   30: {
-    opacity: 0,
-    transform: [{ scale: 0.95 }],
+    opacity: 0.9,
+    transform: [{ scale: 0.995 }],
   },
   100: {
     opacity: 1,

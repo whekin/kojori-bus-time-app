@@ -52,6 +52,7 @@ modules/*/android/.gradle/
 
 # EAS / build artifacts
 *.omx
+.release-state.json
 
 # Oh My OpenCode / local agent artifacts
 .sisyphus/

@@ -1,5 +1,16 @@
 # Changelog
 
+## v2026.5.9
+
+### Improved
+
+- Opening after the destination picker now feels snappier: Departures is prepared behind the picker, heavier tabs wait until after selection, and the launch reveal animation is shorter
+
+### Infra
+
+- Release state is now ignored locally so generated `.release-state.json` files do not block release preflight
+- Release APK builds now restart Gradle with stable tool paths so stale daemon environments do not break Expo autolinking
+
 ## v2026.4.21
 
 ### New
@@ -11,7 +22,6 @@
 
 ### Improved
 
-- Opening after the destination picker now feels snappier by showing departures first and deferring heavier tabs until after launch interactions finish
 - Map tab now respects the shared direction instead of resetting on every open
 - Smart direction rechecks on every launch and foreground instead of riding a 30-min cache; cache (15 min) only seeds the UI instantly while a fresh fetch runs in parallel
 - Settings now has a single **On launch** choice: ask every time, use location, or remember the last direction
