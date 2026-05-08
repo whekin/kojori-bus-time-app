@@ -49,10 +49,14 @@ import { useTtcOfflineStatus } from '@/hooks/use-ttc-offline';
 import { StopInfo } from '@/services/ttc';
 import {
     clearAllTtcCache,
+    refreshTtcOfflineDataset,
     ROUTE_POLYLINES_CACHE_TTL,
     ROUTE_STOPS_CACHE_TTL,
     SCHEDULE_CACHE_TTL,
     STOP_NAMES_CACHE_TTL,
+    TTC_OFFLINE_AUTO_REFRESH_INTERVAL,
+    type TtcOfflineDataset,
+    warmTtcOfflineData,
 } from '@/services/ttc-offline';
 import {
   calculateTtcQueryMetrics,
@@ -90,6 +94,18 @@ const LAUNCH_BEHAVIOR_OPTIONS: { value: LaunchBehavior; label: string; caption: 
   { value: 'ask', label: 'Ask me each time', caption: 'Always show the destination screen on open.' },
   { value: 'smart', label: 'Use my location', caption: 'Try location first, then fall back to asking if needed.' },
   { value: 'remember', label: 'Remember last direction', caption: 'Open straight into the last direction you used.' },
+];
+const TTC_DATASETS: {
+  value: TtcOfflineDataset;
+  label: string;
+  caption: string;
+  requests: string;
+  accent: 'route380' | 'route316' | 'primary' | 'warning';
+}[] = [
+  { value: 'schedules', label: 'Timetables', caption: 'Service dates and departure times for both routes.', requests: '4 slow requests', accent: 'route380' },
+  { value: 'routeStops', label: 'Stops', caption: 'Ordered stop lists for each direction.', requests: '4 slow requests', accent: 'route316' },
+  { value: 'polylines', label: 'Map lines', caption: 'Route geometry used by the Map tab.', requests: '4 slow requests', accent: 'primary' },
+  { value: 'stopNames', label: 'Stop names', caption: 'Labels for saved and important stops.', requests: 'one per missing stop', accent: 'warning' },
 ];
 const LEGAL_BASE_URL = 'https://github.com/whekin/kojori-bus-time-app/blob/main/release/google-play';
 const LEGAL_URLS = {
@@ -186,6 +202,11 @@ function formatBakedAt(timestamp: string) {
     hour: '2-digit',
     minute: '2-digit',
   });
+}
+
+function isWeeklyRefreshDue(timestamp: number | null) {
+  if (!timestamp) return true;
+  return Date.now() - timestamp >= TTC_OFFLINE_AUTO_REFRESH_INTERVAL;
 }
 
 function formatQueryKind(kind: TtcQueryLogEntry['kind']) {
@@ -379,6 +400,95 @@ function FavoritesCard({
       <Pressable style={styles.manageBtn} onPress={onManage}>
         <Text style={[styles.manageBtnText, { color: accentColor }]}>+ Add stop</Text>
       </Pressable>
+    </View>
+  );
+}
+
+function DataRefreshCard({
+  status,
+  refreshingDataset,
+  onRefreshDataset,
+}: {
+  status: ReturnType<typeof useTtcOfflineStatus>;
+  refreshingDataset: TtcOfflineDataset | 'weekly' | null;
+  onRefreshDataset: (dataset: TtcOfflineDataset) => void;
+}) {
+  const { colors, styles } = useStyles();
+  const refreshBusy = status.status === 'warming' || refreshingDataset !== null;
+  const weeklyDue = isWeeklyRefreshDue(status.lastSyncAt);
+  const completedSteps = status.status === 'warming' ? status.completedSteps : 0;
+
+  return (
+    <View style={[styles.card, styles.dataRefreshCard]}>
+      <View style={styles.dataRefreshHero}>
+        <View style={styles.dataRefreshHalo} />
+        <View style={styles.dataRefreshHeaderRow}>
+          <View style={styles.dataRefreshCopy}>
+            <Text style={styles.dataRefreshEyebrow}>SLOW LANE TTC SYNC</Text>
+            <Text style={styles.dataRefreshTitle}>{refreshBusy ? 'Updating carefully' : weeklyDue ? 'Fresh data is due' : 'Data is fresh enough'}</Text>
+            <Text style={styles.dataRefreshNote}>
+              Requests run one-by-one with a 10 second pause. Nothing is fetched during normal app launch.
+            </Text>
+          </View>
+          <View style={[styles.dataRefreshBadge, { borderColor: weeklyDue ? alpha(colors.warning, '60') : alpha(colors.primary, '60') }]}>
+            {refreshBusy ? <ActivityIndicator color={colors.primary} size="small" /> : null}
+            <Text style={[styles.dataRefreshBadgeText, { color: weeklyDue ? colors.warning : colors.primary }]}>
+              {refreshBusy ? `${status.completedSteps}/${status.totalSteps}` : weeklyDue ? 'Weekly' : 'OK'}
+            </Text>
+          </View>
+        </View>
+        <View style={styles.dataRefreshMetaRow}>
+          <Text style={styles.dataRefreshMetaText}>Last sync: {formatLastSync(status.lastSyncAt)}</Text>
+          <Text style={styles.dataRefreshMetaDot}>·</Text>
+          <Text style={styles.dataRefreshMetaText}>Saved {status.availableDatasets}/{status.totalDatasets}</Text>
+        </View>
+      </View>
+      {TTC_DATASETS.map((dataset, index) => {
+        const accentColor = colors[dataset.accent];
+        const stepNumber = index + 1;
+        const active = refreshingDataset === dataset.value || (refreshingDataset === 'weekly' && status.status === 'warming' && completedSteps + 1 === stepNumber);
+        const done = refreshingDataset === 'weekly' && status.status === 'warming' && completedSteps >= stepNumber;
+        const queued = refreshingDataset === 'weekly' && status.status === 'warming' && completedSteps + 1 < stepNumber;
+        const disabled = refreshBusy && !active;
+        const statusLabel = active ? 'Updating' : done ? 'Updated' : queued ? 'Queued' : 'Update';
+        const statusColor = active || done ? accentColor : queued ? colors.textFaint : colors.text;
+
+        return (
+          <React.Fragment key={dataset.value}>
+            {index > 0 ? <View style={styles.itemDivider} /> : null}
+            <Pressable
+              disabled={refreshBusy}
+              onPress={() => onRefreshDataset(dataset.value)}
+              style={({ pressed }) => [
+                styles.dataRefreshRow,
+                pressed && !disabled ? { backgroundColor: alpha(accentColor, '08') } : null,
+                disabled ? styles.dataRefreshRowDisabled : null,
+              ]}>
+              <View style={[styles.dataRefreshPulse, { backgroundColor: alpha(accentColor, active || done ? '24' : '12'), borderColor: alpha(accentColor, '50') }]}>
+                <View style={[styles.dataRefreshPulseDot, { backgroundColor: active || done ? accentColor : colors.textFaint }]} />
+              </View>
+              <View style={styles.dataRefreshDatasetCopy}>
+                <Text style={styles.dataRefreshDatasetTitle}>{dataset.label}</Text>
+                <Text style={styles.dataRefreshDatasetNote}>{dataset.caption}</Text>
+              </View>
+              <View style={styles.dataRefreshAction}>
+                <Text style={[styles.dataRefreshRequests, { color: accentColor }]}>{dataset.requests}</Text>
+                <View style={[styles.dataRefreshStatusPill, { borderColor: alpha(statusColor, '42'), backgroundColor: alpha(statusColor, active ? '16' : '0F') }]}>
+                  <Text style={[styles.dataRefreshStatusText, { color: statusColor }]}>{statusLabel}</Text>
+                </View>
+              </View>
+            </Pressable>
+          </React.Fragment>
+        );
+      })}
+      {status.error ? (
+        <>
+          <View style={styles.itemDivider} />
+          <View style={styles.dataRefreshErrorRow}>
+            <Text style={styles.dataRefreshErrorText}>{status.error}</Text>
+          </View>
+        </>
+      ) : null}
     </View>
   );
 }
@@ -742,7 +852,9 @@ export default function SettingsScreen() {
   const [showPermissionModal, setShowPermissionModal] = useState(false);
   const [noticeModal, setNoticeModal] = useState<NoticeModalState | null>(null);
   const [easterEggTaps, setEasterEggTaps] = useState(0);
+  const [refreshingDataset, setRefreshingDataset] = useState<TtcOfflineDataset | 'weekly' | null>(null);
   const easterEggTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const weeklyRefreshStartedRef = useRef(false);
   const paletteCarouselRef = useRef<ICarouselInstance>(null);
   const paletteIndex = Math.max(0, PALETTE_IDS.indexOf(settings.paletteId));
   const paletteCarouselWidth = Math.max(windowWidth, PALETTE_CARD_WIDTH + 40);
@@ -794,6 +906,28 @@ export default function SettingsScreen() {
   useEffect(() => {
     paletteCarouselRef.current?.scrollTo({ index: paletteIndex, animated: true });
   }, [paletteIndex]);
+
+  useEffect(() => {
+    if (weeklyRefreshStartedRef.current) return;
+    if (offlineStatus.status === 'hydrating' || offlineStatus.status === 'warming') return;
+    if (!offlineStatus.lastHydratedAt) return;
+    if (!isWeeklyRefreshDue(offlineStatus.lastSyncAt)) return;
+
+    weeklyRefreshStartedRef.current = true;
+    setRefreshingDataset('weekly');
+    void warmTtcOfflineData(queryClient).finally(() => {
+      setRefreshingDataset(current => current === 'weekly' ? null : current);
+    });
+  }, [offlineStatus.lastHydratedAt, offlineStatus.lastSyncAt, offlineStatus.status, queryClient]);
+
+  function handleRefreshDataset(dataset: TtcOfflineDataset) {
+    if (offlineStatus.status === 'warming' || refreshingDataset) return;
+
+    setRefreshingDataset(dataset);
+    void refreshTtcOfflineDataset(queryClient, dataset, { force: true }).finally(() => {
+      setRefreshingDataset(current => current === dataset ? null : current);
+    });
+  }
 
   async function handleClearCache() {
     Alert.alert(
@@ -1188,6 +1322,16 @@ export default function SettingsScreen() {
         ) : null}
 
         <View style={styles.sectionMeta}>
+          <Text style={styles.sectionHeader}>TTC DATA UPDATES</Text>
+          <Text style={styles.sectionNote}>Refresh static data deliberately, without a burst of TTC requests.</Text>
+        </View>
+        <DataRefreshCard
+          status={offlineStatus}
+          refreshingDataset={refreshingDataset}
+          onRefreshDataset={handleRefreshDataset}
+        />
+
+        <View style={styles.sectionMeta}>
           <Text style={styles.sectionHeader}>DATA SOURCE</Text>
         </View>
         <View style={styles.card}>
@@ -1520,6 +1664,79 @@ function createStyles(C: AppColors) {
     manageBtn: { paddingHorizontal: 16, paddingVertical: 14, alignItems: 'center' },
     manageBtnText: { fontSize: 14, fontWeight: '600' },
     itemDivider: { height: 1, backgroundColor: C.border, marginLeft: 16 },
+
+    dataRefreshCard: { overflow: 'hidden' },
+    dataRefreshHero: {
+      padding: 16,
+      gap: 12,
+      backgroundColor: C.panel,
+      overflow: 'hidden',
+    },
+    dataRefreshHalo: {
+      position: 'absolute',
+      right: -48,
+      top: -54,
+      width: 150,
+      height: 150,
+      borderRadius: 999,
+      backgroundColor: alpha(C.primary, '13'),
+    },
+    dataRefreshHeaderRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
+    dataRefreshCopy: { flex: 1, gap: 4 },
+    dataRefreshEyebrow: { color: C.textFaint, fontSize: 10, fontWeight: '800', letterSpacing: 1.8 },
+    dataRefreshTitle: { color: C.text, fontSize: 20, fontWeight: '800', letterSpacing: -0.4, fontFamily: DISPLAY },
+    dataRefreshNote: { color: C.textDim, fontSize: 12, lineHeight: 18 },
+    dataRefreshBadge: {
+      minWidth: 66,
+      minHeight: 42,
+      borderRadius: 999,
+      borderWidth: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: 10,
+      gap: 3,
+      backgroundColor: alpha(C.surface, '74'),
+    },
+    dataRefreshBadgeText: { fontSize: 11, fontWeight: '800', letterSpacing: 0.9, textTransform: 'uppercase' },
+    dataRefreshMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' },
+    dataRefreshMetaText: { color: C.textFaint, fontSize: 11, fontWeight: '600' },
+    dataRefreshMetaDot: { color: C.textFaint, fontSize: 11 },
+    dataRefreshRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      paddingHorizontal: 16,
+      paddingVertical: 14,
+      backgroundColor: C.surface,
+    },
+    dataRefreshRowDisabled: { opacity: 0.46 },
+    dataRefreshPulse: {
+      width: 34,
+      height: 34,
+      borderRadius: 999,
+      borderWidth: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      flexShrink: 0,
+    },
+    dataRefreshPulseDot: { width: 8, height: 8, borderRadius: 999 },
+    dataRefreshDatasetCopy: { flex: 1, gap: 2 },
+    dataRefreshDatasetTitle: { color: C.text, fontSize: 15, fontWeight: '700' },
+    dataRefreshDatasetNote: { color: C.textDim, fontSize: 12, lineHeight: 17 },
+    dataRefreshAction: { alignItems: 'flex-end', gap: 3, flexShrink: 0 },
+    dataRefreshRequests: { fontSize: 10, fontWeight: '800', letterSpacing: 0.8, textTransform: 'uppercase' },
+    dataRefreshActionText: { fontSize: 13, fontWeight: '800' },
+    dataRefreshStatusPill: {
+      borderWidth: 1,
+      borderRadius: 999,
+      paddingHorizontal: 9,
+      paddingVertical: 4,
+      minWidth: 74,
+      alignItems: 'center',
+    },
+    dataRefreshStatusText: { fontSize: 12, fontWeight: '800' },
+    dataRefreshErrorRow: { paddingHorizontal: 16, paddingVertical: 12, backgroundColor: alpha(C.error, '08') },
+    dataRefreshErrorText: { color: C.error, fontSize: 12, lineHeight: 17 },
 
     toggleRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, gap: 14 },
     toggleCopy: { flex: 1, gap: 3 },

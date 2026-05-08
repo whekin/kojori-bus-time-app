@@ -27,7 +27,7 @@ import {
 } from '@/services/ttc';
 
 type Direction = 'toKojori' | 'toTbilisi';
-type OfflineDataset = 'schedules' | 'routeStops' | 'polylines' | 'stopNames';
+export type TtcOfflineDataset = 'schedules' | 'routeStops' | 'polylines' | 'stopNames';
 
 interface CacheEnvelope<T> {
   cachedAt: number;
@@ -55,6 +55,7 @@ export const SCHEDULE_CACHE_TTL = 12 * 60 * 60 * 1000;
 export const ROUTE_STOPS_CACHE_TTL = 24 * 60 * 60 * 1000;
 export const ROUTE_POLYLINES_CACHE_TTL = 30 * 24 * 60 * 60 * 1000;
 export const STOP_NAMES_CACHE_TTL = 7 * 24 * 60 * 60 * 1000;
+export const TTC_OFFLINE_AUTO_REFRESH_INTERVAL = 7 * 24 * 60 * 60 * 1000;
 
 const STOP_NAMES_CACHE_KEY = '@ttc_stop_names_v2';
 const ROUTE_PATTERN_PAIRS = [
@@ -163,14 +164,14 @@ function dedupeStops(stops: StopInfo[]) {
   });
 }
 
-const THROTTLE_MS = 30_000;
+const THROTTLE_MS = 10_000;
 
 function delay(ms: number) {
   return new Promise<void>(resolve => setTimeout(resolve, ms));
 }
 
 async function refreshStep(
-  dataset: OfflineDataset,
+  dataset: TtcOfflineDataset,
   run: () => Promise<boolean>,
   stepIndex: number,
 ) {
@@ -190,36 +191,25 @@ async function refreshStep(
 }
 
 async function loadAvailability() {
-  const [scheduleFlags, routeStopFlags, polylineFlags, stopNames, cachedAtValues] = await Promise.all([
-    Promise.all(
-      ROUTE_PATTERN_PAIRS.map(pair =>
-        readEnvelope<SchedulePeriod[]>(scheduleCacheKey(pair.routeId, pair.patternSuffix)),
-      ),
-    ),
-    Promise.all(DIRECTIONS.map(direction => readEnvelope<StopInfo[]>(routeStopsCacheKey(direction)))),
-    Promise.all(
-      DIRECTIONS.map(direction =>
-        readEnvelope<CachedRoutePolylines>(routePolylinesCacheKey(direction)),
-      ),
-    ),
-    readEnvelope<Record<string, string>>(STOP_NAMES_CACHE_KEY),
-    Promise.all([
-      ...ROUTE_PATTERN_PAIRS.map(pair => readCachedAt(scheduleCacheKey(pair.routeId, pair.patternSuffix))),
-      ...DIRECTIONS.map(direction => readCachedAt(routeStopsCacheKey(direction))),
-      ...DIRECTIONS.map(direction => readCachedAt(routePolylinesCacheKey(direction))),
-      readCachedAt(STOP_NAMES_CACHE_KEY),
-    ]),
+  const cachedAtValues = await Promise.all([
+    ...ROUTE_PATTERN_PAIRS.map(pair => readCachedAt(scheduleCacheKey(pair.routeId, pair.patternSuffix))),
+    ...DIRECTIONS.map(direction => readCachedAt(routeStopsCacheKey(direction))),
+    ...DIRECTIONS.map(direction => readCachedAt(routePolylinesCacheKey(direction))),
+    readCachedAt(STOP_NAMES_CACHE_KEY),
   ]);
 
   const availability = {
-    schedules: scheduleFlags.every(Boolean),
-    routeStops: routeStopFlags.every(Boolean),
-    polylines: polylineFlags.every(Boolean),
-    stopNames: IMPORTANT_STOP_IDS.every(id => Boolean(stopNames?.data?.[id])),
-  } satisfies Record<OfflineDataset, boolean>;
+    schedules: true,
+    routeStops: true,
+    polylines: true,
+    stopNames: true,
+  } satisfies Record<TtcOfflineDataset, boolean>;
 
   const availableDatasets = Object.values(availability).filter(Boolean).length;
-  const lastSyncAt = cachedAtValues.filter((value): value is number => typeof value === 'number').sort((a, b) => b - a)[0] ?? null;
+  const lastSyncAt = [
+    ...cachedAtValues.filter((value): value is number => typeof value === 'number'),
+    new Date(BAKED_AT).getTime(),
+  ].sort((a, b) => b - a)[0] ?? null;
 
   return { availability, availableDatasets, lastSyncAt };
 }
@@ -497,19 +487,210 @@ export async function hydrateTtcOfflineData(client: QueryClient) {
   });
 }
 
-/**
- * Gradually refreshes all offline datasets, throttling API calls to avoid
- * TTC rate limiting. Each network request is separated by THROTTLE_MS.
- * Cached data is used without delay; only actual fetches incur the wait.
- */
-export async function warmTtcOfflineData(client: QueryClient) {
+function createThrottledFetcher() {
   let apiCallsMade = 0;
 
-  async function throttledFetch<T>(fn: () => Promise<T>): Promise<T> {
+  return async function throttledFetch<T>(fn: () => Promise<T>): Promise<T> {
     if (apiCallsMade > 0) await delay(THROTTLE_MS);
     apiCallsMade++;
     return fn();
+  };
+}
+
+async function refreshSchedules(
+  client: QueryClient,
+  force: boolean,
+  throttledFetch: <T>(fn: () => Promise<T>) => Promise<T>,
+) {
+  let anySucceeded = false;
+  for (const pair of ROUTE_PATTERN_PAIRS) {
+    try {
+      const fresh = force ? null : await readScheduleCache(pair.routeId, pair.patternSuffix);
+      if (fresh) {
+        client.setQueryData(['schedule', pair.routeId, pair.patternSuffix], fresh);
+        anySucceeded = true;
+        continue;
+      }
+
+      const data = await throttledFetch(() => fetchSchedule(pair.routeId, pair.patternSuffix));
+      await writeScheduleCache(pair.routeId, pair.patternSuffix, data);
+      client.setQueryData(['schedule', pair.routeId, pair.patternSuffix], data);
+      anySucceeded = true;
+    } catch {}
   }
+
+  if (!anySucceeded) throw new Error('Could not refresh schedules');
+}
+
+async function refreshRouteStops(
+  client: QueryClient,
+  force: boolean,
+  throttledFetch: <T>(fn: () => Promise<T>) => Promise<T>,
+) {
+  let anySucceeded = false;
+  for (const direction of DIRECTIONS) {
+    try {
+      const fresh = force ? null : await readRouteStopsCache(direction);
+      if (fresh) {
+        client.setQueryData(['route-stops', direction], fresh);
+        anySucceeded = true;
+        continue;
+      }
+
+      const stops380 = await throttledFetch(() => fetchRouteStops(ROUTES['380'].id, ROUTES['380'][direction]));
+      const stops316 = await throttledFetch(() => fetchRouteStops(ROUTES['316'].id, ROUTES['316'][direction]));
+      const data = dedupeStops([...stops380, ...stops316]);
+      if (direction === 'toKojori' && !data.some(s => s.id === '1:2994')) {
+        const firstTbilisiStop = ALL_TBILISI_STOPS.find(stop => stop.id === '1:2994');
+        data.unshift(firstTbilisiStop ?? { id: '1:2994', label: 'Elene Akhvlediani Street' });
+      }
+      await writeRouteStopsCache(direction, data);
+      client.setQueryData(['route-stops', direction], data);
+      anySucceeded = true;
+    } catch {}
+  }
+
+  if (!anySucceeded) throw new Error('Could not refresh route stops');
+}
+
+async function refreshPolylines(
+  client: QueryClient,
+  force: boolean,
+  throttledFetch: <T>(fn: () => Promise<T>) => Promise<T>,
+) {
+  let anySucceeded = false;
+  for (const direction of DIRECTIONS) {
+    try {
+      const fresh = force ? null : await readRoutePolylinesCache(direction);
+      if (fresh) {
+        client.setQueryData(['route-polylines', direction], fresh);
+        anySucceeded = true;
+        continue;
+      }
+
+      const result380 = await throttledFetch(() => fetchRoutePolyline(ROUTES['380'].id, ROUTES['380'][direction]));
+      const result316 = await throttledFetch(() => fetchRoutePolyline(ROUTES['316'].id, ROUTES['316'][direction]));
+      const sources = [result380.source, result316.source];
+      const source = sources.every(result => result === 'google-directions')
+        ? 'google-directions'
+        : sources.every(result => result === 'stops-fallback')
+          ? 'stops-fallback'
+          : 'hybrid-connected';
+      const data = {
+        version: 3,
+        polylines: { '380': result380.points, '316': result316.points },
+        source,
+      } satisfies CachedRoutePolylines;
+      await writeRoutePolylinesCache(direction, data);
+      client.setQueryData(['route-polylines', direction], data);
+      anySucceeded = true;
+    } catch {}
+  }
+
+  if (!anySucceeded) throw new Error('Could not refresh route polylines');
+}
+
+async function refreshStopNames(
+  client: QueryClient,
+  force: boolean,
+  throttledFetch: <T>(fn: () => Promise<T>) => Promise<T>,
+) {
+  const freshNames = force ? {} : await readStopNameCache();
+  const missingStopIds = force ? IMPORTANT_STOP_IDS : IMPORTANT_STOP_IDS.filter(id => !freshNames[id]);
+
+  if (missingStopIds.length === 0) {
+    buildStopNamesQueryData(freshNames).forEach(entry => {
+      client.setQueryData(entry.queryKey, entry.data);
+    });
+    return;
+  }
+
+  const nextNames = { ...freshNames };
+  let anyFetched = false;
+
+  for (const id of missingStopIds) {
+    try {
+      const data = await throttledFetch(() => fetchStopDetails(id));
+      nextNames[data.id] = data.name;
+      client.setQueryData(['stop', data.id], data);
+      anyFetched = true;
+    } catch {}
+  }
+
+  if (anyFetched) {
+    await writeStopNameCache(nextNames);
+  }
+
+  if (!anyFetched && missingStopIds.length > 0) {
+    throw new Error('Could not refresh stop names');
+  }
+
+  buildStopNamesQueryData(nextNames).forEach(entry => {
+    client.setQueryData(entry.queryKey, entry.data);
+  });
+}
+
+async function refreshDataset(
+  client: QueryClient,
+  dataset: TtcOfflineDataset,
+  force: boolean,
+  throttledFetch: <T>(fn: () => Promise<T>) => Promise<T>,
+) {
+  switch (dataset) {
+    case 'schedules':
+      await refreshSchedules(client, force, throttledFetch);
+      break;
+    case 'routeStops':
+      await refreshRouteStops(client, force, throttledFetch);
+      break;
+    case 'polylines':
+      await refreshPolylines(client, force, throttledFetch);
+      break;
+    case 'stopNames':
+      await refreshStopNames(client, force, throttledFetch);
+      break;
+  }
+}
+
+async function finishRefresh() {
+  const { availableDatasets, lastSyncAt } = await loadAvailability();
+  updateSnapshot({
+    status: availableDatasets === TOTAL_OFFLINE_DATASETS ? 'ready' : 'partial',
+    availableDatasets,
+    lastSyncAt,
+  });
+}
+
+export async function refreshTtcOfflineDataset(
+  client: QueryClient,
+  dataset: TtcOfflineDataset,
+  options: { force?: boolean } = {},
+) {
+  updateSnapshot({
+    status: 'warming',
+    completedSteps: 0,
+    totalSteps: 1,
+    error: null,
+  });
+
+  await refreshStep(
+    dataset,
+    async () => {
+      await refreshDataset(client, dataset, options.force ?? false, createThrottledFetcher());
+      return true;
+    },
+    1,
+  );
+
+  await finishRefresh();
+}
+
+/**
+ * Gradually refreshes all offline datasets, throttling every TTC API request to
+ * avoid rate limiting. Cached data is used without delay; only actual fetches wait.
+ */
+export async function warmTtcOfflineData(client: QueryClient) {
+  const throttledFetch = createThrottledFetcher();
 
   updateSnapshot({
     status: 'warming',
@@ -518,144 +699,43 @@ export async function warmTtcOfflineData(client: QueryClient) {
     error: null,
   });
 
-  // Step 1: Schedules (4 route/pattern pairs, each may need 1 API call)
   await refreshStep(
     'schedules',
     async () => {
-      let anySucceeded = false;
-      for (const pair of ROUTE_PATTERN_PAIRS) {
-        try {
-          const fresh = await readScheduleCache(pair.routeId, pair.patternSuffix);
-          if (fresh) {
-            client.setQueryData(['schedule', pair.routeId, pair.patternSuffix], fresh);
-            anySucceeded = true;
-            continue;
-          }
-
-          const data = await throttledFetch(() => fetchSchedule(pair.routeId, pair.patternSuffix));
-          await writeScheduleCache(pair.routeId, pair.patternSuffix, data);
-          client.setQueryData(['schedule', pair.routeId, pair.patternSuffix], data);
-          anySucceeded = true;
-        } catch {}
-      }
-
-      if (!anySucceeded) throw new Error('Could not refresh schedules');
+      await refreshSchedules(client, false, throttledFetch);
       return true;
     },
     1,
   );
 
-  // Step 2: Route stops (2 directions, each fetches 2 routes internally)
   await refreshStep(
     'routeStops',
     async () => {
-      let anySucceeded = false;
-      for (const direction of DIRECTIONS) {
-        try {
-          const fresh = await readRouteStopsCache(direction);
-          if (fresh) {
-            client.setQueryData(['route-stops', direction], fresh);
-            anySucceeded = true;
-            continue;
-          }
-
-          const data = await throttledFetch(() => fetchRouteStopsForDirection(direction));
-          await writeRouteStopsCache(direction, data);
-          client.setQueryData(['route-stops', direction], data);
-          anySucceeded = true;
-        } catch {}
-      }
-
-      if (!anySucceeded) throw new Error('Could not refresh route stops');
+      await refreshRouteStops(client, false, throttledFetch);
       return true;
     },
     2,
   );
 
-  // Step 3: Polylines (2 directions, each fetches 2 routes internally)
   await refreshStep(
     'polylines',
     async () => {
-      let anySucceeded = false;
-      for (const direction of DIRECTIONS) {
-        try {
-          const fresh = await readRoutePolylinesCache(direction);
-          if (fresh) {
-            client.setQueryData(['route-polylines', direction], fresh);
-            anySucceeded = true;
-            continue;
-          }
-
-          const data = await throttledFetch(() => fetchRoutePolylinesForDirection(direction));
-          await writeRoutePolylinesCache(direction, {
-            version: 3,
-            polylines: data.polylines,
-            source: data.source,
-          });
-          client.setQueryData(['route-polylines', direction], {
-            version: 3,
-            polylines: data.polylines,
-            source: data.source,
-          });
-          anySucceeded = true;
-        } catch {}
-      }
-
-      if (!anySucceeded) throw new Error('Could not refresh route polylines');
+      await refreshPolylines(client, false, throttledFetch);
       return true;
     },
     3,
   );
 
-  // Step 4: Stop names (batch, but throttled per call)
   await refreshStep(
     'stopNames',
     async () => {
-      const freshNames = await readStopNameCache();
-      const missingStopIds = IMPORTANT_STOP_IDS.filter(id => !freshNames[id]);
-
-      if (missingStopIds.length === 0) {
-        buildStopNamesQueryData(freshNames).forEach(entry => {
-          client.setQueryData(entry.queryKey, entry.data);
-        });
-        return true;
-      }
-
-      const nextNames = { ...freshNames };
-      let anyFetched = false;
-
-      for (const id of missingStopIds) {
-        try {
-          const data = await throttledFetch(() => fetchStopDetails(id));
-          nextNames[data.id] = data.name;
-          client.setQueryData(['stop', data.id], data);
-          anyFetched = true;
-        } catch {}
-      }
-
-      if (anyFetched) {
-        await writeStopNameCache(nextNames);
-      }
-
-      if (!anyFetched && missingStopIds.length > 0) {
-        throw new Error('Could not refresh stop names');
-      }
-
-      buildStopNamesQueryData(nextNames).forEach(entry => {
-        client.setQueryData(entry.queryKey, entry.data);
-      });
-
+      await refreshStopNames(client, false, throttledFetch);
       return true;
     },
     4,
   );
 
-  const { availableDatasets, lastSyncAt } = await loadAvailability();
-  updateSnapshot({
-    status: availableDatasets === TOTAL_OFFLINE_DATASETS ? 'ready' : 'partial',
-    availableDatasets,
-    lastSyncAt,
-  });
+  await finishRefresh();
 }
 
 export async function clearAllTtcCache(client: QueryClient) {

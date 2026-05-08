@@ -7,12 +7,15 @@
 - **Start screen** — first-launch destination picker with hand-drawn landmark illustrations (Azeula fortress ruins for Kojori, Sameba Cathedral for Tbilisi); preloads arrivals so the departures screen lands without a spinner
 - **Direction pill** — single header control across Departures, Map, and Timetable; tap to switch direction, enable smart detection, or refresh location. Replaces the ambiguous arrow toggle with an explicit "to <destination>" label
 - **Add stop from the picker sheet** — reorder sheet now has an "Add another stop" action, so you can add new stops without needing exactly one already
+- **TTC data updates** — Settings now has deliberate one-at-a-time refresh controls for timetables, stops, map lines, and stop names, plus a slow weekly refresh when cached data is stale
 
 ### Improved
 
+- Opening after the destination picker now feels snappier by showing departures first and deferring heavier tabs until after launch interactions finish
 - Map tab now respects the shared direction instead of resetting on every open
 - Smart direction rechecks on every launch and foreground instead of riding a 30-min cache; cache (15 min) only seeds the UI instantly while a fresh fetch runs in parallel
 - Settings now has a single **On launch** choice: ask every time, use location, or remember the last direction
+- TTC data refresh now shows queued/updating/updated states and uses a shorter 10-second gap between safe refresh requests
 - Smart direction auto-skips the start screen when it resolves within ~1.8 s of launch; slow or failed detection still falls back to the manual picker
 - Android widget now uses `to Kojori` / `to Tbilisi` wording instead of arrow-based direction labels, matching the app UI
 
