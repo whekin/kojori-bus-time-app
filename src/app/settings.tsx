@@ -343,38 +343,44 @@ function TtcQueryLogCard({
             <Text style={styles.queryEmptyNote}>{t('queryEmptyNote')}</Text>
           </View>
         ) : (
-          visibleEntries.map((entry, index) => {
-            const statusColor = entry.ok ? colors.route316 : colors.error;
+          <ScrollView
+            style={styles.queryListScroll}
+            contentContainerStyle={styles.queryListScrollContent}
+            nestedScrollEnabled
+            showsVerticalScrollIndicator>
+            {visibleEntries.map((entry, index) => {
+              const statusColor = entry.ok ? colors.route316 : colors.error;
 
-            return (
-              <View key={entry.id}>
-                {index > 0 ? <View style={styles.queryDivider} /> : null}
-                <View style={styles.queryRow}>
-                  <View style={styles.queryRowTop}>
-                    <View style={styles.queryRowLead}>
-                      <Text style={styles.queryKind}>{formatQueryKind(entry.kind, t)}</Text>
-                      <Text style={styles.queryAge}>{formatQueryAge(entry.finishedAt)}</Text>
+              return (
+                <View key={entry.id}>
+                  {index > 0 ? <View style={styles.queryDivider} /> : null}
+                  <View style={styles.queryRow}>
+                    <View style={styles.queryRowTop}>
+                      <View style={styles.queryRowLead}>
+                        <Text style={styles.queryKind}>{formatQueryKind(entry.kind, t)}</Text>
+                        <Text style={styles.queryAge}>{formatQueryAge(entry.finishedAt)}</Text>
+                      </View>
+                      <View style={[styles.queryStatusChip, { borderColor: alpha(statusColor, '40'), backgroundColor: alpha(statusColor, '12') }]}>
+                        <Text style={[styles.queryStatusText, { color: statusColor }]}>{getQueryStatusLabel(entry)}</Text>
+                      </View>
                     </View>
-                    <View style={[styles.queryStatusChip, { borderColor: alpha(statusColor, '40'), backgroundColor: alpha(statusColor, '12') }]}>
-                      <Text style={[styles.queryStatusText, { color: statusColor }]}>{getQueryStatusLabel(entry)}</Text>
+                    <Text style={styles.queryEndpoint} numberOfLines={1}>{entry.endpoint}</Text>
+                    <View style={styles.queryMetaRow}>
+                      <Text style={styles.queryMetaText}>{formatQueryDuration(entry.durationMs)}</Text>
+                      <Text style={styles.queryMetaSeparator}>·</Text>
+                      <Text style={styles.queryMetaText}>{new Date(entry.finishedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</Text>
+                      {!entry.ok && entry.errorCode ? (
+                        <>
+                          <Text style={styles.queryMetaSeparator}>·</Text>
+                          <Text style={[styles.queryMetaText, { color: colors.error }]}>{entry.errorCode}</Text>
+                        </>
+                      ) : null}
                     </View>
-                  </View>
-                  <Text style={styles.queryEndpoint} numberOfLines={1}>{entry.endpoint}</Text>
-                  <View style={styles.queryMetaRow}>
-                    <Text style={styles.queryMetaText}>{formatQueryDuration(entry.durationMs)}</Text>
-                    <Text style={styles.queryMetaSeparator}>·</Text>
-                    <Text style={styles.queryMetaText}>{new Date(entry.finishedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</Text>
-                    {!entry.ok && entry.errorCode ? (
-                      <>
-                        <Text style={styles.queryMetaSeparator}>·</Text>
-                        <Text style={[styles.queryMetaText, { color: colors.error }]}>{entry.errorCode}</Text>
-                      </>
-                    ) : null}
                   </View>
                 </View>
-              </View>
-            );
-          })
+              );
+            })}
+          </ScrollView>
         )}
       </View>
     </View>
@@ -523,15 +529,6 @@ function DataRefreshCard({
             </Text>
           </View>
         ) : null}
-        <View style={styles.dataRefreshMetaRow}>
-          <Text style={styles.dataRefreshMetaText}>
-            {t('settingsOldestData', { value: formatLastSync(status.oldestEffectiveSyncAt, t, resolvedLanguage) })}
-          </Text>
-          <Text style={styles.dataRefreshMetaDot}>·</Text>
-          <Text style={styles.dataRefreshMetaText}>
-            {t('settingsSavedDatasets', { available: status.availableDatasets, total: status.totalDatasets })}
-          </Text>
-        </View>
       </View>
       {TTC_DATASETS.map((dataset, index) => {
         const accentColor = colors[dataset.accent];
@@ -1495,44 +1492,6 @@ export default function SettingsScreen() {
           </>
         ) : null}
 
-        {settings.debugOptionsUnlocked ? (
-          <>
-            <View style={styles.sectionMeta}>
-              <Text style={styles.sectionHeader}>{t('settingsHomeDebug')}</Text>
-              <Text style={styles.sectionNote}>{t('settingsHomeDebugNote')}</Text>
-            </View>
-            <View style={styles.card}>
-              <View style={styles.toggleRow}>
-                <View style={styles.toggleCopy}>
-                  <Text style={styles.toggleLabel}>{t('settingsCancelledDemo')}</Text>
-                  <Text style={styles.toggleNote}>{t('settingsCancelledDemoNote')}</Text>
-                </View>
-                <SettingsSwitch
-                  value={settings.cancelledBusDemo}
-                  onValueChange={value => update({ cancelledBusDemo: value })}
-                  accentColor={colors.primary}
-                />
-              </View>
-            </View>
-          </>
-        ) : null}
-
-        {settings.debugOptionsUnlocked ? (
-          <>
-            <View style={styles.sectionMeta}>
-              <Text style={styles.sectionHeader}>{t('settingsTtcQueryLogger')}</Text>
-              <Text style={styles.sectionNote}>{t('settingsTtcQueryLoggerNote')}</Text>
-            </View>
-            <TtcQueryLogCard
-              entries={queryLog.entries}
-              queriesLastMinute={liveQueryMetrics.queriesLastMinute}
-              queriesLastTenMinutes={liveQueryMetrics.queriesLastTenMinutes}
-              totalErrors={liveQueryMetrics.totalErrors}
-              onClear={handleClearQueryLog}
-            />
-          </>
-        ) : null}
-
         <View style={styles.sectionMeta}>
           <Text style={styles.sectionHeader}>{t('settingsDataUpdates')}</Text>
           <Text style={styles.sectionNote}>{t('settingsDataUpdatesNote')}</Text>
@@ -1578,64 +1537,108 @@ export default function SettingsScreen() {
             <Text style={styles.infoLabel}>{t('settingsBakedAsset')}</Text>
             <Text style={[styles.infoValue, styles.infoValueWrap]}>{formatBakedAt(BAKED_AT, resolvedLanguage)}</Text>
           </View>
-          {settings.debugOptionsUnlocked ? (
-            <>
-              <View style={styles.itemDivider} />
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>{t('settingsOfflineCache')}</Text>
-                <Text style={styles.infoValue}>{formatOfflineStatus(offlineStatus, t)}</Text>
-              </View>
-              <View style={styles.itemDivider} />
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>{t('settingsSavedDatasetsLabel')}</Text>
-                <Text style={styles.infoValue}>{offlineStatus.availableDatasets}/{offlineStatus.totalDatasets}</Text>
-              </View>
-              <View style={styles.itemDivider} />
-              <View style={styles.infoRow}>
-	                <Text style={styles.infoLabel}>{t('settingsOldestOfflineData')}</Text>
-	                <Text style={styles.infoValue}>{formatLastSync(offlineStatus.oldestEffectiveSyncAt, t, resolvedLanguage)}</Text>
-              </View>
-              <View style={styles.itemDivider} />
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>{t('settingsTimetables')}</Text>
-                <Text style={styles.infoValue}>{formatTtl(SCHEDULE_CACHE_TTL)}</Text>
-              </View>
-              <View style={styles.itemDivider} />
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>{t('settingsStopsNames')}</Text>
-                <Text style={styles.infoValue}>{formatTtl(Math.max(ROUTE_STOPS_CACHE_TTL, STOP_NAMES_CACHE_TTL))}</Text>
-              </View>
-              <View style={styles.itemDivider} />
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>{t('settingsPolylines')}</Text>
-                <Text style={styles.infoValue}>{formatTtl(ROUTE_POLYLINES_CACHE_TTL)}</Text>
-              </View>
-              <View style={styles.itemDivider} />
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>{t('settingsRealtimeRefresh')}</Text>
-                <Text style={styles.infoValue}>{t('settingsRealtimeRefreshValue')}</Text>
-              </View>
-              {offlineStatus.error ? (
-                <>
-                  <View style={styles.itemDivider} />
-                  <View style={styles.infoRow}>
-                    <Text style={styles.infoLabel}>{t('settingsOfflineSyncNote')}</Text>
-                    <Text style={[styles.infoValue, styles.infoValueWrap]}>{offlineStatus.error}</Text>
-                  </View>
-                </>
-              ) : null}
-            </>
-          ) : null}
-          {settings.debugOptionsUnlocked ? (
-            <>
-              <Pressable
-                style={styles.manageBtn}
-                onPress={handleClearCache}>
-                <Text style={[styles.manageBtnText, { color: colors.textDim }]}>{t('settingsClearCache')}</Text>
-              </Pressable>
-            </>
-          ) : null}
         </View>
+
+        {settings.debugOptionsUnlocked ? (
+          <View style={styles.adminSection}>
+            <View style={styles.sectionMeta}>
+              <Text style={styles.sectionHeader}>{t('settingsAdmin')}</Text>
+              <Text style={styles.sectionNote}>{t('settingsAdminNote')}</Text>
+            </View>
+
+            <View style={styles.adminStack}>
+              <View style={styles.adminCard}>
+                <View style={styles.adminCardHeader}>
+                  <Text style={styles.adminCardTitle}>{t('settingsHomeDebug')}</Text>
+                  <Text style={styles.adminCardNote}>{t('settingsHomeDebugNote')}</Text>
+                </View>
+                <View style={styles.itemDivider} />
+                <View style={styles.toggleRow}>
+                  <View style={styles.toggleCopy}>
+                    <Text style={styles.toggleLabel}>{t('settingsCancelledDemo')}</Text>
+                    <Text style={styles.toggleNote}>{t('settingsCancelledDemoNote')}</Text>
+                  </View>
+                  <SettingsSwitch
+                    value={settings.cancelledBusDemo}
+                    onValueChange={value => update({ cancelledBusDemo: value })}
+                    accentColor={colors.primary}
+                  />
+                </View>
+              </View>
+
+              <View style={styles.adminSubsection}>
+                <View style={styles.adminCardHeader}>
+                  <Text style={styles.adminCardTitle}>{t('settingsTtcQueryLogger')}</Text>
+                  <Text style={styles.adminCardNote}>{t('settingsTtcQueryLoggerNote')}</Text>
+                </View>
+                <TtcQueryLogCard
+                  entries={queryLog.entries}
+                  queriesLastMinute={liveQueryMetrics.queriesLastMinute}
+                  queriesLastTenMinutes={liveQueryMetrics.queriesLastTenMinutes}
+                  totalErrors={liveQueryMetrics.totalErrors}
+                  onClear={handleClearQueryLog}
+                />
+              </View>
+
+              <View style={styles.adminCard}>
+                <View style={styles.adminCardHeader}>
+                  <Text style={styles.adminCardTitle}>{t('settingsCacheDiagnostics')}</Text>
+                  <Text style={styles.adminCardNote}>{t('settingsCacheDiagnosticsNote')}</Text>
+                </View>
+                <View style={styles.itemDivider} />
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>{t('settingsOfflineCache')}</Text>
+                  <Text style={styles.infoValue}>{formatOfflineStatus(offlineStatus, t)}</Text>
+                </View>
+                <View style={styles.itemDivider} />
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>{t('settingsSavedDatasetsLabel')}</Text>
+                  <Text style={styles.infoValue}>{offlineStatus.availableDatasets}/{offlineStatus.totalDatasets}</Text>
+                </View>
+                <View style={styles.itemDivider} />
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>{t('settingsOldestOfflineData')}</Text>
+                  <Text style={styles.infoValue}>{formatLastSync(offlineStatus.oldestEffectiveSyncAt, t, resolvedLanguage)}</Text>
+                </View>
+                <View style={styles.itemDivider} />
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>{t('settingsTimetables')}</Text>
+                  <Text style={styles.infoValue}>{formatTtl(SCHEDULE_CACHE_TTL)}</Text>
+                </View>
+                <View style={styles.itemDivider} />
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>{t('settingsStopsNames')}</Text>
+                  <Text style={styles.infoValue}>{formatTtl(Math.max(ROUTE_STOPS_CACHE_TTL, STOP_NAMES_CACHE_TTL))}</Text>
+                </View>
+                <View style={styles.itemDivider} />
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>{t('settingsPolylines')}</Text>
+                  <Text style={styles.infoValue}>{formatTtl(ROUTE_POLYLINES_CACHE_TTL)}</Text>
+                </View>
+                <View style={styles.itemDivider} />
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>{t('settingsRealtimeRefresh')}</Text>
+                  <Text style={styles.infoValue}>{t('settingsRealtimeRefreshValue')}</Text>
+                </View>
+                {offlineStatus.error ? (
+                  <>
+                    <View style={styles.itemDivider} />
+                    <View style={styles.infoRow}>
+                      <Text style={styles.infoLabel}>{t('settingsOfflineSyncNote')}</Text>
+                      <Text style={[styles.infoValue, styles.infoValueWrap]}>{offlineStatus.error}</Text>
+                    </View>
+                  </>
+                ) : null}
+                <View style={styles.itemDivider} />
+                <Pressable
+                  style={styles.manageBtn}
+                  onPress={handleClearCache}>
+                  <Text style={[styles.manageBtnText, { color: colors.textDim }]}>{t('settingsClearCache')}</Text>
+                </Pressable>
+              </View>
+            </View>
+          </View>
+        ) : null}
 
         <View style={styles.sectionMeta}>
           <Text style={styles.sectionHeader}>{t('settingsLegal')}</Text>
@@ -1863,6 +1866,24 @@ function createStyles(C: AppColors) {
     sectionSpacer: { height: 12 },
 
     card: { backgroundColor: C.surface, borderRadius: 16, borderWidth: 1, borderColor: C.border, overflow: 'hidden' },
+    adminSection: { marginTop: 2 },
+    adminStack: { gap: 12 },
+    adminCard: {
+      backgroundColor: C.surface,
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: C.border,
+      overflow: 'hidden',
+    },
+    adminSubsection: { gap: 10 },
+    adminCardHeader: {
+      paddingHorizontal: 16,
+      paddingVertical: 14,
+      gap: 5,
+      backgroundColor: alpha(C.panel, '88'),
+    },
+    adminCardTitle: { color: C.text, fontSize: 13, fontWeight: '800', letterSpacing: 1.1 },
+    adminCardNote: { color: C.textDim, fontSize: 12, lineHeight: 17 },
     favRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 13, gap: 10 },
     favDot: { width: 7, height: 7, borderRadius: 3.5, flexShrink: 0 },
     favLabel: { flex: 1, color: C.text, fontSize: 15, fontWeight: '500' },
@@ -2104,11 +2125,13 @@ function createStyles(C: AppColors) {
       borderColor: C.border,
       overflow: 'hidden',
     },
+    queryListScroll: { maxHeight: 320 },
+    queryListScrollContent: { flexGrow: 0 },
     queryEmptyState: { paddingHorizontal: 18, paddingVertical: 22, gap: 6 },
     queryEmptyTitle: { color: C.text, fontSize: 15, fontWeight: '700' },
     queryEmptyNote: { color: C.textDim, fontSize: 12, lineHeight: 18 },
     queryDivider: { height: 1, backgroundColor: C.border, marginLeft: 16 },
-    queryRow: { paddingHorizontal: 16, paddingVertical: 14, gap: 6 },
+    queryRow: { paddingHorizontal: 16, paddingVertical: 11, gap: 6 },
     queryRowTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
     queryRowLead: { flexDirection: 'row', alignItems: 'baseline', gap: 8, flex: 1 },
     queryKind: { color: C.text, fontSize: 14, fontWeight: '700' },

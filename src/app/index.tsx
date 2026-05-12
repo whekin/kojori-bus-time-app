@@ -143,6 +143,35 @@ function LiveDot({ color }: { color?: string }) {
   return <View style={[styles.liveDot, { backgroundColor: color ?? colors.live }]} />;
 }
 
+function ScheduledTimeHint({ time, compact = false }: { time?: string; compact?: boolean }) {
+  const colors = useAppColors();
+  const styles = useHomeStyles();
+  const { t } = useI18n();
+  if (!time) return null;
+
+  return (
+    <View
+      accessible
+      accessibilityLabel={t('homeScheduledTimeA11y', { time })}
+      style={[styles.scheduledHint, compact && styles.scheduledHintCompact]}>
+      <MaterialCommunityIcons
+        name="calendar-clock"
+        size={compact ? 12 : 14}
+        color={compact ? colors.textFaint : colors.textDim}
+      />
+      <Text
+        style={[
+          styles.scheduledHintText,
+          compact && styles.scheduledHintTextCompact,
+          { fontFamily: MONO },
+        ]}
+        numberOfLines={1}>
+        {time}
+      </Text>
+    </View>
+  );
+}
+
 function SectionDivider({ label, style }: { label: string; style?: ViewStyle }) {
   const styles = useHomeStyles();
   return (
@@ -330,6 +359,7 @@ function DepartureRow({ dep, isLast }: { dep: Departure; isLast: boolean }) {
           numberOfLines={1}>
           {dep.time}
         </Text>
+        {dep.live ? <ScheduledTimeHint time={dep.scheduledTime} compact /> : null}
       </View>
       <View style={styles.rowMeta}>
         {realtimeStatus ? (
@@ -482,6 +512,7 @@ function NextCard({
                 minimumFontScale={0.72}>
                 {dep.time}
               </Text>
+              {dep.live ? <ScheduledTimeHint time={dep.scheduledTime} /> : null}
             </View>
             <View
               style={[
@@ -1158,7 +1189,7 @@ function createStyles(C: AppColors) {
   nextHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 10, minWidth: 0, flexShrink: 1 },
   nextEyebrow: { color: alpha(C.text, 'B8'), fontSize: 10, fontWeight: '700', letterSpacing: 1.8 },
   nextBodyRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 12 },
-  nextMain: { flex: 1, minWidth: 0, justifyContent: 'flex-end' },
+  nextMain: { flex: 1, minWidth: 0, justifyContent: 'flex-end', gap: 5 },
   nextTime: { color: C.text, fontSize: 46, fontWeight: '700', letterSpacing: -1.6, lineHeight: 48, flexShrink: 1 },
   nextRouteBadge: {
     minWidth: 54,
@@ -1240,7 +1271,7 @@ function createStyles(C: AppColors) {
   row: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 15, gap: 14 },
   rowCancelled: { opacity: 0.86 },
   rowDivider: { borderBottomWidth: 1, borderBottomColor: C.border },
-  rowMain: { flex: 1, minWidth: 0 },
+  rowMain: { flex: 1, minWidth: 0, gap: 3 },
   rowTime: { color: C.text, fontSize: 22, fontWeight: '600', letterSpacing: -0.3, minWidth: 0 },
   rowTimeCancelled: {
     color: alpha(C.text, '8F'),
@@ -1272,6 +1303,16 @@ function createStyles(C: AppColors) {
     borderWidth: 1,
   },
   liveBadgeSmallText: { fontSize: 11, fontWeight: '700', letterSpacing: 0.2 },
+  scheduledHint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 5,
+    maxWidth: '100%',
+  },
+  scheduledHintCompact: { gap: 4 },
+  scheduledHintText: { color: C.textDim, fontSize: 12, fontWeight: '700', letterSpacing: 0.2 },
+  scheduledHintTextCompact: { color: C.textFaint, fontSize: 11, fontWeight: '700', letterSpacing: 0.2 },
   cancelledBadgeSmall: {
     borderRadius: 999,
     paddingHorizontal: 9,

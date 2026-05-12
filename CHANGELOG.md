@@ -1,5 +1,14 @@
 # Changelog
 
+## v2026.5.13
+
+### Improved
+
+- Live departures now show the scheduled timetable time as a small secondary hint next to the live-adjusted time
+- Hidden maintenance tools now live in one Settings admin section, with saved-data diagnostics kept out of the normal Settings flow
+- TTC request logs in Settings now use a compact scrollable panel instead of taking over the page
+- Russian Settings copy now uses more natural wording for saved data, update status, admin tools, and TTC logs
+
 ## v2026.5.9
 
 ### New
