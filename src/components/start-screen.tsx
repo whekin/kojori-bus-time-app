@@ -103,7 +103,7 @@ export function StartScreen({ onDone }: { onDone: () => void }) {
                 key={mode}
                 accessibilityRole="button"
                 accessibilityLabel={`Go to ${label}`}
-                onPressIn={() => handlePick(mode)}
+                onPress={() => handlePick(mode)}
                 style={({ pressed }) => [
                   styles.card,
                   {
@@ -146,13 +146,13 @@ export function StartScreen({ onDone }: { onDone: () => void }) {
         </View>
 
         <LocationActionCard
-          title={smartIssue ? 'Location unavailable' : smartEnabled ? 'Smart direction on' : 'Use my location'}
+          title={smartIssue ? 'Location unavailable' : smartEnabled ? 'Location set for next time' : 'Use location next time'}
           subtitle={
             isLocating
               ? 'Detecting where you are and finding the closest stop…'
               : locationError
                 ? 'Timed out. Tap to retry, or just choose a destination.'
-                : 'We will detect your direction and closest boarding stop automatically'
+                : 'Skip the manual picker when location can choose your direction and closest stop'
           }
           onPress={handleEnableSmart}
           isLocating={isLocating}

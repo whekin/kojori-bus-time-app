@@ -4,6 +4,9 @@
 
 ### Improved
 
+- Destination cards now wait for a completed tap instead of triggering as soon as a finger touches down
+- All themes now use the swapped Kojori/Tbilisi destination accent colors consistently
+- Start screen location copy now makes it clearer that location is a next-launch preference, not another manual destination choice
 - Opening after the destination picker now feels snappier: Departures is prepared behind the picker, heavier tabs wait until after selection, and the launch reveal animation is shorter
 
 ### Infra
