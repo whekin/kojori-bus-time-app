@@ -91,12 +91,13 @@ const TTC_DATASETS: {
   labelKey: TranslationKey;
   captionKey: TranslationKey;
   requestsKey: TranslationKey;
+  syncTitleKey: TranslationKey;
   accent: 'route380' | 'route316' | 'primary' | 'warning';
 }[] = [
-  { value: 'schedules', labelKey: 'settingsDatasetTimetables', captionKey: 'settingsDatasetTimetablesNote', requestsKey: 'settingsDatasetFourSlowRequests', accent: 'route380' },
-  { value: 'routeStops', labelKey: 'settingsDatasetStops', captionKey: 'settingsDatasetStopsNote', requestsKey: 'settingsDatasetFourSlowRequests', accent: 'route316' },
-  { value: 'polylines', labelKey: 'settingsDatasetPolylines', captionKey: 'settingsDatasetPolylinesNote', requestsKey: 'settingsDatasetFourSlowRequests', accent: 'primary' },
-  { value: 'stopNames', labelKey: 'settingsDatasetStopNames', captionKey: 'settingsDatasetStopNamesNote', requestsKey: 'settingsDatasetMissingStopRequests', accent: 'warning' },
+  { value: 'schedules', labelKey: 'settingsDatasetTimetables', captionKey: 'settingsDatasetTimetablesNote', requestsKey: 'settingsDatasetFourSlowRequests', syncTitleKey: 'settingsSyncDatasetSchedules', accent: 'route380' },
+  { value: 'routeStops', labelKey: 'settingsDatasetStops', captionKey: 'settingsDatasetStopsNote', requestsKey: 'settingsDatasetFourSlowRequests', syncTitleKey: 'settingsSyncDatasetRouteStops', accent: 'route316' },
+  { value: 'polylines', labelKey: 'settingsDatasetPolylines', captionKey: 'settingsDatasetPolylinesNote', requestsKey: 'settingsDatasetFourSlowRequests', syncTitleKey: 'settingsSyncDatasetPolylines', accent: 'primary' },
+  { value: 'stopNames', labelKey: 'settingsDatasetStopNames', captionKey: 'settingsDatasetStopNamesNote', requestsKey: 'settingsDatasetMissingStopRequests', syncTitleKey: 'settingsSyncDatasetStopNames', accent: 'warning' },
 ];
 const PALETTE_TRANSLATION_KEYS: Record<AppPaletteId, { name: TranslationKey; tagline: TranslationKey }> = {
   nightShift: { name: 'paletteNightShiftName', tagline: 'paletteNightShiftTagline' },
@@ -193,6 +194,28 @@ function formatOfflineStatus(status: ReturnType<typeof useTtcOfflineStatus>, t: 
   }
 
   return t('settingsPartial', { available: status.availableDatasets, total: status.totalDatasets });
+}
+
+function formatDatasetSyncStatus(
+  sync: ReturnType<typeof useTtcOfflineStatus>['datasetSync'][TtcOfflineDataset],
+  t: ReturnType<typeof useI18n>['t'],
+  language: 'en' | 'ka' | 'ru',
+) {
+  const value = formatLastSync(sync.effectiveUpdatedAt, t, language);
+
+  if (sync.source === 'cache') {
+    return t('settingsDatasetUpdated', { value });
+  }
+
+  if (sync.source === 'partial-cache') {
+    return t('settingsDatasetPartial', {
+      cached: sync.cachedParts,
+      total: sync.totalParts,
+      value,
+    });
+  }
+
+  return t('settingsDatasetBundled', { value });
 }
 
 function formatBakedAt(timestamp: string, language: 'en' | 'ka' | 'ru') {
@@ -418,9 +441,46 @@ function DataRefreshCard({
 }) {
   const { colors, styles } = useStyles();
   const { t, resolvedLanguage } = useI18n();
+  const { width } = useWindowDimensions();
   const refreshBusy = status.status === 'warming' || refreshingDataset !== null;
   const weeklyDue = isWeeklyRefreshDue(status.lastSyncAt);
   const completedSteps = status.status === 'warming' ? status.completedSteps : 0;
+  const compactRows = width < 420;
+  const activeDatasetConfig = status.activeDataset
+    ? TTC_DATASETS.find(dataset => dataset.value === status.activeDataset)
+    : null;
+  const activeDatasetLabel = activeDatasetConfig ? t(activeDatasetConfig.syncTitleKey) : '';
+  const progressTotal = status.totalRequests;
+  const progressCompleted = status.completedRequests;
+  const progressRatio = progressTotal > 0 ? Math.min(1, progressCompleted / progressTotal) : 0;
+  const currentRequestNumber = progressTotal > 0
+    ? Math.min(progressTotal, progressCompleted + (progressCompleted < progressTotal ? 1 : 0))
+    : 0;
+  const isWaiting = refreshBusy && status.nextRequestAt !== null;
+  const progressTitle = refreshBusy
+    ? progressTotal === 0
+      ? t('settingsSyncAlreadyFresh')
+      : t('settingsSyncFetching', { dataset: activeDatasetLabel })
+    : status.error
+      ? t('settingsSyncFailedPartial')
+    : status.lastCompletedDataset
+      ? t('settingsSyncCompleted')
+    : weeklyDue
+      ? t('settingsSyncDue')
+      : t('settingsSyncFresh');
+  const progressDetail = refreshBusy
+    ? progressTotal === 0
+      ? t('settingsSyncAlreadyFresh')
+      : isWaiting
+        ? t('settingsSyncWaiting')
+        : status.activeRequestLabel
+          ? t('settingsSyncRequestProgress', {
+              current: currentRequestNumber,
+              total: progressTotal,
+              label: status.activeRequestLabel,
+            })
+          : t('settingsSyncFetching', { dataset: activeDatasetLabel })
+    : t('settingsSyncNote');
 
   return (
     <View style={[styles.card, styles.dataRefreshCard]}>
@@ -429,21 +489,43 @@ function DataRefreshCard({
         <View style={styles.dataRefreshHeaderRow}>
           <View style={styles.dataRefreshCopy}>
             <Text style={styles.dataRefreshEyebrow}>{t('settingsSyncEyebrow')}</Text>
-            <Text style={styles.dataRefreshTitle}>{refreshBusy ? t('settingsSyncUpdating') : weeklyDue ? t('settingsSyncDue') : t('settingsSyncFresh')}</Text>
+            <Text style={styles.dataRefreshTitle}>{progressTitle}</Text>
             <Text style={styles.dataRefreshNote}>
-              {t('settingsSyncNote')}
+              {progressDetail}
             </Text>
           </View>
           <View style={[styles.dataRefreshBadge, { borderColor: weeklyDue ? alpha(colors.warning, '60') : alpha(colors.primary, '60') }]}>
             {refreshBusy ? <ActivityIndicator color={colors.primary} size="small" /> : null}
             <Text style={[styles.dataRefreshBadgeText, { color: weeklyDue ? colors.warning : colors.primary }]}>
-              {refreshBusy ? `${status.completedSteps}/${status.totalSteps}` : weeklyDue ? t('settingsSyncWeekly') : t('settingsSyncOk')}
+              {refreshBusy && progressTotal > 0 ? `${progressCompleted}/${progressTotal}` : refreshBusy ? `${status.completedSteps}/${status.totalSteps}` : weeklyDue ? t('settingsSyncWeekly') : t('settingsSyncOk')}
             </Text>
           </View>
         </View>
+        {refreshBusy ? (
+          <View style={styles.dataRefreshProgressBlock}>
+            <View style={styles.dataRefreshProgressTrack}>
+              <View
+                style={[
+                  styles.dataRefreshProgressFill,
+                  {
+                    width: `${Math.max(progressTotal > 0 ? 8 : 0, progressRatio * 100)}%`,
+                    backgroundColor: colors.primary,
+                  },
+                ]}
+              />
+            </View>
+            <Text style={styles.dataRefreshProgressText}>
+              {isWaiting ? t('settingsSyncWaiting') : progressTotal > 0 ? t('settingsSyncRequestProgress', {
+                current: Math.max(1, currentRequestNumber),
+                total: progressTotal,
+                label: status.activeRequestLabel ?? activeDatasetLabel,
+              }) : t('settingsSyncAlreadyFresh')}
+            </Text>
+          </View>
+        ) : null}
         <View style={styles.dataRefreshMetaRow}>
           <Text style={styles.dataRefreshMetaText}>
-            {t('settingsLastSync', { value: formatLastSync(status.lastSyncAt, t, resolvedLanguage) })}
+            {t('settingsOldestData', { value: formatLastSync(status.oldestEffectiveSyncAt, t, resolvedLanguage) })}
           </Text>
           <Text style={styles.dataRefreshMetaDot}>·</Text>
           <Text style={styles.dataRefreshMetaText}>
@@ -459,13 +541,17 @@ function DataRefreshCard({
         const queued = refreshingDataset === 'weekly' && status.status === 'warming' && completedSteps + 1 < stepNumber;
         const disabled = refreshBusy && !active;
         const statusLabel = active
-          ? t('settingsUpdateStatusUpdating')
+          ? progressTotal > 0
+            ? `${progressCompleted}/${progressTotal}`
+            : t('settingsUpdateStatusUpdating')
           : done
             ? t('settingsUpdateStatusUpdated')
             : queued
               ? t('settingsUpdateStatusQueued')
               : t('settingsUpdateStatusUpdate');
         const statusColor = active || done ? accentColor : queued ? colors.textFaint : colors.text;
+        const datasetSync = status.datasetSync[dataset.value];
+        const freshnessLabel = formatDatasetSyncStatus(datasetSync, t, resolvedLanguage);
 
         return (
           <React.Fragment key={dataset.value}>
@@ -475,18 +561,24 @@ function DataRefreshCard({
               onPress={() => onRefreshDataset(dataset.value)}
               style={({ pressed }) => [
                 styles.dataRefreshRow,
+                compactRows ? styles.dataRefreshRowCompact : null,
                 pressed && !disabled ? { backgroundColor: alpha(accentColor, '08') } : null,
                 disabled ? styles.dataRefreshRowDisabled : null,
               ]}>
-              <View style={[styles.dataRefreshPulse, { backgroundColor: alpha(accentColor, active || done ? '24' : '12'), borderColor: alpha(accentColor, '50') }]}>
-                <View style={[styles.dataRefreshPulseDot, { backgroundColor: active || done ? accentColor : colors.textFaint }]} />
+              <View style={styles.dataRefreshRowMain}>
+                <View style={[styles.dataRefreshPulse, { backgroundColor: alpha(accentColor, active || done ? '24' : '12'), borderColor: alpha(accentColor, '50') }]}>
+                  <View style={[styles.dataRefreshPulseDot, { backgroundColor: active || done ? accentColor : colors.textFaint }]} />
+                </View>
+                <View style={styles.dataRefreshDatasetCopy}>
+                  <Text style={styles.dataRefreshDatasetTitle} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.82}>{t(dataset.labelKey)}</Text>
+                  <Text style={styles.dataRefreshDatasetNote} numberOfLines={2}>{t(dataset.captionKey)}</Text>
+                </View>
               </View>
-              <View style={styles.dataRefreshDatasetCopy}>
-                <Text style={styles.dataRefreshDatasetTitle}>{t(dataset.labelKey)}</Text>
-                <Text style={styles.dataRefreshDatasetNote}>{t(dataset.captionKey)}</Text>
-              </View>
-              <View style={styles.dataRefreshAction}>
-                <Text style={[styles.dataRefreshRequests, { color: accentColor }]}>{t(dataset.requestsKey)}</Text>
+              <View style={[styles.dataRefreshAction, compactRows ? styles.dataRefreshActionCompact : null]}>
+                <View style={styles.dataRefreshActionCopy}>
+                  <Text style={[styles.dataRefreshRequests, { color: accentColor }]}>{t(dataset.requestsKey)}</Text>
+                  <Text style={styles.dataRefreshFreshness} numberOfLines={1}>{freshnessLabel}</Text>
+                </View>
                 <View style={[styles.dataRefreshStatusPill, { borderColor: alpha(statusColor, '42'), backgroundColor: alpha(statusColor, active ? '16' : '0F') }]}>
                   <Text style={[styles.dataRefreshStatusText, { color: statusColor }]}>{statusLabel}</Text>
                 </View>
@@ -1500,8 +1592,8 @@ export default function SettingsScreen() {
               </View>
               <View style={styles.itemDivider} />
               <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>{t('settingsLastOfflineSync')}</Text>
-                <Text style={styles.infoValue}>{formatLastSync(offlineStatus.lastSyncAt, t, resolvedLanguage)}</Text>
+	                <Text style={styles.infoLabel}>{t('settingsOldestOfflineData')}</Text>
+	                <Text style={styles.infoValue}>{formatLastSync(offlineStatus.oldestEffectiveSyncAt, t, resolvedLanguage)}</Text>
               </View>
               <View style={styles.itemDivider} />
               <View style={styles.infoRow}>
@@ -1806,6 +1898,18 @@ function createStyles(C: AppColors) {
     dataRefreshEyebrow: { color: C.textFaint, fontSize: 10, fontWeight: '800', letterSpacing: 1.8 },
     dataRefreshTitle: { color: C.text, fontSize: 20, fontWeight: '800', letterSpacing: -0.4, fontFamily: DISPLAY },
     dataRefreshNote: { color: C.textDim, fontSize: 12, lineHeight: 18 },
+    dataRefreshProgressBlock: { gap: 7 },
+    dataRefreshProgressTrack: {
+      height: 7,
+      borderRadius: 999,
+      backgroundColor: alpha(C.borderStrong, '28'),
+      overflow: 'hidden',
+    },
+    dataRefreshProgressFill: {
+      height: '100%',
+      borderRadius: 999,
+    },
+    dataRefreshProgressText: { color: C.textFaint, fontSize: 11, lineHeight: 15, fontWeight: '600' },
     dataRefreshBadge: {
       minWidth: 66,
       minHeight: 42,
@@ -1829,7 +1933,13 @@ function createStyles(C: AppColors) {
       paddingVertical: 14,
       backgroundColor: C.surface,
     },
+    dataRefreshRowCompact: {
+      flexDirection: 'column',
+      alignItems: 'stretch',
+      gap: 10,
+    },
     dataRefreshRowDisabled: { opacity: 0.46 },
+    dataRefreshRowMain: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 12 },
     dataRefreshPulse: {
       width: 34,
       height: 34,
@@ -1840,11 +1950,20 @@ function createStyles(C: AppColors) {
       flexShrink: 0,
     },
     dataRefreshPulseDot: { width: 8, height: 8, borderRadius: 999 },
-    dataRefreshDatasetCopy: { flex: 1, gap: 2 },
+    dataRefreshDatasetCopy: { flex: 1, minWidth: 0, gap: 2 },
     dataRefreshDatasetTitle: { color: C.text, fontSize: 15, fontWeight: '700' },
     dataRefreshDatasetNote: { color: C.textDim, fontSize: 12, lineHeight: 17 },
     dataRefreshAction: { alignItems: 'flex-end', gap: 3, flexShrink: 0 },
+    dataRefreshActionCopy: { alignItems: 'flex-end', gap: 2, minWidth: 0 },
+    dataRefreshActionCompact: {
+      paddingLeft: 46,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 12,
+    },
     dataRefreshRequests: { fontSize: 10, fontWeight: '800', letterSpacing: 0.8, textTransform: 'uppercase' },
+    dataRefreshFreshness: { color: C.textFaint, fontSize: 10, lineHeight: 13, fontWeight: '600' },
     dataRefreshActionText: { fontSize: 13, fontWeight: '800' },
     dataRefreshStatusPill: {
       borderWidth: 1,

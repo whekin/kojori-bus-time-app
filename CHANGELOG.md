@@ -8,6 +8,8 @@
 
 ### Improved
 
+- TTC data sync in Settings now shows per-request progress, wait states, and clearer Russian layout while keeping the TTC-friendly 10-second request pacing
+- TTC data sync now shows freshness per dataset, with the summary based on the oldest available offline data instead of the newest single update
 - Russian and Georgian coverage now includes Settings data/source/legal rows, widget size labels, theme names, live-status badges, compact countdowns, and fallback stop names from English TTC data
 - Destination cards now wait for a completed tap instead of triggering as soon as a finger touches down
 - All themes now use the swapped Kojori/Tbilisi destination accent colors consistently
