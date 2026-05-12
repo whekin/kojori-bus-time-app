@@ -2,6 +2,9 @@ import { Platform } from 'react-native';
 
 import { BAKED_SCHEDULES, BAKED_STOP_NAMES } from '@/assets/ttc-baked';
 import { getAppColors, type AppPaletteId, type AppResolvedThemeMode } from '@/constants/theme';
+import { resolveLanguage, type AppLanguage } from '@/i18n/languages';
+import { localizedStopName } from '@/i18n/stop-names';
+import { translate } from '@/i18n/translations';
 import {
   BusLine,
   extractStopTimes,
@@ -25,6 +28,7 @@ interface WidgetSyncSettings {
   activeTbilisiStopId: string;
   paletteId: AppPaletteId;
   themeMode: AppResolvedThemeMode;
+  language: AppLanguage;
 }
 
 interface WidgetItemPayload {
@@ -51,6 +55,14 @@ interface WidgetStatePayload {
     primary: string;
     route380: string;
     route316: string;
+  };
+  strings: {
+    openAppToLoad: string;
+    openAppToRefresh: string;
+    noDeparturesSoon: string;
+    toKojori: string;
+    toTbilisi: string;
+    from: string;
   };
   directions: Record<WidgetMode, WidgetDirectionPayload>;
 }
@@ -133,24 +145,25 @@ async function loadSchedule(routeId: string, patternSuffix: string): Promise<Sch
   return bakedKey ? JSON.parse(JSON.stringify(BAKED_SCHEDULES[bakedKey])) as SchedulePeriod[] : undefined;
 }
 
-async function loadStopLabel(stopId: string) {
+async function loadStopLabel(stopId: string, language: ReturnType<typeof resolveLanguage>) {
   const cached = await readCachedStopName(stopId, true);
-  if (cached) return cached;
+  if (cached) return localizedStopName({ id: stopId, label: cached }, language);
 
   const baked = BAKED_STOP_NAMES[stopId];
-  if (baked) return baked;
+  if (baked) return localizedStopName({ id: stopId, label: baked }, language);
 
   const fallback = findStop(stopId)?.label;
-  return fallback ?? `Stop #${stopId.split(':')[1] ?? stopId}`;
+  return localizedStopName(stopId, language, fallback);
 }
 
 async function buildDirectionPayload(
   mode: WidgetMode,
   stopId: string,
   now: Date,
+  language: ReturnType<typeof resolveLanguage>,
 ): Promise<WidgetDirectionPayload> {
   const direction = mode === 'kojori' ? 'toKojori' : 'toTbilisi';
-  const stopLabel = await loadStopLabel(stopId);
+  const stopLabel = await loadStopLabel(stopId, language);
   const syncedAtEpochMs = now.getTime();
 
   try {
@@ -168,7 +181,7 @@ async function buildDirectionPayload(
         stopLabel,
         syncedAtEpochMs,
         status: 'empty',
-        message: 'No departures soon',
+        message: translate(language, 'widgetNoDepartures'),
         items: [],
       };
     }
@@ -189,7 +202,7 @@ async function buildDirectionPayload(
       stopLabel,
       syncedAtEpochMs,
       status: 'error',
-      message: 'Open app to refresh',
+      message: translate(language, 'widgetOpenRefresh'),
       items: [],
     };
   }
@@ -199,10 +212,11 @@ export async function syncAndroidWidgetState(settings: WidgetSyncSettings) {
   if (Platform.OS !== 'android' || !KojoriWidget) return;
 
   const now = new Date();
+  const language = resolveLanguage(settings.language);
   const palette = getAppColors(settings.paletteId, settings.themeMode);
   const [kojori, tbilisi] = await Promise.all([
-    buildDirectionPayload('kojori', settings.activeTbilisiStopId, now),
-    buildDirectionPayload('tbilisi', settings.activeKojoriStopId, now),
+    buildDirectionPayload('kojori', settings.activeTbilisiStopId, now, language),
+    buildDirectionPayload('tbilisi', settings.activeKojoriStopId, now, language),
   ]);
 
   const payload: WidgetStatePayload = {
@@ -213,6 +227,14 @@ export async function syncAndroidWidgetState(settings: WidgetSyncSettings) {
       primary: palette.primary,
       route380: palette.route380,
       route316: palette.route316,
+    },
+    strings: {
+      openAppToLoad: translate(language, 'widgetOpenLoad'),
+      openAppToRefresh: translate(language, 'widgetOpenRefresh'),
+      noDeparturesSoon: translate(language, 'widgetNoDepartures'),
+      toKojori: translate(language, 'widgetToKojori'),
+      toTbilisi: translate(language, 'widgetToTbilisi'),
+      from: language === 'en' ? 'from' : language === 'ka' ? 'საიდან' : 'от',
     },
     directions: { kojori, tbilisi },
   };

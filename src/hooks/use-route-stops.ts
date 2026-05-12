@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 
+import { useI18n } from '@/hooks/use-i18n';
 import { StopInfo } from '@/services/ttc';
 import {
   getBakedRouteStops,
@@ -9,8 +10,9 @@ import {
 type Direction = 'toKojori' | 'toTbilisi';
 
 export function useRouteStops(direction: Direction) {
+  const { localizedStopName, resolvedLanguage } = useI18n();
   const query = useQuery<StopInfo[]>({
-    queryKey: ['route-stops', direction],
+    queryKey: ['route-stops', direction, resolvedLanguage],
     meta: { source: 'ttc' },
     initialData: () => getBakedRouteStops(direction),
     queryFn: async () => (await readRouteStopsCache(direction, true)) ?? getBakedRouteStops(direction),
@@ -19,7 +21,7 @@ export function useRouteStops(direction: Direction) {
   });
 
   return {
-    stops: query.data ?? [],
+    stops: (query.data ?? []).map(stop => ({ ...stop, label: localizedStopName(stop) })),
     isLoading: query.isLoading,
     isError: query.isError,
   };

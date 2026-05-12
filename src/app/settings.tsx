@@ -40,6 +40,7 @@ import {
   type AppThemeMode,
 } from '@/constants/theme';
 import { useAppColors, useResolvedAppThemeMode } from '@/hooks/use-app-colors';
+import { useI18n, type TranslationKey } from '@/hooks/use-i18n';
 import { useLocation } from '@/hooks/use-location';
 import { useRouteStops } from '@/hooks/use-route-stops';
 import { useSettings, type LaunchBehavior } from '@/hooks/use-settings';
@@ -85,28 +86,24 @@ const EASTER_EGG_MESSAGES = [
 const PALETTE_IDS = Object.keys(APP_PALETTES) as AppPaletteId[];
 const PALETTE_CARD_WIDTH = 250;
 const PALETTE_CARD_GAP = 12;
-const THEME_MODE_OPTIONS: { value: AppThemeMode; label: string; caption: string }[] = [
-  { value: 'system', label: 'System', caption: 'Follow device' },
-  { value: 'light', label: 'Light', caption: 'Always bright' },
-  { value: 'dark', label: 'Dark', caption: 'Always moody' },
-];
-const LAUNCH_BEHAVIOR_OPTIONS: { value: LaunchBehavior; label: string; caption: string }[] = [
-  { value: 'ask', label: 'Ask me each time', caption: 'Always show the destination screen on open.' },
-  { value: 'smart', label: 'Use my location', caption: 'Try location first, then fall back to asking if needed.' },
-  { value: 'remember', label: 'Remember last direction', caption: 'Open straight into the last direction you used.' },
-];
 const TTC_DATASETS: {
   value: TtcOfflineDataset;
-  label: string;
-  caption: string;
-  requests: string;
+  labelKey: TranslationKey;
+  captionKey: TranslationKey;
+  requestsKey: TranslationKey;
   accent: 'route380' | 'route316' | 'primary' | 'warning';
 }[] = [
-  { value: 'schedules', label: 'Timetables', caption: 'Service dates and departure times for both routes.', requests: '4 slow requests', accent: 'route380' },
-  { value: 'routeStops', label: 'Stops', caption: 'Ordered stop lists for each direction.', requests: '4 slow requests', accent: 'route316' },
-  { value: 'polylines', label: 'Map lines', caption: 'Route geometry used by the Map tab.', requests: '4 slow requests', accent: 'primary' },
-  { value: 'stopNames', label: 'Stop names', caption: 'Labels for saved and important stops.', requests: 'one per missing stop', accent: 'warning' },
+  { value: 'schedules', labelKey: 'settingsDatasetTimetables', captionKey: 'settingsDatasetTimetablesNote', requestsKey: 'settingsDatasetFourSlowRequests', accent: 'route380' },
+  { value: 'routeStops', labelKey: 'settingsDatasetStops', captionKey: 'settingsDatasetStopsNote', requestsKey: 'settingsDatasetFourSlowRequests', accent: 'route316' },
+  { value: 'polylines', labelKey: 'settingsDatasetPolylines', captionKey: 'settingsDatasetPolylinesNote', requestsKey: 'settingsDatasetFourSlowRequests', accent: 'primary' },
+  { value: 'stopNames', labelKey: 'settingsDatasetStopNames', captionKey: 'settingsDatasetStopNamesNote', requestsKey: 'settingsDatasetMissingStopRequests', accent: 'warning' },
 ];
+const PALETTE_TRANSLATION_KEYS: Record<AppPaletteId, { name: TranslationKey; tagline: TranslationKey }> = {
+  nightShift: { name: 'paletteNightShiftName', tagline: 'paletteNightShiftTagline' },
+  emberPunch: { name: 'paletteEmberPunchName', tagline: 'paletteEmberPunchTagline' },
+  sorbetStatic: { name: 'paletteSorbetStaticName', tagline: 'paletteSorbetStaticTagline' },
+  midnightFig: { name: 'paletteMidnightFigName', tagline: 'paletteMidnightFigTagline' },
+};
 const LEGAL_BASE_URL = 'https://github.com/whekin/kojori-bus-time-app/blob/main/release/google-play';
 const LEGAL_URLS = {
   privacyPolicy: Constants.expoConfig?.extra?.legal?.privacyPolicyUrl ?? `${LEGAL_BASE_URL}/privacy-policy.md`,
@@ -168,9 +165,13 @@ function formatTtl(ms: number) {
   return `${days} d`;
 }
 
-function formatLastSync(timestamp: number | null) {
-  if (!timestamp) return 'Not yet';
-  return new Date(timestamp).toLocaleString('en-GB', {
+function languageDateLocale(language: 'en' | 'ka' | 'ru') {
+  return language === 'ru' ? 'ru-RU' : language === 'ka' ? 'ka-GE' : 'en-GB';
+}
+
+function formatLastSync(timestamp: number | null, t: ReturnType<typeof useI18n>['t'], language: 'en' | 'ka' | 'ru') {
+  if (!timestamp) return t('settingsNotYet');
+  return new Date(timestamp).toLocaleString(languageDateLocale(language), {
     day: '2-digit',
     month: 'short',
     hour: '2-digit',
@@ -178,24 +179,24 @@ function formatLastSync(timestamp: number | null) {
   });
 }
 
-function formatOfflineStatus(status: ReturnType<typeof useTtcOfflineStatus>) {
+function formatOfflineStatus(status: ReturnType<typeof useTtcOfflineStatus>, t: ReturnType<typeof useI18n>['t']) {
   if (status.status === 'warming') {
-    return `Syncing ${status.completedSteps}/${status.totalSteps}`;
+    return t('settingsSyncing', { completed: status.completedSteps, total: status.totalSteps });
   }
 
   if (status.status === 'hydrating') {
-    return 'Loading saved data';
+    return t('settingsLoadingSavedData');
   }
 
   if (status.availableDatasets === status.totalDatasets) {
-    return 'Ready';
+    return t('settingsReady');
   }
 
-  return `Partial ${status.availableDatasets}/${status.totalDatasets}`;
+  return t('settingsPartial', { available: status.availableDatasets, total: status.totalDatasets });
 }
 
-function formatBakedAt(timestamp: string) {
-  return new Date(timestamp).toLocaleString('en-GB', {
+function formatBakedAt(timestamp: string, language: 'en' | 'ka' | 'ru') {
+  return new Date(timestamp).toLocaleString(languageDateLocale(language), {
     day: '2-digit',
     month: 'short',
     year: 'numeric',
@@ -209,20 +210,20 @@ function isWeeklyRefreshDue(timestamp: number | null) {
   return Date.now() - timestamp >= TTC_OFFLINE_AUTO_REFRESH_INTERVAL;
 }
 
-function formatQueryKind(kind: TtcQueryLogEntry['kind']) {
+function formatQueryKind(kind: TtcQueryLogEntry['kind'], t: ReturnType<typeof useI18n>['t']) {
   switch (kind) {
     case 'arrivals':
-      return 'Arrivals';
+      return t('queryKindArrivals');
     case 'vehicle-positions':
-      return 'Vehicles';
+      return t('queryKindVehicles');
     case 'schedule':
-      return 'Schedule';
+      return t('queryKindSchedule');
     case 'route-stops':
-      return 'Stops';
+      return t('queryKindStops');
     case 'route-polylines':
-      return 'Polylines';
+      return t('queryKindPolylines');
     case 'stop-details':
-      return 'Stop';
+      return t('queryKindStop');
     default:
       return kind;
   }
@@ -276,6 +277,7 @@ function TtcQueryLogCard({
   onClear: () => void;
 }) {
   const { styles, colors } = useStyles();
+  const { t } = useI18n();
   const visibleEntries = entries.slice(0, 18);
 
   return (
@@ -285,37 +287,37 @@ function TtcQueryLogCard({
 
       <View style={styles.queryConsoleHeader}>
         <View style={styles.queryConsoleCopy}>
-          <Text style={styles.queryConsoleEyebrow}>TTC OBSERVABILITY</Text>
-          <Text style={[styles.queryConsoleTitle, { fontFamily: DISPLAY }]}>Realtime calls only.</Text>
+          <Text style={styles.queryConsoleEyebrow}>{t('queryObservability')}</Text>
+          <Text style={[styles.queryConsoleTitle, { fontFamily: DISPLAY }]}>{t('queryRealtimeOnly')}</Text>
           <Text style={styles.queryConsoleBody}>
-            Static schedules, stops, polylines, and known stop names now come from the bundled build. Normal live traffic should be arrivals on Departures and vehicle positions on Map.
+            {t('queryRealtimeBody')}
           </Text>
         </View>
         <Pressable style={[styles.queryClearButton, { borderColor: colors.borderStrong }]} onPress={onClear}>
-          <Text style={[styles.queryClearButtonText, { color: colors.text }]}>Clear logs</Text>
+          <Text style={[styles.queryClearButtonText, { color: colors.text }]}>{t('queryClearLogs')}</Text>
         </Pressable>
       </View>
 
       <View style={styles.queryMetricRow}>
         <View style={[styles.queryMetricTile, { backgroundColor: alpha(colors.primary, '0E') }]}>
           <Text style={styles.queryMetricValue}>{queriesLastMinute}</Text>
-          <Text style={styles.queryMetricLabel}>queries / 1 min</Text>
+          <Text style={styles.queryMetricLabel}>{t('queryOneMinute')}</Text>
         </View>
         <View style={[styles.queryMetricTile, { backgroundColor: alpha(colors.route380, '10') }]}>
           <Text style={styles.queryMetricValue}>{queriesLastTenMinutes}</Text>
-          <Text style={styles.queryMetricLabel}>queries / 10 min</Text>
+          <Text style={styles.queryMetricLabel}>{t('queryTenMinutes')}</Text>
         </View>
         <View style={[styles.queryMetricTile, { backgroundColor: alpha(colors.route316, '10') }]}>
           <Text style={styles.queryMetricValue}>{totalErrors}</Text>
-          <Text style={styles.queryMetricLabel}>errors saved</Text>
+          <Text style={styles.queryMetricLabel}>{t('queryErrorsSaved')}</Text>
         </View>
       </View>
 
       <View style={styles.queryListWrap}>
         {visibleEntries.length === 0 ? (
           <View style={styles.queryEmptyState}>
-            <Text style={styles.queryEmptyTitle}>No TTC requests captured yet.</Text>
-            <Text style={styles.queryEmptyNote}>Open Departures or Map to generate live traffic, then return here.</Text>
+            <Text style={styles.queryEmptyTitle}>{t('queryEmptyTitle')}</Text>
+            <Text style={styles.queryEmptyNote}>{t('queryEmptyNote')}</Text>
           </View>
         ) : (
           visibleEntries.map((entry, index) => {
@@ -327,7 +329,7 @@ function TtcQueryLogCard({
                 <View style={styles.queryRow}>
                   <View style={styles.queryRowTop}>
                     <View style={styles.queryRowLead}>
-                      <Text style={styles.queryKind}>{formatQueryKind(entry.kind)}</Text>
+                      <Text style={styles.queryKind}>{formatQueryKind(entry.kind, t)}</Text>
                       <Text style={styles.queryAge}>{formatQueryAge(entry.finishedAt)}</Text>
                     </View>
                     <View style={[styles.queryStatusChip, { borderColor: alpha(statusColor, '40'), backgroundColor: alpha(statusColor, '12') }]}>
@@ -372,6 +374,7 @@ function FavoritesCard({
   onManage: () => void;
 }) {
   const { styles } = useStyles();
+  const { t } = useI18n();
 
   return (
     <View style={styles.card}>
@@ -398,7 +401,7 @@ function FavoritesCard({
       })}
       <View style={styles.itemDivider} />
       <Pressable style={styles.manageBtn} onPress={onManage}>
-        <Text style={[styles.manageBtnText, { color: accentColor }]}>+ Add stop</Text>
+        <Text style={[styles.manageBtnText, { color: accentColor }]}>{t('stopAddAnother')}</Text>
       </Pressable>
     </View>
   );
@@ -414,6 +417,7 @@ function DataRefreshCard({
   onRefreshDataset: (dataset: TtcOfflineDataset) => void;
 }) {
   const { colors, styles } = useStyles();
+  const { t, resolvedLanguage } = useI18n();
   const refreshBusy = status.status === 'warming' || refreshingDataset !== null;
   const weeklyDue = isWeeklyRefreshDue(status.lastSyncAt);
   const completedSteps = status.status === 'warming' ? status.completedSteps : 0;
@@ -424,23 +428,27 @@ function DataRefreshCard({
         <View style={styles.dataRefreshHalo} />
         <View style={styles.dataRefreshHeaderRow}>
           <View style={styles.dataRefreshCopy}>
-            <Text style={styles.dataRefreshEyebrow}>SLOW LANE TTC SYNC</Text>
-            <Text style={styles.dataRefreshTitle}>{refreshBusy ? 'Updating carefully' : weeklyDue ? 'Fresh data is due' : 'Data is fresh enough'}</Text>
+            <Text style={styles.dataRefreshEyebrow}>{t('settingsSyncEyebrow')}</Text>
+            <Text style={styles.dataRefreshTitle}>{refreshBusy ? t('settingsSyncUpdating') : weeklyDue ? t('settingsSyncDue') : t('settingsSyncFresh')}</Text>
             <Text style={styles.dataRefreshNote}>
-              Requests run one-by-one with a 10 second pause. Nothing is fetched during normal app launch.
+              {t('settingsSyncNote')}
             </Text>
           </View>
           <View style={[styles.dataRefreshBadge, { borderColor: weeklyDue ? alpha(colors.warning, '60') : alpha(colors.primary, '60') }]}>
             {refreshBusy ? <ActivityIndicator color={colors.primary} size="small" /> : null}
             <Text style={[styles.dataRefreshBadgeText, { color: weeklyDue ? colors.warning : colors.primary }]}>
-              {refreshBusy ? `${status.completedSteps}/${status.totalSteps}` : weeklyDue ? 'Weekly' : 'OK'}
+              {refreshBusy ? `${status.completedSteps}/${status.totalSteps}` : weeklyDue ? t('settingsSyncWeekly') : t('settingsSyncOk')}
             </Text>
           </View>
         </View>
         <View style={styles.dataRefreshMetaRow}>
-          <Text style={styles.dataRefreshMetaText}>Last sync: {formatLastSync(status.lastSyncAt)}</Text>
+          <Text style={styles.dataRefreshMetaText}>
+            {t('settingsLastSync', { value: formatLastSync(status.lastSyncAt, t, resolvedLanguage) })}
+          </Text>
           <Text style={styles.dataRefreshMetaDot}>·</Text>
-          <Text style={styles.dataRefreshMetaText}>Saved {status.availableDatasets}/{status.totalDatasets}</Text>
+          <Text style={styles.dataRefreshMetaText}>
+            {t('settingsSavedDatasets', { available: status.availableDatasets, total: status.totalDatasets })}
+          </Text>
         </View>
       </View>
       {TTC_DATASETS.map((dataset, index) => {
@@ -450,7 +458,13 @@ function DataRefreshCard({
         const done = refreshingDataset === 'weekly' && status.status === 'warming' && completedSteps >= stepNumber;
         const queued = refreshingDataset === 'weekly' && status.status === 'warming' && completedSteps + 1 < stepNumber;
         const disabled = refreshBusy && !active;
-        const statusLabel = active ? 'Updating' : done ? 'Updated' : queued ? 'Queued' : 'Update';
+        const statusLabel = active
+          ? t('settingsUpdateStatusUpdating')
+          : done
+            ? t('settingsUpdateStatusUpdated')
+            : queued
+              ? t('settingsUpdateStatusQueued')
+              : t('settingsUpdateStatusUpdate');
         const statusColor = active || done ? accentColor : queued ? colors.textFaint : colors.text;
 
         return (
@@ -468,11 +482,11 @@ function DataRefreshCard({
                 <View style={[styles.dataRefreshPulseDot, { backgroundColor: active || done ? accentColor : colors.textFaint }]} />
               </View>
               <View style={styles.dataRefreshDatasetCopy}>
-                <Text style={styles.dataRefreshDatasetTitle}>{dataset.label}</Text>
-                <Text style={styles.dataRefreshDatasetNote}>{dataset.caption}</Text>
+                <Text style={styles.dataRefreshDatasetTitle}>{t(dataset.labelKey)}</Text>
+                <Text style={styles.dataRefreshDatasetNote}>{t(dataset.captionKey)}</Text>
               </View>
               <View style={styles.dataRefreshAction}>
-                <Text style={[styles.dataRefreshRequests, { color: accentColor }]}>{dataset.requests}</Text>
+                <Text style={[styles.dataRefreshRequests, { color: accentColor }]}>{t(dataset.requestsKey)}</Text>
                 <View style={[styles.dataRefreshStatusPill, { borderColor: alpha(statusColor, '42'), backgroundColor: alpha(statusColor, active ? '16' : '0F') }]}>
                   <Text style={[styles.dataRefreshStatusText, { color: statusColor }]}>{statusLabel}</Text>
                 </View>
@@ -507,6 +521,7 @@ function WidgetStopCard({
   onManage: () => void;
 }) {
   const { styles } = useStyles();
+  const { t } = useI18n();
   const shortId = stopId.split(':')[1];
   const label = stopNames[stopId] ?? `Stop #${shortId}`;
 
@@ -522,7 +537,7 @@ function WidgetStopCard({
       </View>
       <View style={styles.itemDivider} />
       <Pressable style={styles.manageBtn} onPress={onManage}>
-        <Text style={[styles.manageBtnText, { color: accentColor }]}>Change stop</Text>
+        <Text style={[styles.manageBtnText, { color: accentColor }]}>{t('commonChange')}</Text>
       </Pressable>
     </View>
   );
@@ -549,6 +564,7 @@ function SingleStopPickerModal({
 }) {
   const [search, setSearch] = useState('');
   const { modalStyles, colors } = useStyles();
+  const { t } = useI18n();
   const { stops: routeStops, isLoading } = useRouteStops(direction);
   const insets = useSafeAreaInsets();
   const query = search.trim().toLowerCase();
@@ -577,7 +593,7 @@ function SingleStopPickerModal({
         <View style={modalStyles.searchWrap}>
           <TextInput
             style={modalStyles.searchInput}
-            placeholder="Search by name or stop ID…"
+            placeholder={t('stopSearch')}
             placeholderTextColor={colors.textFaint}
             value={search}
             onChangeText={setSearch}
@@ -596,7 +612,7 @@ function SingleStopPickerModal({
           ItemSeparatorComponent={() => <View style={modalStyles.separator} />}
           ListEmptyComponent={
             <Text style={modalStyles.emptyText}>
-              {isLoading ? 'Loading stops…' : 'No stops found'}
+              {isLoading ? t('stopLoading') : t('stopNoneFound')}
             </Text>
           }
           renderItem={({ item }) => {
@@ -638,8 +654,10 @@ function PaletteCard({
   onSelect: (paletteId: AppPaletteId) => void;
 }) {
   const { styles } = useStyles();
+  const { t } = useI18n();
   const darkPalette = getAppColors(paletteId, 'dark');
   const lightPalette = getAppColors(paletteId, 'light');
+  const copyKeys = PALETTE_TRANSLATION_KEYS[paletteId];
   const darkPreviewChipBorder = alpha(darkPalette.primary, '55');
   const lightPreviewChipBorder = alpha(lightPalette.primary, '55');
   const darkPreviewChipFill = alpha(darkPalette.primary, '14');
@@ -767,12 +785,24 @@ function PaletteCard({
 
         <View style={styles.paletteMeta}>
           <View style={styles.paletteHeaderRow}>
-            <Animated.Text style={[styles.paletteName, nameStyle, { fontFamily: DISPLAY }]}>
-              {darkPalette.name}
+            <Animated.Text
+              style={[styles.paletteName, nameStyle, { fontFamily: DISPLAY }]}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.78}>
+              {t(copyKeys.name)}
             </Animated.Text>
-            {selected ? <Animated.Text style={[styles.paletteSelected, liveStyle]}>LIVE</Animated.Text> : null}
+            {selected ? (
+              <Animated.Text
+                style={[styles.paletteSelected, liveStyle]}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.72}>
+                {t('commonSelected')}
+              </Animated.Text>
+            ) : null}
           </View>
-          <Animated.Text style={[styles.paletteTagline, taglineStyle]}>{darkPalette.tagline}</Animated.Text>
+          <Animated.Text style={[styles.paletteTagline, taglineStyle]}>{t(copyKeys.tagline)}</Animated.Text>
           <View style={styles.paletteSwatches}>
             <Animated.View style={[styles.paletteSwatch, swatchPrimaryStyle]} />
             <Animated.View style={[styles.paletteSwatch, swatchRoute380Style]} />
@@ -820,10 +850,18 @@ function ThemeModeCard({
   return (
     <Pressable onPress={() => onSelect(option.value)} style={styles.themeModePressable}>
       <Animated.View style={[styles.themeModeButton, animatedStyle]}>
-        <Animated.Text style={[styles.themeModeLabel, labelStyle]}>
+        <Animated.Text
+          style={[styles.themeModeLabel, labelStyle]}
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          minimumFontScale={0.72}>
           {option.label}
         </Animated.Text>
-        <Animated.Text style={[styles.themeModeCaption, captionStyle]}>
+        <Animated.Text
+          style={[styles.themeModeCaption, captionStyle]}
+          numberOfLines={2}
+          adjustsFontSizeToFit
+          minimumFontScale={0.78}>
           {option.caption}
         </Animated.Text>
       </Animated.View>
@@ -837,6 +875,7 @@ export default function SettingsScreen() {
   const { colors, styles } = useStyles();
   const resolvedThemeMode = useResolvedAppThemeMode();
   const { settings, toggleKojoriFavorite, toggleTbilisiFavorite, update, hasManualDirectionOverride } = useSettings();
+  const { t, languageOptions, resolvedLanguage, setLanguage } = useI18n();
   const stopNames = useStopNames();
   const offlineStatus = useTtcOfflineStatus();
   const queryLog = useTtcQueryLog();
@@ -887,7 +926,7 @@ export default function SettingsScreen() {
         setLegalLoadError(null);
       } catch {
         if (cancelled) return;
-        setLegalLoadError('Failed to load this document.');
+        setLegalLoadError(t('settingsDocumentLoadFailed'));
       }
     }
 
@@ -896,7 +935,7 @@ export default function SettingsScreen() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [t]);
 
   const liveQueryMetrics = useMemo(
     () => calculateTtcQueryMetrics(queryLog.entries, queryMetricsNow),
@@ -931,12 +970,12 @@ export default function SettingsScreen() {
 
   async function handleClearCache() {
     Alert.alert(
-      'Clear Cache',
-      'This will remove all cached data and settings. The app will reload to apply changes.',
+      t('settingsClearCacheTitle'),
+      t('settingsClearCacheMessage'),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('commonCancel'), style: 'cancel' },
         {
-          text: 'Clear',
+          text: t('commonClear'),
           style: 'destructive',
           onPress: async () => {
             try {
@@ -948,7 +987,7 @@ export default function SettingsScreen() {
                 await Updates.reloadAsync();
               }
             } catch {
-              Alert.alert('Error', 'Failed to clear cache.');
+              Alert.alert(t('commonError'), t('settingsClearCacheFailed'));
             }
           },
         },
@@ -958,12 +997,12 @@ export default function SettingsScreen() {
 
   function handleClearQueryLog() {
     Alert.alert(
-      'Clear TTC logs',
-      'Remove all persisted TTC request logs and metrics from this device?',
+      t('settingsClearTtcLogsTitle'),
+      t('settingsClearTtcLogsMessage'),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('commonCancel'), style: 'cancel' },
         {
-          text: 'Clear',
+          text: t('commonClear'),
           style: 'destructive',
           onPress: () => {
             void clearTtcQueryLog();
@@ -981,8 +1020,8 @@ export default function SettingsScreen() {
         update({ debugOptionsUnlocked: true });
         setNoticeModal({
           icon: '🛠️',
-          title: 'Debug Options Unlocked',
-          message: 'Extra debug controls are now visible in Settings.',
+          title: t('settingsDebugUnlockedTitle'),
+          message: t('settingsDebugUnlockedMessage'),
         });
         setEasterEggTaps(0);
         return;
@@ -1016,49 +1055,61 @@ export default function SettingsScreen() {
   const launchBehaviorStatus = (() => {
     if (settings.launchBehavior === 'ask') {
       return {
-        title: 'Ask every time',
-        note: 'The start screen opens on each launch so the destination stays explicit.',
+        title: t('settingsAskEveryTime'),
+        note: t('settingsAskNote'),
       };
     }
 
     if (settings.launchBehavior === 'remember') {
       return {
-        title: 'Restore last direction',
-        note: 'The app skips the start screen and opens directly into the last direction you used.',
+        title: t('settingsRestoreDirection'),
+        note: t('settingsRestoreNote'),
       };
     }
 
     if (permission === 'granted') {
       if (hasManualDirectionOverride) {
         return {
-          title: 'Using location with manual override',
-          note: 'Launch will still try location first. Your current in-app direction stays manual until you ask for location again.',
+          title: t('settingsLocationManualTitle'),
+          note: t('settingsLocationManualNote'),
         };
       }
 
       return {
-        title: 'Using location on launch',
-        note: 'The app will try your location first, then fall back to asking if detection is slow or unclear.',
+        title: t('settingsLocationLaunchTitle'),
+        note: t('settingsLocationLaunchNote'),
       };
     }
 
     if (permission === 'denied') {
       return {
-        title: 'Location permission is off',
-        note: 'Use my location is selected, but launch will fall back to asking until permission is granted.',
+        title: t('settingsLocationOffTitle'),
+        note: t('settingsLocationOffNote'),
       };
     }
 
     return {
-      title: 'Location is not ready yet',
-      note: 'Use my location is selected. Permission will be requested inline when available.',
+      title: t('settingsLocationNotReadyTitle'),
+      note: t('settingsLocationNotReadyNote'),
     };
   })();
+
+  const themeModeOptions = [
+    { value: 'system' as const, label: t('settingsThemeSystemShort'), caption: t('settingsThemeFollowDevice') },
+    { value: 'light' as const, label: t('settingsThemeLightShort'), caption: t('settingsThemeAlwaysBright') },
+    { value: 'dark' as const, label: t('settingsThemeDarkShort'), caption: t('settingsThemeAlwaysMoody') },
+  ];
+  const launchBehaviorOptions = [
+    { value: 'ask' as const, label: t('settingsAskEveryTime'), caption: t('settingsAskNote') },
+    { value: 'smart' as const, label: t('locationUseMine'), caption: t('settingsLocationLaunchNote') },
+    { value: 'remember' as const, label: t('settingsRestoreDirection'), caption: t('settingsRestoreNote') },
+  ];
+  const activeLanguageLabel = languageOptions.find(option => option.value === resolvedLanguage)?.label ?? t('commonEnglish');
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Settings</Text>
+        <Text style={styles.headerTitle}>{t('settingsTitle')}</Text>
       </View>
 
       <ScrollView
@@ -1066,10 +1117,10 @@ export default function SettingsScreen() {
         contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + BottomTabInset + 32 }]}
         showsVerticalScrollIndicator={false}>
         <View style={styles.paletteHero}>
-          <Text style={styles.paletteEyebrow}>LOOK & FEEL</Text>
-          <Text style={styles.paletteHeadline}>Pick palette for whole app.</Text>
+          <Text style={styles.paletteEyebrow}>{t('settingsLookFeel')}</Text>
+          <Text style={styles.paletteHeadline}>{t('settingsPaletteHeadline')}</Text>
           <Text style={styles.paletteBody}>
-            Three tuned color systems. Tabs, cards, route accents, badges, map traces, settings.
+            {t('settingsPaletteBody')}
           </Text>
         </View>
 
@@ -1122,14 +1173,14 @@ export default function SettingsScreen() {
         </View>
 
         <View style={styles.sectionMeta}>
-          <Text style={styles.sectionHeader}>COLOR MODE</Text>
+          <Text style={styles.sectionHeader}>{t('settingsColorMode')}</Text>
           <Text style={styles.sectionNote}>
-            Keep each palette, choose whether it runs in light, dark, or follows your device.
+            {t('settingsColorModeNote')}
           </Text>
         </View>
         <View style={styles.card}>
           <View style={styles.themeModeRow}>
-            {THEME_MODE_OPTIONS.map(option => {
+            {themeModeOptions.map(option => {
               return (
                 <ThemeModeCard
                   key={option.value}
@@ -1144,18 +1195,83 @@ export default function SettingsScreen() {
           <View style={styles.itemDivider} />
           <View style={styles.themeModeFooter}>
             <Text style={styles.themeModeFooterText}>
-              Active now: {resolvedThemeMode === 'dark' ? 'Dark' : 'Light'}
-              {settings.themeMode === 'system' ? ' from device setting.' : ' mode pinned in app.'}
+              {t('settingsActiveNow', {
+                mode: resolvedThemeMode === 'dark' ? t('settingsDark') : t('settingsLight'),
+                suffix: settings.themeMode === 'system' ? t('settingsFromDevice') : t('settingsPinnedMode'),
+              })}
             </Text>
           </View>
         </View>
 
         <View style={styles.sectionMeta}>
-          <Text style={styles.sectionHeader}>ON LAUNCH</Text>
-          <Text style={styles.sectionNote}>Choose whether the app should ask, use location, or restore your last direction.</Text>
+          <Text style={styles.sectionHeader}>{t('settingsLanguage')}</Text>
+          <Text style={styles.sectionNote}>{t('settingsLanguageNote')}</Text>
         </View>
         <View style={styles.card}>
-          {LAUNCH_BEHAVIOR_OPTIONS.map((option, index) => {
+          {languageOptions.map((option, index) => {
+            const selected = settings.language === option.value;
+            const label =
+              option.value === 'system' ? t('commonSystem')
+                : option.value === 'en' ? t('commonEnglish')
+                : option.value === 'ka' ? t('commonGeorgian')
+                : t('commonRussian');
+            const caption =
+              option.value === 'system' ? t('settingsLanguageNote')
+                : option.value === 'en' ? 'English'
+                : option.value === 'ka' ? 'ქართული'
+                : 'Русский';
+            return (
+              <React.Fragment key={option.value}>
+                {index > 0 ? <View style={styles.itemDivider} /> : null}
+                <Pressable
+                  onPress={() => setLanguage(option.value)}
+                  style={({ pressed }) => [
+                    styles.launchBehaviorRow,
+                    {
+                      backgroundColor: selected
+                        ? alpha(colors.primary, '12')
+                        : pressed
+                          ? colors.panel
+                          : colors.surface,
+                    },
+                  ]}>
+                  <View style={styles.launchBehaviorCopy}>
+                    <Text style={styles.launchBehaviorLabel}>{label}</Text>
+                    <Text style={styles.launchBehaviorNote}>{caption}</Text>
+                  </View>
+                  <View
+                    style={[
+                      styles.launchBehaviorRadio,
+                      selected && {
+                        borderColor: colors.primary,
+                        backgroundColor: alpha(colors.primary, '18'),
+                      },
+                    ]}>
+                    {selected ? (
+                      <View
+                        style={[
+                          styles.launchBehaviorRadioDot,
+                          { backgroundColor: colors.primary },
+                        ]}
+                      />
+                    ) : null}
+                  </View>
+                </Pressable>
+              </React.Fragment>
+            );
+          })}
+          <View style={styles.itemDivider} />
+          <View style={styles.launchBehaviorFooter}>
+            <Text style={styles.launchBehaviorFooterTitle}>{t('settingsActiveLanguage', { language: activeLanguageLabel })}</Text>
+          </View>
+        </View>
+
+        <View style={styles.sectionMeta}>
+          <Text style={styles.sectionHeader}>{t('settingsOnLaunch')}</Text>
+          <Text style={styles.sectionNote}>{t('settingsOnLaunchNote')}</Text>
+        </View>
+        <View style={styles.card}>
+          {launchBehaviorOptions.map((option, index) => {
             const selected = settings.launchBehavior === option.value;
 
             return (
@@ -1216,8 +1332,8 @@ export default function SettingsScreen() {
         </View>
 
         <View style={styles.sectionMeta}>
-          <Text style={styles.sectionHeader}>KOJORI STOPS</Text>
-          <Text style={styles.sectionNote}>Used for real-time arrivals when heading to Tbilisi.</Text>
+          <Text style={styles.sectionHeader}>{t('settingsKojoriStops')}</Text>
+          <Text style={styles.sectionNote}>{t('settingsKojoriStopsNote')}</Text>
         </View>
         <FavoritesCard
           favoriteIds={settings.kojoriFavorites}
@@ -1229,7 +1345,7 @@ export default function SettingsScreen() {
         />
 
         <View style={styles.sectionMeta}>
-          <Text style={styles.sectionHeader}>TBILISI DEPARTURE STOPS</Text>
+          <Text style={styles.sectionHeader}>{t('settingsTbilisiStops')}</Text>
         </View>
         <FavoritesCard
           favoriteIds={settings.tbilisiFavorites}
@@ -1243,13 +1359,17 @@ export default function SettingsScreen() {
         {Platform.OS === 'android' ? (
           <>
             <View style={styles.sectionMeta}>
-              <Text style={styles.sectionHeader}>ANDROID WIDGET</Text>
-              <Text style={styles.sectionNote}>See upcoming departures right from your home screen.</Text>
+              <Text style={styles.sectionHeader}>{t('settingsAndroidWidget')}</Text>
+              <Text style={styles.sectionNote}>{t('settingsAndroidWidgetNote')}</Text>
             </View>
             {KojoriWidget?.canPinWidget() ? (
               <View style={styles.card}>
                 {(['2x3', '3x3', '2x2'] as const).map((size, i) => {
-                  const label = size === '2x3' ? '2×3 Tall (recommended)' : size === '3x3' ? '3×3 Large' : '2×2 Compact';
+                  const label = size === '2x3'
+                    ? t('widgetSizeTall')
+                    : size === '3x3'
+                      ? t('widgetSizeLarge')
+                      : t('widgetSizeCompact');
                   return (
                     <React.Fragment key={size}>
                       {i > 0 ? <View style={styles.itemDivider} /> : null}
@@ -1262,11 +1382,11 @@ export default function SettingsScreen() {
               </View>
             ) : null}
             <View style={styles.sectionMeta}>
-              <Text style={styles.sectionHeader}>WIDGET STOPS</Text>
-              <Text style={styles.sectionNote}>Default stop for each direction on the widget.</Text>
+              <Text style={styles.sectionHeader}>{t('settingsWidgetStops')}</Text>
+              <Text style={styles.sectionNote}>{t('settingsWidgetStopsNote')}</Text>
             </View>
             <WidgetStopCard
-              title="→ Kojori default stop"
+              title={t('settingsWidgetKojoriStop')}
               stopId={settings.widgetTbilisiStopId}
               accentColor={colors.route380}
               stopNames={stopNames}
@@ -1274,7 +1394,7 @@ export default function SettingsScreen() {
             />
             <View style={styles.sectionSpacer} />
             <WidgetStopCard
-              title="→ Tbilisi default stop"
+              title={t('settingsWidgetTbilisiStop')}
               stopId={settings.widgetKojoriStopId}
               accentColor={colors.route316}
               stopNames={stopNames}
@@ -1286,14 +1406,14 @@ export default function SettingsScreen() {
         {settings.debugOptionsUnlocked ? (
           <>
             <View style={styles.sectionMeta}>
-              <Text style={styles.sectionHeader}>HOME DEBUG</Text>
-              <Text style={styles.sectionNote}>Force one likely-cancelled departure so Home UI can be checked on demand.</Text>
+              <Text style={styles.sectionHeader}>{t('settingsHomeDebug')}</Text>
+              <Text style={styles.sectionNote}>{t('settingsHomeDebugNote')}</Text>
             </View>
             <View style={styles.card}>
               <View style={styles.toggleRow}>
                 <View style={styles.toggleCopy}>
-                  <Text style={styles.toggleLabel}>Cancelled bus demo</Text>
-                  <Text style={styles.toggleNote}>Home screen only. Shows live replacement plus cancelled slab.</Text>
+                  <Text style={styles.toggleLabel}>{t('settingsCancelledDemo')}</Text>
+                  <Text style={styles.toggleNote}>{t('settingsCancelledDemoNote')}</Text>
                 </View>
                 <SettingsSwitch
                   value={settings.cancelledBusDemo}
@@ -1308,8 +1428,8 @@ export default function SettingsScreen() {
         {settings.debugOptionsUnlocked ? (
           <>
             <View style={styles.sectionMeta}>
-              <Text style={styles.sectionHeader}>TTC QUERY LOGGER</Text>
-              <Text style={styles.sectionNote}>Persisted request history for live TTC traffic, with rolling query-rate metrics.</Text>
+              <Text style={styles.sectionHeader}>{t('settingsTtcQueryLogger')}</Text>
+              <Text style={styles.sectionNote}>{t('settingsTtcQueryLoggerNote')}</Text>
             </View>
             <TtcQueryLogCard
               entries={queryLog.entries}
@@ -1322,8 +1442,8 @@ export default function SettingsScreen() {
         ) : null}
 
         <View style={styles.sectionMeta}>
-          <Text style={styles.sectionHeader}>TTC DATA UPDATES</Text>
-          <Text style={styles.sectionNote}>Refresh static data deliberately, without a burst of TTC requests.</Text>
+          <Text style={styles.sectionHeader}>{t('settingsDataUpdates')}</Text>
+          <Text style={styles.sectionNote}>{t('settingsDataUpdatesNote')}</Text>
         </View>
         <DataRefreshCard
           status={offlineStatus}
@@ -1332,16 +1452,16 @@ export default function SettingsScreen() {
         />
 
         <View style={styles.sectionMeta}>
-          <Text style={styles.sectionHeader}>DATA SOURCE</Text>
+          <Text style={styles.sectionHeader}>{t('settingsDataSource')}</Text>
         </View>
         <View style={styles.card}>
           <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Provider</Text>
-            <Text style={styles.infoValue}>TTC (Tbilisi Transport)</Text>
+            <Text style={styles.infoLabel}>{t('settingsProvider')}</Text>
+            <Text style={styles.infoValue}>{t('settingsProviderValue')}</Text>
           </View>
           <View style={styles.itemDivider} />
           <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Routes</Text>
+            <Text style={styles.infoLabel}>{t('settingsRoutes')}</Text>
             <View style={styles.infoTags}>
               <View style={[styles.miniTag, { borderColor: colors.route380 }]}>
                 <Text style={[styles.miniTagText, { color: colors.route380, fontFamily: MONO }]}>380</Text>
@@ -1353,61 +1473,61 @@ export default function SettingsScreen() {
           </View>
           <View style={styles.itemDivider} />
           <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Static data</Text>
-            <Text style={[styles.infoValue, styles.infoValueWrap]}>Bundled schedules, stops, polylines, stop names</Text>
+            <Text style={styles.infoLabel}>{t('settingsStaticData')}</Text>
+            <Text style={[styles.infoValue, styles.infoValueWrap]}>{t('settingsStaticDataValue')}</Text>
           </View>
           <View style={styles.itemDivider} />
           <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Live data</Text>
-            <Text style={[styles.infoValue, styles.infoValueWrap]}>Arrivals on Departures, vehicles on Map</Text>
+            <Text style={styles.infoLabel}>{t('settingsLiveData')}</Text>
+            <Text style={[styles.infoValue, styles.infoValueWrap]}>{t('settingsLiveDataValue')}</Text>
           </View>
           <View style={styles.itemDivider} />
           <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Baked asset</Text>
-            <Text style={[styles.infoValue, styles.infoValueWrap]}>{formatBakedAt(BAKED_AT)}</Text>
+            <Text style={styles.infoLabel}>{t('settingsBakedAsset')}</Text>
+            <Text style={[styles.infoValue, styles.infoValueWrap]}>{formatBakedAt(BAKED_AT, resolvedLanguage)}</Text>
           </View>
           {settings.debugOptionsUnlocked ? (
             <>
               <View style={styles.itemDivider} />
               <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Offline cache</Text>
-                <Text style={styles.infoValue}>{formatOfflineStatus(offlineStatus)}</Text>
+                <Text style={styles.infoLabel}>{t('settingsOfflineCache')}</Text>
+                <Text style={styles.infoValue}>{formatOfflineStatus(offlineStatus, t)}</Text>
               </View>
               <View style={styles.itemDivider} />
               <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Saved datasets</Text>
+                <Text style={styles.infoLabel}>{t('settingsSavedDatasetsLabel')}</Text>
                 <Text style={styles.infoValue}>{offlineStatus.availableDatasets}/{offlineStatus.totalDatasets}</Text>
               </View>
               <View style={styles.itemDivider} />
               <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Last offline sync</Text>
-                <Text style={styles.infoValue}>{formatLastSync(offlineStatus.lastSyncAt)}</Text>
+                <Text style={styles.infoLabel}>{t('settingsLastOfflineSync')}</Text>
+                <Text style={styles.infoValue}>{formatLastSync(offlineStatus.lastSyncAt, t, resolvedLanguage)}</Text>
               </View>
               <View style={styles.itemDivider} />
               <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Timetables</Text>
+                <Text style={styles.infoLabel}>{t('settingsTimetables')}</Text>
                 <Text style={styles.infoValue}>{formatTtl(SCHEDULE_CACHE_TTL)}</Text>
               </View>
               <View style={styles.itemDivider} />
               <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Stops + names</Text>
+                <Text style={styles.infoLabel}>{t('settingsStopsNames')}</Text>
                 <Text style={styles.infoValue}>{formatTtl(Math.max(ROUTE_STOPS_CACHE_TTL, STOP_NAMES_CACHE_TTL))}</Text>
               </View>
               <View style={styles.itemDivider} />
               <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Polylines</Text>
+                <Text style={styles.infoLabel}>{t('settingsPolylines')}</Text>
                 <Text style={styles.infoValue}>{formatTtl(ROUTE_POLYLINES_CACHE_TTL)}</Text>
               </View>
               <View style={styles.itemDivider} />
               <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Real-time refresh</Text>
-                <Text style={styles.infoValue}>Every 30 s</Text>
+                <Text style={styles.infoLabel}>{t('settingsRealtimeRefresh')}</Text>
+                <Text style={styles.infoValue}>{t('settingsRealtimeRefreshValue')}</Text>
               </View>
               {offlineStatus.error ? (
                 <>
                   <View style={styles.itemDivider} />
                   <View style={styles.infoRow}>
-                    <Text style={styles.infoLabel}>Offline sync note</Text>
+                    <Text style={styles.infoLabel}>{t('settingsOfflineSyncNote')}</Text>
                     <Text style={[styles.infoValue, styles.infoValueWrap]}>{offlineStatus.error}</Text>
                   </View>
                 </>
@@ -1419,28 +1539,28 @@ export default function SettingsScreen() {
               <Pressable
                 style={styles.manageBtn}
                 onPress={handleClearCache}>
-                <Text style={[styles.manageBtnText, { color: colors.textDim }]}>Clear cache</Text>
+                <Text style={[styles.manageBtnText, { color: colors.textDim }]}>{t('settingsClearCache')}</Text>
               </Pressable>
             </>
           ) : null}
         </View>
 
         <View style={styles.sectionMeta}>
-          <Text style={styles.sectionHeader}>LEGAL</Text>
+          <Text style={styles.sectionHeader}>{t('settingsLegal')}</Text>
         </View>
         <View style={styles.card}>
           <Pressable style={styles.infoRow} onPress={() => setLegalModal('privacy')}>
-            <Text style={[styles.infoLabel, { color: colors.text }]}>Privacy Policy</Text>
+            <Text style={[styles.infoLabel, { color: colors.text }]}>{t('settingsPrivacyPolicy')}</Text>
             <Text style={[styles.infoValue, { color: colors.textFaint }]}>→</Text>
           </Pressable>
           <View style={styles.itemDivider} />
           <Pressable style={styles.infoRow} onPress={() => setLegalModal('terms')}>
-            <Text style={[styles.infoLabel, { color: colors.text }]}>Terms of Service</Text>
+            <Text style={[styles.infoLabel, { color: colors.text }]}>{t('settingsTermsOfService')}</Text>
             <Text style={[styles.infoValue, { color: colors.textFaint }]}>→</Text>
           </Pressable>
           <View style={styles.itemDivider} />
           <Pressable style={styles.infoRow} onPress={() => Linking.openURL(LEGAL_URLS.support)}>
-            <Text style={[styles.infoLabel, { color: colors.text }]}>Support</Text>
+            <Text style={[styles.infoLabel, { color: colors.text }]}>{t('settingsSupport')}</Text>
             <Text style={[styles.infoValue, { color: colors.textFaint }]}>GitHub ↗</Text>
           </Pressable>
         </View>
@@ -1461,7 +1581,7 @@ export default function SettingsScreen() {
 
       <StopPickerModal
         visible={modal === 'kojori'}
-        title="Kojori Stops"
+        title={t('timetableKojoriStops')}
         direction="toTbilisi"
         favoriteIds={settings.kojoriFavorites}
         accentColor={colors.route316}
@@ -1470,7 +1590,7 @@ export default function SettingsScreen() {
       />
       <StopPickerModal
         visible={modal === 'tbilisi'}
-        title="Tbilisi Departure Stops"
+        title={t('timetableTbilisiStops')}
         direction="toKojori"
         favoriteIds={settings.tbilisiFavorites}
         accentColor={colors.route380}
@@ -1479,7 +1599,7 @@ export default function SettingsScreen() {
       />
       <SingleStopPickerModal
         visible={modal === 'widget-tbilisi'}
-        title="Widget default for → Kojori"
+        title={t('settingsWidgetKojoriStop')}
         direction="toKojori"
         selectedId={settings.widgetTbilisiStopId}
         accentColor={colors.route380}
@@ -1489,7 +1609,7 @@ export default function SettingsScreen() {
       />
       <SingleStopPickerModal
         visible={modal === 'widget-kojori'}
-        title="Widget default for → Tbilisi"
+        title={t('settingsWidgetTbilisiStop')}
         direction="toTbilisi"
         selectedId={settings.widgetKojoriStopId}
         accentColor={colors.route316}
@@ -1499,7 +1619,7 @@ export default function SettingsScreen() {
       />
       <LegalModal
         visible={legalModal !== null}
-        title={legalModal === 'privacy' ? 'Privacy Policy' : 'Terms of Service'}
+        title={legalModal === 'privacy' ? t('settingsPrivacyPolicy') : t('settingsTermsOfService')}
         content={legalModal ? legalContent[legalModal] : ''}
         isLoading={legalModal !== null && !legalLoadError && !legalContent[legalModal]}
         error={legalLoadError}
@@ -1638,9 +1758,9 @@ function createStyles(C: AppColors) {
     palettePreviewAccentAlt: { width: '74%', height: 12, borderRadius: 999 },
     palettePreviewChip: { width: 54, height: 20, borderRadius: 999, borderWidth: 1, alignSelf: 'flex-end' },
     paletteMeta: { gap: 8 },
-    paletteHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
-    paletteName: { fontSize: 20, fontWeight: '700' },
-    paletteSelected: { fontSize: 10, fontWeight: '800', letterSpacing: 1.8 },
+    paletteHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
+    paletteName: { flex: 1, minWidth: 0, fontSize: 20, fontWeight: '700' },
+    paletteSelected: { maxWidth: 78, flexShrink: 0, fontSize: 10, fontWeight: '800', letterSpacing: 0.8 },
     paletteTagline: { fontSize: 12, lineHeight: 17 },
     paletteSwatches: { flexDirection: 'row', gap: 8 },
     paletteSwatch: { width: 24, height: 24, borderRadius: 999 },
@@ -1793,7 +1913,7 @@ function createStyles(C: AppColors) {
       justifyContent: 'space-between',
       gap: 8,
     },
-    themeModeLabel: { fontSize: 15, fontWeight: '700', letterSpacing: 0.2 },
+    themeModeLabel: { fontSize: 15, fontWeight: '700', letterSpacing: 0 },
     themeModeCaption: { fontSize: 12, lineHeight: 16, fontWeight: '600' },
     themeModeFooter: { paddingHorizontal: 16, paddingVertical: 12 },
     themeModeFooterText: { color: C.textDim, fontSize: 12, lineHeight: 17 },
@@ -1903,6 +2023,7 @@ function PermissionModal({
   onOpenSettings: () => void;
 }) {
   const insets = useSafeAreaInsets();
+  const { t } = useI18n();
 
   return (
     <Modal
@@ -1917,24 +2038,24 @@ function PermissionModal({
             <Text style={styles.permissionIcon}>📍</Text>
           </View>
           <Text style={[styles.permissionTitle, { color: colors.text }]}>
-            Location Permission Required
+            {t('settingsPermissionTitle')}
           </Text>
           <Text style={[styles.permissionMessage, { color: colors.textDim }]}>
-            Smart direction needs location access to automatically suggest whether you&apos;re heading to Kojori or Tbilisi. Please enable it in your device settings.
+            {t('settingsPermissionMessage')}
           </Text>
           <View style={styles.permissionButtons}>
             <Pressable
               style={[styles.permissionButton, styles.permissionButtonSecondary, { borderColor: colors.border }]}
               onPress={onClose}>
               <Text style={[styles.permissionButtonText, { color: colors.textDim }]}>
-                Cancel
+                {t('commonCancel')}
               </Text>
             </Pressable>
             <Pressable
               style={[styles.permissionButton, styles.permissionButtonPrimary, { backgroundColor: colors.primary }]}
               onPress={onOpenSettings}>
               <Text style={[styles.permissionButtonText, styles.permissionButtonTextPrimary, { color: colors.bg }]}>
-                Open Settings
+                {t('commonOpenSettings')}
               </Text>
             </Pressable>
           </View>
@@ -1960,6 +2081,7 @@ function NoticeModal({
   onClose: () => void;
 }) {
   const insets = useSafeAreaInsets();
+  const { t } = useI18n();
 
   return (
     <Modal
@@ -1984,7 +2106,7 @@ function NoticeModal({
               style={[styles.permissionButton, styles.permissionButtonPrimary, { backgroundColor: colors.primary }]}
               onPress={onClose}>
               <Text style={[styles.permissionButtonText, styles.permissionButtonTextPrimary, { color: colors.bg }]}>
-                Nice
+                {t('commonNice')}
               </Text>
             </Pressable>
           </View>

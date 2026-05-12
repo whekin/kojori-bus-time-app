@@ -4,6 +4,7 @@ import {
   getBakedStopNames,
   readStopNameCache,
 } from '@/services/ttc-offline';
+import { useI18n } from '@/hooks/use-i18n';
 
 const BUNDLED_STOP_NAMES = getBakedStopNames();
 
@@ -28,5 +29,6 @@ export async function prefillStopNames(client: QueryClient) {
  * Returns a map of stopId → name.
  */
 export function useStopNames(): Record<string, string> {
-  return BUNDLED_STOP_NAMES;
+  const { localizedStopNames } = useI18n();
+  return localizedStopNames(BUNDLED_STOP_NAMES);
 }

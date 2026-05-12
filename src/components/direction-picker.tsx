@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { alpha, type AppColors } from '@/constants/theme';
 import { LocationActionCard } from '@/components/location-action-card';
 import { useAppColors } from '@/hooks/use-app-colors';
+import { useI18n } from '@/hooks/use-i18n';
 import { useLocation } from '@/hooks/use-location';
 import { useSettings, type SharedDirection } from '@/hooks/use-settings';
 
@@ -19,12 +20,12 @@ function modeToDirection(mode: Mode): SharedDirection {
   return mode === 'kojori' ? 'toKojori' : 'toTbilisi';
 }
 
-function originLabel(direction: SharedDirection) {
-  return direction === 'toKojori' ? 'Tbilisi' : 'Kojori';
+function originLabel(direction: SharedDirection, t: ReturnType<typeof useI18n>['t']) {
+  return direction === 'toKojori' ? t('cityTbilisi') : t('cityKojori');
 }
 
-function destinationLabel(direction: SharedDirection) {
-  return direction === 'toKojori' ? 'Kojori' : 'Tbilisi';
+function destinationLabel(direction: SharedDirection, t: ReturnType<typeof useI18n>['t']) {
+  return direction === 'toKojori' ? t('cityKojori') : t('cityTbilisi');
 }
 
 export function DirectionPill({
@@ -39,14 +40,15 @@ export function DirectionPill({
   const colors = useAppColors();
   const styles = usePillStyles();
   const { settings } = useSettings();
+  const { t } = useI18n();
 
-  const origin = originLabel(settings.sharedDirection);
-  const destination = destinationLabel(settings.sharedDirection);
+  const origin = originLabel(settings.sharedDirection, t);
+  const destination = destinationLabel(settings.sharedDirection, t);
 
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`Going from ${origin} to ${destination}. Tap to change.`}
+      accessibilityLabel={t('directionAccessibility', { origin, destination })}
       onPress={onPress}
       style={({ pressed }) => [
         styles.pill,
@@ -58,9 +60,9 @@ export function DirectionPill({
       ]}>
       <View style={[styles.pillDot, { backgroundColor: accentColor }]} />
       <View style={styles.pillText}>
-        <Text style={styles.pillEyebrow} numberOfLines={1}>FROM {origin.toUpperCase()}</Text>
+        <Text style={styles.pillEyebrow} numberOfLines={1}>{t('directionFrom', { origin }).toUpperCase()}</Text>
         <Text style={styles.pillDest} numberOfLines={1}>
-          <Text style={styles.pillTo}>to </Text>{destination}
+          <Text style={styles.pillTo}>{t('directionTo')}</Text>{destination}
         </Text>
       </View>
       <MaterialCommunityIcons name="chevron-down" size={14} color={colors.textDim} />
@@ -87,6 +89,7 @@ function DirectionPickerSheetInner({ onClose }: { onClose: () => void }) {
     settings,
     setSharedDirection,
   } = useSettings();
+  const { t } = useI18n();
   const {
     suggestedMode,
     permission,
@@ -115,16 +118,16 @@ function DirectionPickerSheetInner({ onClose }: { onClose: () => void }) {
         <Pressable style={styles.backdrop} onPress={onClose} />
         <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 16) }]}>
           <View style={styles.handle} />
-          <Text style={styles.title}>Where are you going?</Text>
+          <Text style={styles.title}>{t('directionTitle')}</Text>
           <Text style={styles.subtitle}>
-            Change direction any time. Smart direction uses your location to suggest one.
+            {t('directionSubtitle')}
           </Text>
 
           <View style={styles.options}>
             {(['kojori', 'tbilisi'] as Mode[]).map(mode => {
               const isActive = activeMode === mode;
-              const label = mode === 'kojori' ? 'Kojori' : 'Tbilisi';
-              const sub = mode === 'kojori' ? 'Up the mountain' : 'Down in the city';
+              const label = mode === 'kojori' ? t('cityKojori') : t('cityTbilisi');
+              const sub = mode === 'kojori' ? t('directionUpMountain') : t('directionDownCity');
               const accent = mode === 'kojori' ? colors.route380 : colors.route316;
               return (
                 <Pressable
@@ -144,7 +147,7 @@ function DirectionPickerSheetInner({ onClose }: { onClose: () => void }) {
                   <View style={[styles.optionDot, { backgroundColor: accent }]} />
                   <View style={styles.optionCopy}>
                     <Text style={[styles.optionLabel, { color: isActive ? accent : colors.text }]}>
-                      <Text style={[styles.optionTo, { color: isActive ? alpha(accent, 'AA') : colors.textDim }]}>to </Text>{label}
+                      <Text style={[styles.optionTo, { color: isActive ? alpha(accent, 'AA') : colors.textDim }]}>{t('directionTo')}</Text>{label}
                     </Text>
                     <Text style={styles.optionSub}>{sub}</Text>
                   </View>
@@ -157,17 +160,17 @@ function DirectionPickerSheetInner({ onClose }: { onClose: () => void }) {
           </View>
 
           <LocationActionCard
-            title={locationError ? 'Location unavailable' : 'Use my location'}
+            title={locationError ? t('locationUnavailable') : t('locationUseMine')}
             subtitle={
               isLocating
-                ? 'Detecting where you are…'
+                ? t('locationDetecting')
                 : locationError
-                  ? 'Timed out. Tap to retry, or choose a direction manually.'
+                  ? t('locationRetryManual')
                   : suggestedMode
-                    ? `Suggested: ${suggestedMode === 'kojori' ? 'Kojori' : 'Tbilisi'}. Tap to refresh.`
+                    ? t('locationSuggested', { place: suggestedMode === 'kojori' ? t('cityKojori') : t('cityTbilisi') })
                     : permission === 'granted'
-                      ? 'Tap to refresh location'
-                      : 'Auto-pick direction once from where you are'
+                      ? t('locationRefresh')
+                      : t('locationAutoPickOnce')
             }
             onPress={handleUseLocation}
             isLocating={isLocating}

@@ -9,6 +9,7 @@ import { DirectionPickerSheet, DirectionPill } from '@/components/direction-pick
 import { TtcStatusChip } from '@/components/ttc-status-banner';
 import { BottomTabInset } from '@/constants/theme';
 import { useAppColors, useResolvedAppThemeMode } from '@/hooks/use-app-colors';
+import { useI18n } from '@/hooks/use-i18n';
 import { useRoutePolylines } from '@/hooks/use-route-polylines';
 import { useSettings } from '@/hooks/use-settings';
 import { useVehiclePositions } from '@/hooks/use-vehicle-positions';
@@ -63,6 +64,7 @@ const GOOGLE_DARK_MAP_STYLE = [
 
 export default function ExploreScreen({ isActive = false }: ExploreScreenProps) {
   const colors = useAppColors();
+  const { t } = useI18n();
   const resolvedThemeMode = useResolvedAppThemeMode();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
@@ -215,7 +217,7 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
     try {
       const permission = await Location.requestForegroundPermissionsAsync();
       if (permission.status !== 'granted') {
-        setLocationMessage('Location permission required');
+        setLocationMessage(t('mapLocationRequired'));
         return;
       }
 
@@ -234,7 +236,7 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
         450,
       );
     } catch {
-      setLocationMessage('Location unavailable');
+      setLocationMessage(t('locationUnavailable'));
     } finally {
       setIsLocating(false);
     }
@@ -321,8 +323,8 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
                 coordinate={{ latitude: position.lat, longitude: position.lon }}
                 anchor={MARKER_ANCHOR}
                 tracksViewChanges={false}
-                title={`${position.bus} to ${direction === 'toKojori' ? 'Kojori' : 'Tbilisi'}`}
-                description={`Vehicle ${position.vehicleId}`}>
+                title={`${position.bus} ${t('directionTo')}${direction === 'toKojori' ? t('cityKojori') : t('cityTbilisi')}`}
+                description={t('mapVehicle', { id: position.vehicleId })}>
                 <Image
                   source={MARKER_BADGE_IMAGES[position.bus]}
                   style={{ width: markerWidth, height: markerHeight }}
@@ -411,10 +413,9 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
 
       {mapTimedOut ? (
         <View style={styles.configOverlay} pointerEvents="none">
-          <Text style={styles.configTitle}>Map not loading</Text>
+          <Text style={styles.configTitle}>{t('mapNotLoading')}</Text>
           <Text style={styles.configText}>
-            The API key may be invalid or Maps SDK for Android is not enabled.{'\n'}
-            Enable it at console.cloud.google.com → APIs &amp; Services → Library → &quot;Maps SDK for Android&quot;.
+            {t('mapConfigIssue')}
           </Text>
         </View>
       ) : null}

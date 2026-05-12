@@ -5,6 +5,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { alpha, type AppColors } from '@/constants/theme';
 import { useAppColors } from '@/hooks/use-app-colors';
+import { useI18n } from '@/hooks/use-i18n';
 import { useTtcHealth } from '@/hooks/use-ttc-health';
 
 function useStyles() {
@@ -36,6 +37,7 @@ function TtcStatusBannerBase({
   headerInline?: boolean;
 }) {
   const { colors, styles } = useStyles();
+  const { t } = useI18n();
   const queryClient = useQueryClient();
   const { status, lastSuccessAt } = useTtcHealth();
   const [expanded, setExpanded] = useState(false);
@@ -50,34 +52,34 @@ function TtcStatusBannerBase({
   const timeAgo = lastSuccessAt
     ? (() => {
         const mins = Math.floor((Date.now() - lastSuccessAt) / 60000);
-        if (mins < 1) return 'just now';
-        if (mins === 1) return '1m ago';
-        if (mins < 60) return `${mins}m ago`;
+        if (mins < 1) return t('ttcJustNow');
+        if (mins === 1) return t('ttcMinuteAgo');
+        if (mins < 60) return t('ttcMinutesAgo', { minutes: mins });
         const hours = Math.floor(mins / 60);
-        return hours === 1 ? '1h ago' : `${hours}h ago`;
+        return hours === 1 ? t('ttcHourAgo') : t('ttcHoursAgo', { hours });
       })()
     : null;
   
-  const baseLabel = isRateLimited 
-    ? 'Rate limited' 
-    : isOffline 
-    ? 'TTC offline' 
-    : 'TTC unstable';
+  const baseLabel = isRateLimited
+    ? t('ttcRateLimited')
+    : isOffline
+    ? t('ttcOffline')
+    : t('ttcUnstable');
   
   const label = timeAgo ? `${baseLabel} · ${timeAgo}` : baseLabel;
     
   const message = isRateLimited
-    ? 'TTC rate limiter hit. Requests are being throttled. Showing cached data when available.'
+    ? t('ttcRateDetail')
     : isOffline
-    ? 'Cannot reach TTC right now. Showing cached data when available.'
-    : 'TTC requests are failing intermittently. Some data may be stale.';
+    ? t('ttcOfflineDetail')
+    : t('ttcUnstableDetail');
 
   const freshness = lastSuccessAt
-    ? `Last TTC update ${new Date(lastSuccessAt).toLocaleTimeString('en-GB', {
+    ? t('ttcLastUpdate', { time: new Date(lastSuccessAt).toLocaleTimeString('en-GB', {
       hour: '2-digit',
       minute: '2-digit',
-    })}`
-    : 'No TTC response yet this session';
+    }) })
+    : t('ttcNoResponse');
 
   return (
     <View style={[headerInline ? styles.headerWrap : centered ? styles.centerWrap : styles.rowWrap]}>

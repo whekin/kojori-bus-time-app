@@ -11,6 +11,7 @@ import { alpha, BottomTabInset, type AppColors } from '@/constants/theme';
 import { useAppColors } from '@/hooks/use-app-colors';
 import { useArrivals } from '@/hooks/use-arrivals';
 import { useClosestStop } from '@/hooks/use-closest-stop';
+import { useI18n } from '@/hooks/use-i18n';
 import { useRouteStops } from '@/hooks/use-route-stops';
 import { useSchedule } from '@/hooks/use-schedule';
 import { useSettings } from '@/hooks/use-settings';
@@ -45,21 +46,21 @@ function formatHeaderTime(date = new Date()) {
   return date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 }
 
-function formatMins(mins: number) {
-  if (mins < 1) return 'now';
-  if (mins < 60) return `+${mins}m`;
+function formatMins(mins: number, t: ReturnType<typeof useI18n>['t']) {
+  if (mins < 1) return t('commonNow');
+  if (mins < 60) return t('timePlusMinutes', { minutes: mins });
   const h = Math.floor(mins / 60);
   const m = mins % 60;
-  return m > 0 ? `+${h}h\u202F${m}m` : `+${h}h`;
+  return m > 0 ? t('timePlusHours', { hours: h, minutes: m }) : t('timePlusHour', { hours: h });
 }
 
-function getRealtimeStatus(dep: Departure, colors: AppColors) {
+function getRealtimeStatus(dep: Departure, colors: AppColors, t: ReturnType<typeof useI18n>['t']) {
   if (!dep.live) return null;
 
   const drift = dep.driftMinutes ?? 0;
   if (drift > 0) {
     return {
-      label: `LIVE +${drift}m`,
+      label: t('liveLate', { minutes: drift }),
       textColor: colors.error,
       backgroundColor: alpha(colors.error, '14'),
       borderColor: alpha(colors.error, '38'),
@@ -68,7 +69,7 @@ function getRealtimeStatus(dep: Departure, colors: AppColors) {
 
   if (drift < 0) {
     return {
-      label: `LIVE ${Math.abs(drift)}m early`,
+      label: t('liveEarly', { minutes: Math.abs(drift) }),
       textColor: colors.warning,
       backgroundColor: alpha(colors.warning, '14'),
       borderColor: alpha(colors.warning, '38'),
@@ -76,7 +77,7 @@ function getRealtimeStatus(dep: Departure, colors: AppColors) {
   }
 
   return {
-    label: 'LIVE on time',
+    label: t('liveOnTime'),
     textColor: colors.live,
     backgroundColor: alpha(colors.live, '14'),
     borderColor: alpha(colors.live, '38'),
@@ -105,11 +106,13 @@ function buildStopSelectorStops({
   activeStopId,
   routeStops,
   stopNames,
+  stopFallback,
 }: {
   favoriteIds: string[];
   activeStopId: string;
   routeStops: StopInfo[];
   stopNames: Record<string, string>;
+  stopFallback: (id: string) => string;
 }) {
   const routeStopMap = new Map(routeStops.map(stop => [stop.id, stop]));
   const ids = favoriteIds.includes(activeStopId)
@@ -117,7 +120,7 @@ function buildStopSelectorStops({
     : [...favoriteIds, activeStopId];
 
   return ids.map(id => {
-    const base = routeStopMap.get(id) ?? findStop(id) ?? { id, label: `Stop #${id.split(':')[1]}` };
+    const base = routeStopMap.get(id) ?? findStop(id) ?? { id, label: stopFallback(id) };
     return { ...base, label: stopNames[id] ?? base.label };
   });
 }
@@ -197,6 +200,7 @@ function StatusIsland({
 }) {
   const colors = useAppColors();
   const styles = useHomeStyles();
+  const { t } = useI18n();
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
   const [dismissedTokens, setDismissedTokens] = useState<Record<string, string>>({});
 
@@ -285,7 +289,7 @@ function StatusIsland({
                 ]}
                 onPress={() => handleDismiss(expandedItem)}>
                 <Text style={[styles.statusPanelButtonText, { color: colors.textDim }]}>
-                  Dismiss
+                  {t('commonDismiss')}
                 </Text>
               </Pressable>
             </View>
@@ -312,8 +316,9 @@ function StatusIsland({
 function DepartureRow({ dep, isLast }: { dep: Departure; isLast: boolean }) {
   const colors = useAppColors();
   const styles = useHomeStyles();
-  const countdown = formatMins(dep.minsUntil);
-  const realtimeStatus = getRealtimeStatus(dep, colors);
+  const { t } = useI18n();
+  const countdown = formatMins(dep.minsUntil, t);
+  const realtimeStatus = getRealtimeStatus(dep, colors, t);
   const isCancelled = dep.status === 'cancelled';
 
   return (
@@ -353,7 +358,7 @@ function DepartureRow({ dep, isLast }: { dep: Departure; isLast: boolean }) {
               },
             ]}>
             <Text style={[styles.cancelledBadgeSmallText, { color: colors.warning }]} numberOfLines={1}>
-              Likely cancelled
+              {t('homeLikelyCancelled')}
             </Text>
           </View>
         ) : null}
@@ -365,7 +370,7 @@ function DepartureRow({ dep, isLast }: { dep: Departure; isLast: boolean }) {
             { fontFamily: MONO },
           ]}
           numberOfLines={1}>
-          {isCancelled ? 'skip' : countdown}
+          {isCancelled ? t('homeSkip') : countdown}
         </Text>
       </View>
     </View>
@@ -375,6 +380,7 @@ function DepartureRow({ dep, isLast }: { dep: Departure; isLast: boolean }) {
 function CancelledDepartureSlab({ dep }: { dep: NonNullable<Departure['replacedCancelledDeparture']> }) {
   const colors = useAppColors();
   const styles = useHomeStyles();
+  const { t } = useI18n();
   return (
     <View
       style={[
@@ -388,7 +394,7 @@ function CancelledDepartureSlab({ dep }: { dep: NonNullable<Departure['replacedC
         <BusTag bus={dep.bus} />
         <View style={styles.cancelledSlabCopy}>
           <Text style={[styles.cancelledEyebrow, { color: alpha(colors.warning, 'CC') }]}>
-            SCHEDULED BEFORE LIVE UPDATE
+            {t('homeScheduledBeforeLive')}
           </Text>
           <Text
             style={[
@@ -410,7 +416,7 @@ function CancelledDepartureSlab({ dep }: { dep: NonNullable<Departure['replacedC
               borderColor: alpha(colors.warning, '38'),
             },
           ]}>
-          <Text style={[styles.cancelledPillText, { color: colors.warning }]}>Likely cancelled</Text>
+          <Text style={[styles.cancelledPillText, { color: colors.warning }]}>{t('homeLikelyCancelled')}</Text>
         </View>
       </View>
     </View>
@@ -429,6 +435,7 @@ function NextCard({
 }) {
   const colors = useAppColors();
   const styles = useHomeStyles();
+  const { t } = useI18n();
   if (isLoading && !dep) {
     return (
       <View style={[styles.nextCard, styles.centered]}>
@@ -437,14 +444,14 @@ function NextCard({
     );
   }
   if (!dep) {
-    return <EmptyState message="No more departures today" />;
+    return <EmptyState message={t('homeNoDepartures')} />;
   }
   const minsLabel = dep.minsUntil < 1
-    ? 'now'
+    ? t('commonNow')
     : dep.minsUntil < 60
-      ? `in ${dep.minsUntil} min`
-      : `in ${Math.floor(dep.minsUntil / 60)}h ${dep.minsUntil % 60}min`;
-  const realtimeStatus = getRealtimeStatus(dep, colors);
+      ? t('timeInMinutes', { minutes: dep.minsUntil })
+      : t('timeInHours', { hours: Math.floor(dep.minsUntil / 60), minutes: dep.minsUntil % 60 });
+  const realtimeStatus = getRealtimeStatus(dep, colors, t);
   const busColor = routeColor(dep.bus, colors);
   return (
     <View style={styles.nextBlock}>
@@ -462,7 +469,7 @@ function NextCard({
                   {dep.bus}
                 </Text>
               </View>
-              <Text style={styles.nextEyebrow}>NEXT DEPARTURE</Text>
+              <Text style={styles.nextEyebrow}>{t('homeNextDeparture')}</Text>
             </View>
           </View>
 
@@ -482,7 +489,7 @@ function NextCard({
                 { backgroundColor: alpha(busColor, '16'), borderColor: alpha(busColor, '45') },
               ]}>
               <View style={styles.nextArrivalHeader}>
-                <Text style={styles.nextCountdownLabel}>ARRIVAL SIGNAL</Text>
+                <Text style={styles.nextCountdownLabel}>{t('homeArrivalSignal')}</Text>
                 {realtimeStatus ? (
                   <View
                     style={[
@@ -505,7 +512,7 @@ function NextCard({
                   { color: realtimeStatus ? realtimeStatus.textColor : colors.textDim },
                 ]}
                 numberOfLines={1}>
-                {realtimeStatus ? realtimeStatus.label : 'Scheduled estimate'}
+                {realtimeStatus ? realtimeStatus.label : t('homeScheduledEstimate')}
               </Text>
             </View>
           </View>
@@ -542,6 +549,7 @@ function ToKojoriView({
 }) {
   const colors = useAppColors();
   const styles = useHomeStyles();
+  const { t } = useI18n();
   const stopNames = useStopNames();
   const { stops: routeStops } = useRouteStops('toKojori');
   const {
@@ -556,8 +564,9 @@ function ToKojoriView({
         activeStopId,
         routeStops,
         stopNames,
+        stopFallback: id => t('commonStopNumber', { id: id.split(':')[1] ?? id }),
       }),
-    [activeStopId, favoriteIds, routeStops, stopNames],
+    [activeStopId, favoriteIds, routeStops, stopNames, t],
   );
   const locationSuggestion = useMemo(
     () =>
@@ -614,20 +623,20 @@ function ToKojoriView({
             onSelectStop={onSelectStop}
             locationSuggestion={locationSuggestion}
             addStopModal={{
-              title: 'Tbilisi Departure Stops',
+              title: t('timetableTbilisiStops'),
               direction: 'toKojori',
               favoriteIds,
               onToggle: onToggleFavorite,
             }}
           />
 
-          {isError && <ErrorBanner message="Could not load schedule. Showing cached data." />}
+          {isError && <ErrorBanner message={t('homeScheduleError')} />}
 
-          <SectionDivider label="NEXT" style={styles.nextDivider} />
+          <SectionDivider label={t('homeNext')} style={styles.nextDivider} />
           <NextCard dep={next} accentColor={colors.route380} isLoading={isLoading} />
         </View>
 
-        <SectionDivider label="UPCOMING" style={styles.dividerPadded} />
+        <SectionDivider label={t('homeUpcoming')} style={styles.dividerPadded} />
 
         {upcoming.length > 0 ? (
           <View style={[styles.list, styles.listSection]}>
@@ -640,7 +649,7 @@ function ToKojoriView({
             ))}
           </View>
         ) : !isLoading ? (
-          <EmptyState message="No more departures today" />
+          <EmptyState message={t('homeNoDepartures')} />
         ) : null}
       </ScrollView>
     </View>
@@ -673,6 +682,7 @@ function ToTbilisiView({
 }) {
   const colors = useAppColors();
   const styles = useHomeStyles();
+  const { t } = useI18n();
   const stopNames = useStopNames();
   const { stops: routeStops } = useRouteStops('toTbilisi');
   const {
@@ -687,8 +697,9 @@ function ToTbilisiView({
         activeStopId,
         routeStops,
         stopNames,
+        stopFallback: id => t('commonStopNumber', { id: id.split(':')[1] ?? id }),
       }),
-    [activeStopId, favoriteIds, routeStops, stopNames],
+    [activeStopId, favoriteIds, routeStops, stopNames, t],
   );
   const locationSuggestion = useMemo(
     () =>
@@ -745,20 +756,20 @@ function ToTbilisiView({
             onSelectStop={onSelectStop}
             locationSuggestion={locationSuggestion}
             addStopModal={{
-              title: 'Kojori Stops',
+              title: t('timetableKojoriStops'),
               direction: 'toTbilisi',
               favoriteIds,
               onToggle: onToggleFavorite,
             }}
           />
 
-          {isError && <ErrorBanner message="Could not load schedule. Showing cached data." />}
+          {isError && <ErrorBanner message={t('homeScheduleError')} />}
 
-          <SectionDivider label="NEXT" style={styles.nextDivider} />
+          <SectionDivider label={t('homeNext')} style={styles.nextDivider} />
           <NextCard dep={next} accentColor={colors.route316} isLoading={isLoading} />
         </View>
 
-        <SectionDivider label="UPCOMING" style={styles.dividerPadded} />
+        <SectionDivider label={t('homeUpcoming')} style={styles.dividerPadded} />
 
         {upcoming.length > 0 ? (
           <View style={[styles.list, styles.listSection]}>
@@ -771,7 +782,7 @@ function ToTbilisiView({
             ))}
           </View>
         ) : !isLoading ? (
-          <EmptyState message="No more departures today" />
+          <EmptyState message={t('homeNoDepartures')} />
         ) : null}
       </ScrollView>
     </View>
@@ -782,6 +793,7 @@ function ToTbilisiView({
 export default function HomeScreen({ isActive = false }: { isActive?: boolean }) {
   const colors = useAppColors();
   const styles = useHomeStyles();
+  const { t } = useI18n();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const {
@@ -873,8 +885,7 @@ export default function HomeScreen({ isActive = false }: { isActive?: boolean })
     try {
       await Promise.all([
         queryClient.refetchQueries({
-          queryKey: ['arrivals', activeStopId],
-          exact: true,
+          predicate: query => Array.isArray(query.queryKey) && query.queryKey[0] === 'arrivals' && query.queryKey[1] === activeStopId,
         }),
         queryClient.refetchQueries({
           queryKey: ['schedule', ROUTES['380'].id, ROUTES['380'][activeDirection]],
@@ -902,27 +913,27 @@ export default function HomeScreen({ isActive = false }: { isActive?: boolean })
       const timeAgo = lastSuccessAt
         ? (() => {
             const mins = Math.floor((Date.now() - lastSuccessAt) / 60000);
-            if (mins < 1) return 'just now';
-            if (mins === 1) return '1m ago';
-            if (mins < 60) return `${mins}m ago`;
+            if (mins < 1) return t('ttcJustNow');
+            if (mins === 1) return t('ttcMinuteAgo');
+            if (mins < 60) return t('ttcMinutesAgo', { minutes: mins });
             const hours = Math.floor(mins / 60);
-            return hours === 1 ? '1h ago' : `${hours}h ago`;
+            return hours === 1 ? t('ttcHourAgo') : t('ttcHoursAgo', { hours });
           })()
         : null;
 
       items.push({
         key: 'ttc',
         dismissToken: `ttc:${ttcStatus}`,
-        label: timeAgo ? `${isRateLimited ? 'Rate limited' : isOffline ? 'TTC offline' : 'TTC unstable'} · ${timeAgo}` : (isRateLimited ? 'Rate limited' : isOffline ? 'TTC offline' : 'TTC unstable'),
+        label: timeAgo ? `${isRateLimited ? t('ttcRateLimited') : isOffline ? t('ttcOffline') : t('ttcUnstable')} · ${timeAgo}` : (isRateLimited ? t('ttcRateLimited') : isOffline ? t('ttcOffline') : t('ttcUnstable')),
         detail: isRateLimited
-          ? 'TTC rate limiter hit. Requests are being throttled. Showing cached data when available.'
+          ? t('ttcRateDetail')
           : isOffline
-          ? 'Cannot reach TTC right now. Showing cached data when available.'
-          : 'TTC requests are failing intermittently. Some data may be stale.',
+          ? t('ttcOfflineDetail')
+          : t('ttcUnstableDetail'),
         meta: lastSuccessAt
-          ? `Last TTC update ${new Date(lastSuccessAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`
-          : 'No TTC response yet this session',
-        actionLabel: 'Refresh',
+          ? t('ttcLastUpdate', { time: new Date(lastSuccessAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) })
+          : t('ttcNoResponse'),
+        actionLabel: t('commonRefresh'),
         onAction: () => {
           queryClient.refetchQueries({
             predicate: query => query.meta?.source === 'ttc' && query.getObserversCount() > 0,
@@ -941,6 +952,7 @@ export default function HomeScreen({ isActive = false }: { isActive?: boolean })
     colors.warning,
     lastSuccessAt,
     queryClient,
+    t,
     ttcStatus,
   ]);
 

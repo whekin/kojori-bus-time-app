@@ -16,6 +16,7 @@ import { TtcStatusHeaderBadge } from '@/components/ttc-status-banner';
 import { BottomTabInset, alpha, type AppColors } from '@/constants/theme';
 import { useAppColors } from '@/hooks/use-app-colors';
 import { useClosestStop } from '@/hooks/use-closest-stop';
+import { useI18n } from '@/hooks/use-i18n';
 import { useRouteStops } from '@/hooks/use-route-stops';
 import { useSchedule } from '@/hooks/use-schedule';
 import { useSettings } from '@/hooks/use-settings';
@@ -46,11 +47,11 @@ interface TimetableSection {
   data: TimetableEntry[];
 }
 
-function groupByPeriod(entries: TimetableEntry[]): TimetableSection[] {
+function groupByPeriod(entries: TimetableEntry[], t: ReturnType<typeof useI18n>['t']): TimetableSection[] {
   const periods = [
-    { title: 'Morning', min: 0, max: 719 },
-    { title: 'Afternoon', min: 720, max: 1019 },
-    { title: 'Evening', min: 1020, max: 1439 },
+    { title: t('timetableMorning'), min: 0, max: 719 },
+    { title: t('timetableAfternoon'), min: 720, max: 1019 },
+    { title: t('timetableEvening'), min: 1020, max: 1439 },
   ];
   return periods
     .map(p => ({ title: p.title, data: entries.filter(e => e.minsFromMidnight >= p.min && e.minsFromMidnight <= p.max) }))
@@ -62,11 +63,13 @@ function buildStopSelectorStops({
   activeStopId,
   routeStops,
   stopNames,
+  stopFallback,
 }: {
   favoriteIds: string[];
   activeStopId: string;
   routeStops: StopInfo[];
   stopNames: Record<string, string>;
+  stopFallback: (id: string) => string;
 }) {
   const routeStopMap = new Map(routeStops.map(stop => [stop.id, stop]));
   const ids = favoriteIds.includes(activeStopId)
@@ -74,7 +77,7 @@ function buildStopSelectorStops({
     : [...favoriteIds, activeStopId];
 
   return ids.map(id => {
-    const base = routeStopMap.get(id) ?? findStop(id) ?? { id, label: `Stop #${id.split(':')[1]}` };
+    const base = routeStopMap.get(id) ?? findStop(id) ?? { id, label: stopFallback(id) };
     return { ...base, label: stopNames[id] ?? base.label };
   });
 }
@@ -93,6 +96,7 @@ function BusTag({ bus }: { bus: BusLine }) {
 export default function TimetableScreen() {
   const colors = useAppColors();
   const styles = useTimetableStyles();
+  const { t } = useI18n();
   const insets = useSafeAreaInsets();
   const { settings, update, toggleKojoriFavorite, toggleTbilisiFavorite } = useSettings();
   const stopNames = useStopNames();
@@ -115,8 +119,9 @@ export default function TimetableScreen() {
         activeStopId: stopId,
         routeStops,
         stopNames,
+        stopFallback: id => t('commonStopNumber', { id: id.split(':')[1] ?? id }),
       }),
-    [favoriteIds, routeStops, stopId, stopNames],
+    [favoriteIds, routeStops, stopId, stopNames, t],
   );
   const locationSuggestion = useMemo(
     () =>
@@ -173,8 +178,8 @@ export default function TimetableScreen() {
       }
     }
 
-    return groupByPeriod(entries.sort((a, b) => a.minsFromMidnight - b.minsFromMidnight));
-  }, [s380, s316, stopId, filter]);
+    return groupByPeriod(entries.sort((a, b) => a.minsFromMidnight - b.minsFromMidnight), t);
+  }, [s380, s316, stopId, filter, t]);
 
   const totalCount = sections.reduce((n, s) => n + s.data.length, 0);
 
@@ -191,7 +196,7 @@ export default function TimetableScreen() {
           {isLoading ? (
             <ActivityIndicator color={colors.textDim} size="small" />
           ) : (
-            <Text style={styles.headerCount}>{totalCount} departures</Text>
+            <Text style={styles.headerCount}>{t('timetableCount', { count: totalCount })}</Text>
           )}
         </View>
       </View>
@@ -220,12 +225,12 @@ export default function TimetableScreen() {
                 onSelectStop={handleSelectStop}
                 locationSuggestion={locationSuggestion}
                 addStopModal={{
-                  title: direction === 'toKojori' ? 'Tbilisi Departure Stops' : 'Kojori Stops',
+                  title: direction === 'toKojori' ? t('timetableTbilisiStops') : t('timetableKojoriStops'),
                   direction,
                   favoriteIds,
                   onToggle: direction === 'toKojori' ? toggleTbilisiFavorite : toggleKojoriFavorite,
                 }}
-                label="TIMETABLE STOP"
+                label={t('stopTimetable')}
               />
             </View>
 
@@ -239,7 +244,7 @@ export default function TimetableScreen() {
                     style={[styles.filterChip, isActive && { borderColor: chipColor, backgroundColor: alpha(chipColor, '14') }]}
                     onPress={() => setFilter(f)}>
                     <Text style={[styles.filterChipText, isActive && { color: chipColor, fontWeight: '600' }]}>
-                      {f === 'all' ? 'All buses' : f}
+                      {f === 'all' ? t('timetableAllBuses') : f}
                     </Text>
                   </Pressable>
                 );
@@ -256,7 +261,7 @@ export default function TimetableScreen() {
             </View>
           ) : (
             <View style={styles.emptyState}>
-              <Text style={styles.emptyText}>No timetable entries for this filter.</Text>
+              <Text style={styles.emptyText}>{t('timetableNoEntries')}</Text>
             </View>
           )
         }

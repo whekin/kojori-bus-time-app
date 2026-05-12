@@ -15,6 +15,7 @@ import { LocationActionCard } from '@/components/location-action-card';
 import { alpha, type AppColors } from '@/constants/theme';
 import { useAppColors } from '@/hooks/use-app-colors';
 import { getClosestStopCandidate } from '@/hooks/use-closest-stop';
+import { useI18n } from '@/hooks/use-i18n';
 import { useLocation } from '@/hooks/use-location';
 import { useRouteStops } from '@/hooks/use-route-stops';
 import { useSettings, type SharedDirection } from '@/hooks/use-settings';
@@ -33,6 +34,7 @@ export function StartScreen({ onDone }: { onDone: () => void }) {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const { settings, update, setSharedDirection } = useSettings();
+  const { t } = useI18n();
   const pickedRef = useRef(false);
   const smartEnabled = settings.launchBehavior === 'smart';
   const {
@@ -86,23 +88,23 @@ export function StartScreen({ onDone }: { onDone: () => void }) {
         contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 32 }]}
         showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
-          <Text style={styles.eyebrow}>KOJORI · TBILISI</Text>
-          <Text style={[styles.title, { fontFamily: DISPLAY }]}>Where are you going?</Text>
+          <Text style={styles.eyebrow}>{t('startEyebrow')}</Text>
+          <Text style={[styles.title, { fontFamily: DISPLAY }]}>{t('startTitle')}</Text>
           <Text style={styles.subtitle}>
-            Pick your destination so we can line up the right departures.
+            {t('startSubtitle')}
           </Text>
         </View>
 
         <View style={styles.cards}>
           {(['kojori', 'tbilisi'] as Mode[]).map(mode => {
-            const label = mode === 'kojori' ? 'Kojori' : 'Tbilisi';
-            const sub = mode === 'kojori' ? 'Up the mountain · 1340 m' : 'Down in the city';
+            const label = mode === 'kojori' ? t('cityKojori') : t('cityTbilisi');
+            const sub = mode === 'kojori' ? t('startKojoriSub') : t('startTbilisiSub');
             const accent = mode === 'kojori' ? colors.route380 : colors.route316;
             return (
               <Pressable
                 key={mode}
                 accessibilityRole="button"
-                accessibilityLabel={`Go to ${label}`}
+                accessibilityLabel={t('startGoTo', { place: label })}
                 onPress={() => handlePick(mode)}
                 style={({ pressed }) => [
                   styles.card,
@@ -135,7 +137,7 @@ export function StartScreen({ onDone }: { onDone: () => void }) {
                 </View>
                 <View style={styles.cardCopy}>
                   <View style={styles.cardHeaderRow}>
-                    <Text style={[styles.cardTo, { color: accent, fontFamily: DISPLAY }]}>to</Text>
+                    <Text style={[styles.cardTo, { color: accent, fontFamily: DISPLAY }]}>{t('directionTo').trim()}</Text>
                     <Text style={[styles.cardLabel, { fontFamily: DISPLAY }]}>{label}</Text>
                   </View>
                   <Text style={styles.cardSub}>{sub}</Text>
@@ -146,13 +148,13 @@ export function StartScreen({ onDone }: { onDone: () => void }) {
         </View>
 
         <LocationActionCard
-          title={smartIssue ? 'Location unavailable' : smartEnabled ? 'Location set for next time' : 'Use location next time'}
+          title={smartIssue ? t('locationUnavailable') : smartEnabled ? t('locationSetNextTime') : t('locationUseNextTime')}
           subtitle={
             isLocating
-              ? 'Detecting where you are and finding the closest stop…'
+              ? t('locationDetectingClosest')
               : locationError
-                ? 'Timed out. Tap to retry, or just choose a destination.'
-                : 'Skip the manual picker when location can choose your direction and closest stop'
+                ? t('locationChooseDestination')
+                : t('locationSkipManual')
           }
           onPress={handleEnableSmart}
           isLocating={isLocating}

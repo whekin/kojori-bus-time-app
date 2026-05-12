@@ -20,6 +20,7 @@
         "expo-glass-effect": "~55.0.10",
         "expo-image": "~55.0.8",
         "expo-linking": "~55.0.12",
+        "expo-localization": "~55.0.13",
         "expo-location": "~55.1.8",
         "expo-router": "~55.0.12",
         "expo-splash-screen": "~55.0.17",
@@ -881,6 +882,8 @@
 
     "expo-linking": ["expo-linking@55.0.12", "", { "dependencies": { "expo-constants": "~55.0.13", "invariant": "^2.2.4" }, "peerDependencies": { "react": "*", "react-native": "*" } }, "sha512-JiaIlFHC4iQ57NmsXYdn0HW0iAIEbKZXfGmpnFcY/bztl8I8RjnCV8zYbDMMO1x87mEYy7PmvEv2mmaX8WrQTw=="],
 
+    "expo-localization": ["expo-localization@55.0.13", "", { "dependencies": { "rtl-detect": "^1.0.2" }, "peerDependencies": { "expo": "*", "react": "*" } }, "sha512-fXiEUUihIrXmAEzoneaTOFcQ7TKmr25RR/ymrB/MvYTVnmevFA1zY2KI0VSiXY+NKKjZ8mG65YSn1wh4gEYKxA=="],
+
     "expo-location": ["expo-location@55.1.8", "", { "dependencies": { "@expo/image-utils": "^0.8.13" }, "peerDependencies": { "expo": "*" } }, "sha512-mEExFf84nmWLwi14GFfUsFLrCm10gbcqFn9EPXpuruQ28YMtJWgCD+jJtESYPQkYF44N21fVok3T28fLuCqydA=="],
 
     "expo-manifests": ["expo-manifests@55.0.15", "", { "dependencies": { "@expo/config": "~55.0.14", "expo-json-utils": "~55.0.2" }, "peerDependencies": { "expo": "*" } }, "sha512-p40ftXpgLTFGddFy35MYZMyjm/E6IQdn3l6fBZZ6zeraEzYLt+VLHYsplOL9ccTYvUSWKN9aOWRpoEYpyGVBVw=="],
@@ -1458,6 +1461,8 @@
     "restore-cursor": ["restore-cursor@2.0.0", "", { "dependencies": { "onetime": "^2.0.0", "signal-exit": "^3.0.2" } }, "sha512-6IzJLuGi4+R14vwagDHX+JrXmPVtPpn4mffDJ1UdR7/Edm87fl6yi8mMBIVvFtJaNTUvjughmW4hwLhRG7gC1Q=="],
 
     "rimraf": ["rimraf@3.0.2", "", { "dependencies": { "glob": "^7.1.3" }, "bin": { "rimraf": "bin.js" } }, "sha512-JZkJMZkAGFFPP2YqXZXPbMlMBgsxzE8ILs4lMIX/2o0L9UBw9O/Y3o6wFw/i9YLapcUJWwqbi3kdxIPdC62TIA=="],
+
+    "rtl-detect": ["rtl-detect@1.1.2", "", {}, "sha512-PGMBq03+TTG/p/cRB7HCLKJ1MgDIi07+QU1faSjiYRfmY5UsAttV9Hs08jDAHVwcOwmVLcSJkpwyfXszVjWfIQ=="],
 
     "safe-array-concat": ["safe-array-concat@1.1.3", "", { "dependencies": { "call-bind": "^1.0.8", "call-bound": "^1.0.2", "get-intrinsic": "^1.2.6", "has-symbols": "^1.1.0", "isarray": "^2.0.5" } }, "sha512-AURm5f0jYEOydBj7VQlVvDrjeFgthDdEF5H1dP+6mNpoXOMo1quQqJ4wvJDyRZ9+pO3kGWoOdmV08cSv2aJV6Q=="],
 

@@ -40,6 +40,7 @@ class WidgetListFactory(
   private var stopId: String = ""
   private var rows: List<WidgetRow> = emptyList()
   private var palette = defaultPalette()
+  private var strings: JSONObject? = null
 
   override fun onCreate() {}
 
@@ -49,6 +50,7 @@ class WidgetListFactory(
     stopLabel = ""
     val stateJson = WidgetPrefs.getStateJson(context) ?: return
     val root = runCatching { JSONObject(stateJson) }.getOrNull() ?: return
+    strings = root.optJSONObject("strings")
     direction = WidgetPrefs.getDirection(context)
     val snapshot = root.optJSONObject("directions")?.optJSONObject(direction) ?: return
     val items = snapshot.optJSONArray("items") ?: return
@@ -60,7 +62,8 @@ class WidgetListFactory(
     stopId = snapshot.optString("stopId", "")
     val syncedAtEpochMs = snapshot.optLong("syncedAtEpochMs", 0L)
     val stopCode = stopId.substringAfter(":", stopId)
-    stopLabel = if (stopCode.isNotBlank()) "from $label [#$stopCode]" else "from $label"
+    val from = localizedString("from", "from")
+    stopLabel = if (stopCode.isNotBlank()) "$from $label [#$stopCode]" else "$from $label"
     val nowMs = System.currentTimeMillis()
     val elapsedMins = if (syncedAtEpochMs > 0L) {
       ((nowMs - syncedAtEpochMs) / 60_000L).toInt().coerceAtLeast(0)
@@ -126,7 +129,7 @@ class WidgetListFactory(
 
   private fun titleRow(): RemoteViews {
     val views = RemoteViews(context.packageName, R.layout.widget_list_title)
-    val baseCity = if (direction == "kojori") "Tbilisi" else "Kojori"
+    val baseCity = if (direction == "kojori") localizedString("toKojori", "to Kojori") else localizedString("toTbilisi", "to Tbilisi")
     val dotColor = if (direction == "kojori") palette.route380 else palette.route316
     views.setTextViewText(R.id.title_text, baseCity)
     views.setTextColor(R.id.title_text, palette.text)
@@ -145,10 +148,10 @@ class WidgetListFactory(
     views.setViewVisibility(R.id.toggle_row_h, if (narrow) View.GONE else View.VISIBLE)
     views.setViewVisibility(R.id.toggle_row_v, if (narrow) View.VISIBLE else View.GONE)
 
-    styleToggleButton(views, R.id.toggle_kojori, "to Kojori", direction == "kojori", palette.route380)
-    styleToggleButton(views, R.id.toggle_tbilisi, "to Tbilisi", direction == "tbilisi", palette.route316)
-    styleToggleButton(views, R.id.toggle_kojori_v, "to Kojori", direction == "kojori", palette.route380)
-    styleToggleButton(views, R.id.toggle_tbilisi_v, "to Tbilisi", direction == "tbilisi", palette.route316)
+    styleToggleButton(views, R.id.toggle_kojori, localizedString("toKojori", "to Kojori"), direction == "kojori", palette.route380)
+    styleToggleButton(views, R.id.toggle_tbilisi, localizedString("toTbilisi", "to Tbilisi"), direction == "tbilisi", palette.route316)
+    styleToggleButton(views, R.id.toggle_kojori_v, localizedString("toKojori", "to Kojori"), direction == "kojori", palette.route380)
+    styleToggleButton(views, R.id.toggle_tbilisi_v, localizedString("toTbilisi", "to Tbilisi"), direction == "tbilisi", palette.route316)
 
     val kojoriIntent = baseActionIntent("kojori").apply {
       action = "expo.modules.kojoriwidget.SET_DIRECTION"
@@ -198,6 +201,10 @@ class WidgetListFactory(
     views.setTextViewText(viewId, label)
     views.setTextColor(viewId, if (isActive) activeColor else palette.textDim)
     views.setInt(viewId, "setBackgroundResource", R.drawable.widget_chip_idle)
+  }
+
+  private fun localizedString(key: String, fallback: String): String {
+    return strings?.optString(key, fallback)?.ifBlank { fallback } ?: fallback
   }
 
   private fun openAppIntent() = baseActionIntent(stopId).apply {

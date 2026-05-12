@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { StopPickerModal } from '@/components/stop-picker-modal';
 import { useAppColors } from '@/hooks/use-app-colors';
+import { useI18n } from '@/hooks/use-i18n';
 
 const MONO = Platform.select({ android: 'monospace', ios: 'Menlo', default: 'monospace' });
 const DISPLAY = Platform.select({ android: 'serif', ios: 'Georgia', default: 'serif' });
@@ -43,9 +44,9 @@ function formatCount(currentIndex: number, total: number) {
   return `${formatIndex(currentIndex)} / ${formatIndex(total)}`;
 }
 
-function formatDistance(distanceMeters: number) {
-  if (distanceMeters < 1000) return `${Math.round(distanceMeters)} m away`;
-  return `${(distanceMeters / 1000).toFixed(distanceMeters < 10_000 ? 1 : 0)} km away`;
+function formatDistance(distanceMeters: number, t: ReturnType<typeof useI18n>['t']) {
+  if (distanceMeters < 1000) return t('stopDistanceMeters', { distance: Math.round(distanceMeters) });
+  return t('stopDistanceKm', { distance: (distanceMeters / 1000).toFixed(distanceMeters < 10_000 ? 1 : 0) });
 }
 
 function StopOption({
@@ -65,6 +66,7 @@ function StopOption({
 }) {
   const colors = useAppColors();
   const styles = useStopSelectorStyles();
+  const { t } = useI18n();
   return (
     <Pressable
       accessibilityRole="button"
@@ -100,9 +102,9 @@ function StopOption({
 
       <View style={styles.optionCopy}>
         <View style={styles.optionMeta}>
-          <Text style={styles.optionEyebrow}>STOP {formatIndex(index)}</Text>
+          <Text style={styles.optionEyebrow}>{t('stopOption', { index: formatIndex(index) })}</Text>
           <Text style={[styles.optionState, { color: isActive ? accentColor : colors.textDim, fontFamily: MONO }]}>
-            {isActive ? 'CURRENT' : 'SWITCH'}
+            {isActive ? t('stopCurrent') : t('stopSwitch')}
           </Text>
         </View>
         <Text style={[styles.optionTitle, { fontFamily: DISPLAY }]} numberOfLines={2}>
@@ -134,13 +136,15 @@ export function StopSelector({
   locationSuggestion,
   onAddStop,
   addStopModal,
-  label = 'BOARDING STOP',
+  label,
 }: StopSelectorProps) {
   const colors = useAppColors();
   const styles = useStopSelectorStyles();
   const insets = useSafeAreaInsets();
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
+  const resolvedLabel = label ?? t('stopBoarding');
 
   const activeIndex = Math.max(0, stops.findIndex(stop => stop.id === activeStopId));
   const activeStop = stops[activeIndex] ?? stops[0];
@@ -189,7 +193,7 @@ export function StopSelector({
     <>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={`${label}. ${activeStop.label}. Double tap to change stop.`}
+        accessibilityLabel={t('stopAccessibility', { label: resolvedLabel, stop: activeStop.label })}
         onPress={() => {
           if (totalStops > 1) {
             setOpen(true);
@@ -212,7 +216,7 @@ export function StopSelector({
         ]}>
         <View style={styles.triggerMain}>
           <View style={styles.triggerTopRow}>
-            <Text style={styles.triggerLabel}>{label}</Text>
+            <Text style={styles.triggerLabel}>{resolvedLabel}</Text>
           </View>
           <Text style={[styles.triggerValue, { fontFamily: DISPLAY }]} numberOfLines={1}>
             {activeStop.label}
@@ -231,7 +235,7 @@ export function StopSelector({
                 },
               ]}>
               <MaterialCommunityIcons name="walk" size={14} color={accentColor} />
-              <Text style={[styles.routeButtonText, { color: accentColor }]}>Route</Text>
+              <Text style={[styles.routeButtonText, { color: accentColor }]}>{t('commonRoute')}</Text>
             </Pressable>
           </View>
         </View>
@@ -251,11 +255,11 @@ export function StopSelector({
                   {formatCount(activeIndex, totalStops)}
                 </Text>
               </View>
-              <Text style={[styles.triggerAction, { color: accentColor }]}>Change</Text>
+              <Text style={[styles.triggerAction, { color: accentColor }]}>{t('commonChange')}</Text>
             </>
           ) : (
             <View style={styles.triggerActionSolo}>
-              <Text style={[styles.triggerAction, { color: accentColor }]}>+ Add</Text>
+              <Text style={[styles.triggerAction, { color: accentColor }]}>{t('commonAdd')}</Text>
             </View>
           )}
         </View>
@@ -280,16 +284,16 @@ export function StopSelector({
 
             <View style={styles.sheetHeader}>
               <View style={styles.sheetCopy}>
-                <Text style={styles.sheetEyebrow}>{label}</Text>
-                <Text style={styles.sheetTitle}>Choose the stop you are tracking</Text>
+                <Text style={styles.sheetEyebrow}>{resolvedLabel}</Text>
+                <Text style={styles.sheetTitle}>{t('stopSheetTitle')}</Text>
                 <Text style={styles.sheetNote}>
-                  The selected stop controls the departures shown on this screen.
+                  {t('stopSheetNote')}
                 </Text>
               </View>
 
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel="Close stop picker"
+                accessibilityLabel={t('stopPickerClose')}
                 hitSlop={10}
                 onPress={() => setOpen(false)}
                 style={styles.closeButton}>
@@ -307,7 +311,7 @@ export function StopSelector({
               ]}>
               <View style={[styles.currentMarker, { backgroundColor: accentColor }]} />
               <View style={styles.currentCopy}>
-                <Text style={styles.currentLabel}>CURRENT STOP</Text>
+                <Text style={styles.currentLabel}>{t('stopCurrentLabel')}</Text>
                 <Text style={[styles.currentValue, { fontFamily: DISPLAY }]} numberOfLines={1}>
                   {activeStop.label}
                 </Text>
@@ -326,7 +330,7 @@ export function StopSelector({
               {locationSuggestion ? (
                 <Pressable
                   accessibilityRole="button"
-                  accessibilityLabel={`Use closest stop ${locationSuggestion.stop.label}`}
+                  accessibilityLabel={t('stopUseClosest', { stop: locationSuggestion.stop.label })}
                   onPress={() => {
                     onSelectStop(locationSuggestion.stop.id);
                     setOpen(false);
@@ -342,12 +346,12 @@ export function StopSelector({
                     <MaterialCommunityIcons name="crosshairs-gps" size={18} color={accentColor} />
                   </View>
                   <View style={styles.closestStopCopy}>
-                    <Text style={styles.closestStopEyebrow}>CLOSEST STOP</Text>
+                    <Text style={styles.closestStopEyebrow}>{t('stopClosest')}</Text>
                     <Text style={[styles.closestStopTitle, { fontFamily: DISPLAY }]} numberOfLines={2}>
                       {locationSuggestion.stop.label}
                     </Text>
                     <Text style={[styles.closestStopDistance, { fontFamily: MONO }]}>
-                      {formatDistance(locationSuggestion.distanceMeters)}
+                      {formatDistance(locationSuggestion.distanceMeters, t)}
                     </Text>
                   </View>
                   <MaterialCommunityIcons name="chevron-right" size={18} color={accentColor} />
@@ -357,7 +361,7 @@ export function StopSelector({
               {addStopModal ? (
                 <Pressable
                   accessibilityRole="button"
-                  accessibilityLabel="Add another stop"
+                  accessibilityLabel={t('stopAddAnother')}
                   onPress={() => {
                     setOpen(false);
                     setAddOpen(true);
@@ -371,7 +375,7 @@ export function StopSelector({
                   ]}>
                   <Text style={[styles.addStopPlus, { color: accentColor }]}>+</Text>
                   <Text style={[styles.addStopText, { color: accentColor }]}>
-                    Add another stop
+                    {t('stopAddAnother')}
                   </Text>
                 </Pressable>
               ) : null}

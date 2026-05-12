@@ -9,6 +9,7 @@ const BASE = 'https://transit.ttc.com.ge/pis-gateway/api';
 const API_KEY = 'c0a2f304-551a-4d08-b8df-2c53ecd57f9f';
 
 const headers = { 'x-api-key': API_KEY };
+export type TtcLocale = 'en' | 'ka';
 
 async function fetchTtcJson<T>(url: string, kind: TtcQueryKind): Promise<T> {
   const startedAt = Date.now();
@@ -254,9 +255,9 @@ export const BUS_COLORS: Record<BusLine, string> = {
 
 // ── API functions ─────────────────────────────────────────────────────────────
 
-export async function fetchArrivalTimes(stopId: string): Promise<ArrivalTime[]> {
+export async function fetchArrivalTimes(stopId: string, locale: TtcLocale = 'en'): Promise<ArrivalTime[]> {
   return fetchTtcJson<ArrivalTime[]>(
-    `${BASE}/v2/stops/${stopId}/arrival-times?locale=en&ignoreScheduledArrivalTimes=false`,
+    `${BASE}/v2/stops/${stopId}/arrival-times?locale=${locale}&ignoreScheduledArrivalTimes=false`,
     'arrivals',
   );
 }
@@ -264,26 +265,27 @@ export async function fetchArrivalTimes(stopId: string): Promise<ArrivalTime[]> 
 export async function fetchSchedule(
   routeId: string,
   patternSuffix: string,
+  locale: TtcLocale = 'en',
 ): Promise<SchedulePeriod[]> {
   return fetchTtcJson<SchedulePeriod[]>(
-    `${BASE}/v3/routes/${routeId}/schedule?patternSuffix=${patternSuffix}&locale=en`,
+    `${BASE}/v3/routes/${routeId}/schedule?patternSuffix=${patternSuffix}&locale=${locale}`,
     'schedule',
   );
 }
 
 /** Fetches name + coordinates for a single stop. */
-export async function fetchStopDetails(stopId: string): Promise<{ id: string; name: string }> {
+export async function fetchStopDetails(stopId: string, locale: TtcLocale = 'en'): Promise<{ id: string; name: string }> {
   const data = await fetchTtcJson<{ id?: string; name: string }>(
-    `${BASE}/v2/stops/${stopId}?locale=en`,
+    `${BASE}/v2/stops/${stopId}?locale=${locale}`,
     'stop-details',
   );
   return { id: data.id ?? stopId, name: data.name };
 }
 
 /** Fetches all stops for a route pattern — used in Settings to populate the full picker. */
-export async function fetchRouteStops(routeId: string, patternSuffix: string): Promise<StopInfo[]> {
+export async function fetchRouteStops(routeId: string, patternSuffix: string, locale: TtcLocale = 'en'): Promise<StopInfo[]> {
   const raw = await fetchTtcJson<{ stop: { id: string; name: string; lat?: number; lon?: number } }[]>(
-    `${BASE}/v3/routes/${routeId}/stops-of-patterns?patternSuffixes=${patternSuffix}&locale=en`,
+    `${BASE}/v3/routes/${routeId}/stops-of-patterns?patternSuffixes=${patternSuffix}&locale=${locale}`,
     'route-stops',
   );
   return raw.map(s => ({ id: s.stop.id, label: s.stop.name, lat: s.stop.lat, lon: s.stop.lon }));
@@ -313,9 +315,10 @@ export async function fetchRoutePolyline(
 export async function fetchRoutePolylineFromStops(
   routeId: string,
   patternSuffix: string,
+  locale: TtcLocale = 'en',
 ): Promise<{ points: PolylinePoint[]; source: RouteGeometrySource }> {
   const raw = await fetchTtcJson<{ stop: { lat?: number; lon?: number } }[]>(
-    `${BASE}/v3/routes/${routeId}/stops-of-patterns?patternSuffixes=${patternSuffix}&locale=en`,
+    `${BASE}/v3/routes/${routeId}/stops-of-patterns?patternSuffixes=${patternSuffix}&locale=${locale}`,
     'route-stops',
   );
 

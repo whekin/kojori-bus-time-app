@@ -18,6 +18,7 @@ import HomeScreen from '@/app/index';
 import SettingsScreen from '@/app/settings';
 import TimetableScreen from '@/app/timetable';
 import { useAppColors } from '@/hooks/use-app-colors';
+import { useI18n } from '@/hooks/use-i18n';
 import { TabNavProvider, type TabRoute } from '@/hooks/use-tab-nav';
 
 
@@ -103,7 +104,11 @@ function TabButton({
         size={20}
         style={iconStyle}
       />
-      <Animated.Text style={[styles.navLabel, labelStyle]}>
+      <Animated.Text
+        style={[styles.navLabel, labelStyle]}
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        minimumFontScale={0.78}>
         {tab.title}
       </Animated.Text>
     </Pressable>
@@ -119,11 +124,12 @@ export default function AppTabs({ deferInactiveTabs = false }: { deferInactiveTa
   const [mountedIndexes, setMountedIndexes] = useState<ReadonlySet<number>>(() => new Set([0]));
   const [navWidth, setNavWidth] = useState(0);
   const pagerProgress = useSharedValue(0);
+  const { t } = useI18n();
   const tabs: TabItem[] = [
-    { route: 'index', title: 'Departures', icon: 'bus-clock', accent: C.route380, render: isActive => <HomeScreen isActive={isActive} /> },
-    { route: 'explore', title: 'Map', icon: 'map-marker-radius', accent: C.map, render: isActive => <ExploreScreen isActive={isActive} /> },
-    { route: 'timetable', title: 'Timetable', icon: 'table-clock', accent: C.route316, render: () => <TimetableScreen /> },
-    { route: 'settings', title: 'Settings', icon: 'cog', accent: C.primary, render: () => <SettingsScreen /> },
+    { route: 'index', title: t('tabsDepartures'), icon: 'bus-clock', accent: C.route380, render: isActive => <HomeScreen isActive={isActive} /> },
+    { route: 'explore', title: t('tabsMap'), icon: 'map-marker-radius', accent: C.map, render: isActive => <ExploreScreen isActive={isActive} /> },
+    { route: 'timetable', title: t('tabsTimetable'), icon: 'table-clock', accent: C.route316, render: () => <TimetableScreen /> },
+    { route: 'settings', title: t('tabsSettings'), icon: 'cog', accent: C.primary, render: () => <SettingsScreen /> },
   ];
 
   useEffect(() => {
@@ -278,7 +284,9 @@ function createStyles(C: AppColors) {
     navLabel: {
       fontSize: 12,
       fontWeight: '700',
-      letterSpacing: 0.2,
+      letterSpacing: 0,
+      textAlign: 'center',
+      maxWidth: '100%',
     },
   });
 }

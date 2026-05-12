@@ -14,6 +14,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { alpha, type AppColors } from '@/constants/theme';
 import { useAppColors } from '@/hooks/use-app-colors';
+import { useI18n } from '@/hooks/use-i18n';
 import { useRouteStops } from '@/hooks/use-route-stops';
 import { useStopNames } from '@/hooks/use-stop-names';
 import { StopInfo } from '@/services/ttc';
@@ -39,6 +40,7 @@ export function StopPickerModal({
 }) {
   const [search, setSearch] = useState('');
   const colors = useAppColors();
+  const { t } = useI18n();
   const stopNames = useStopNames();
   const modalStyles = useMemo(() => createModalStyles(colors), [colors]);
   const { stops: routeStops, isLoading } = useRouteStops(direction);
@@ -75,7 +77,7 @@ export function StopPickerModal({
         <View style={modalStyles.searchWrap}>
           <TextInput
             style={modalStyles.searchInput}
-            placeholder="Search by name or stop ID…"
+            placeholder={t('stopSearch')}
             placeholderTextColor={colors.textFaint}
             value={search}
             onChangeText={setSearch}
@@ -94,7 +96,7 @@ export function StopPickerModal({
           ItemSeparatorComponent={() => <View style={modalStyles.separator} />}
           ListEmptyComponent={
             <Text style={modalStyles.emptyText}>
-              {isLoading ? 'Loading stops…' : 'No stops found'}
+              {isLoading ? t('stopLoading') : t('stopNoneFound')}
             </Text>
           }
           renderItem={({ item }) => {

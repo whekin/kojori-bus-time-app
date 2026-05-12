@@ -154,7 +154,7 @@ open class KojoriBusWidgetProvider : AppWidgetProvider() {
       views.setPendingIntentTemplate(R.id.widget_list, widgetCollectionPendingIntent(context, appWidgetId))
 
       if (stateJson.isNullOrBlank()) {
-        bindEmptyState(views, currentDirection, palette)
+        bindEmptyState(views, root, palette)
         appWidgetManager.updateAppWidget(appWidgetId, views)
         return
       }
@@ -164,7 +164,7 @@ open class KojoriBusWidgetProvider : AppWidgetProvider() {
         ?.optJSONObject(currentDirection)
 
       if (snapshot == null) {
-        bindEmptyState(views, currentDirection, palette)
+        bindEmptyState(views, root, palette)
         appWidgetManager.updateAppWidget(appWidgetId, views)
         return
       }
@@ -174,9 +174,9 @@ open class KojoriBusWidgetProvider : AppWidgetProvider() {
       val hadSnapshotItems = items != null && items.length() > 0
       val hasItems = hasUpcomingItems(snapshot, System.currentTimeMillis())
       val displayMessage = when {
-        snapshot.optString("status") == "error" -> message.ifBlank { "Open app to refresh" }
-        !hasItems && hadSnapshotItems -> "Open app to refresh"
-        message.isBlank() -> "No departures soon"
+        snapshot.optString("status") == "error" -> message.ifBlank { root.localizedString("openAppToRefresh", "Open app to refresh") }
+        !hasItems && hadSnapshotItems -> root.localizedString("openAppToRefresh", "Open app to refresh")
+        message.isBlank() -> root.localizedString("noDeparturesSoon", "No departures soon")
         else -> message
       }
 
@@ -214,12 +214,16 @@ open class KojoriBusWidgetProvider : AppWidgetProvider() {
     }
 
     private fun bindEmptyState(
-      views: RemoteViews, direction: String, palette: WidgetPalette,
+      views: RemoteViews, root: JSONObject?, palette: WidgetPalette,
     ) {
-      views.setTextViewText(R.id.widget_message, "Open app to load")
+      views.setTextViewText(R.id.widget_message, root.localizedString("openAppToLoad", "Open app to load"))
       views.setTextColor(R.id.widget_message, palette.textDim)
       views.setViewVisibility(R.id.widget_list, View.GONE)
       views.setViewVisibility(R.id.widget_message, View.VISIBLE)
+    }
+
+    private fun JSONObject?.localizedString(key: String, fallback: String): String {
+      return this?.optJSONObject("strings")?.optString(key, fallback)?.ifBlank { fallback } ?: fallback
     }
 
     private fun widgetCollectionPendingIntent(context: Context, appWidgetId: Int): PendingIntent {

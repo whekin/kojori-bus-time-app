@@ -14,6 +14,7 @@ import {
   DEFAULT_KOJORI_FAVORITES,
   DEFAULT_TBILISI_FAVORITES,
 } from '@/services/ttc';
+import type { AppLanguage } from '@/i18n/languages';
 
 const STORAGE_KEY = '@kojori_settings_v2';
 export type SharedDirection = 'toKojori' | 'toTbilisi';
@@ -50,6 +51,8 @@ export interface Settings {
   cancelledBusDemo: boolean;
   /** What to do on launch: ask, use location, or restore last direction */
   launchBehavior: LaunchBehavior;
+  /** App language override, or follow device language */
+  language: AppLanguage;
 }
 
 const DEFAULTS: Settings = {
@@ -65,6 +68,7 @@ const DEFAULTS: Settings = {
   debugOptionsUnlocked: false,
   cancelledBusDemo: false,
   launchBehavior: 'ask',
+  language: 'system',
 };
 
 // Collapse the legacy two-toggle model (enableSmartDirection + skipStartScreen) onto the new enum.
@@ -131,6 +135,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
         activeTbilisiStopId: settings.widgetTbilisiStopId,
         paletteId: settings.paletteId,
         themeMode: resolveAppThemeMode(settings.themeMode, Appearance.getColorScheme()),
+        language: settings.language,
       }).catch(() => { });
     }
 
@@ -154,6 +159,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     isLoaded,
     settings.paletteId,
     settings.themeMode,
+    settings.language,
     settings.widgetKojoriStopId,
     settings.widgetTbilisiStopId,
   ]);

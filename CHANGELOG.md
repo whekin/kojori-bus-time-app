@@ -2,8 +2,13 @@
 
 ## v2026.5.9
 
+### New
+
+- App language support for English, Georgian, and Russian, including a Settings language selector, localized app chrome, Georgian TTC labels where supported, Russian known-stop labels, and localized Android widget text
+
 ### Improved
 
+- Russian and Georgian coverage now includes Settings data/source/legal rows, widget size labels, theme names, live-status badges, compact countdowns, and fallback stop names from English TTC data
 - Destination cards now wait for a completed tap instead of triggering as soon as a finger touches down
 - All themes now use the swapped Kojori/Tbilisi destination accent colors consistently
 - Start screen location copy now makes it clearer that location is a next-launch preference, not another manual destination choice
