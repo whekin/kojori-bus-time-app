@@ -1009,7 +1009,7 @@ export default function HomeScreen({ isActive = false }: { isActive?: boolean })
             {isRefreshing ? (
               <ActivityIndicator size="small" color={colors.textDim} />
             ) : (
-              <Text style={styles.refreshGlyph}>↻</Text>
+              <MaterialCommunityIcons name="refresh" size={18} color={colors.textDim} />
             )}
           </Pressable>
         </View>
@@ -1160,7 +1160,6 @@ function createStyles(C: AppColors) {
     alignItems: 'center',
     justifyContent: 'center',
   },
-  refreshGlyph: { fontSize: 16, fontWeight: '700', color: C.textDim },
 
   modeContainer: { flex: 1 },
   pageScroll: { flex: 1 },
