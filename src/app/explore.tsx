@@ -8,10 +8,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { DirectionPickerSheet, DirectionPill } from '@/components/direction-picker';
 import { TtcStatusChip } from '@/components/ttc-status-banner';
 import { BottomTabInset } from '@/constants/theme';
+import { useActiveDirection } from '@/hooks/use-active-direction';
 import { useAppColors, useResolvedAppThemeMode } from '@/hooks/use-app-colors';
 import { useI18n } from '@/hooks/use-i18n';
 import { useRoutePolylines } from '@/hooks/use-route-polylines';
-import { useSettings } from '@/hooks/use-settings';
 import { useVehiclePositions } from '@/hooks/use-vehicle-positions';
 import { splitPolylinesByOverlap } from '@/utils/polyline-offset';
 
@@ -69,8 +69,7 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
   const styles = useMemo(() => createStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
   const mapRef = useRef<MapView>(null);
-  const { settings } = useSettings();
-  const direction = settings.sharedDirection;
+  const { activeDirection: direction } = useActiveDirection();
   const [directionSheetOpen, setDirectionSheetOpen] = useState(false);
   const lastFitKeyRef = useRef<string | null>(null);
 
@@ -87,7 +86,8 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
     return () => clearTimeout(id);
   }, [mapReady]);
 
-  const { data: routeData } = useRoutePolylines(direction);
+  const { data: toKojoriRouteData } = useRoutePolylines('toKojori');
+  const { data: toTbilisiRouteData } = useRoutePolylines('toTbilisi');
   const { data: livePositions = [], refetch, isFetching } = useVehiclePositions(direction, isActive);
 
   const spinAnim = useRef(new Animated.Value(0)).current;
@@ -114,6 +114,7 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
   });
 
   const positions = livePositions;
+  const routeData = direction === 'toKojori' ? toKojoriRouteData : toTbilisiRouteData;
   const routePolylines = routeData?.polylines;
 
   const splitPolylines = useMemo(() => {

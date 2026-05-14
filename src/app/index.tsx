@@ -8,6 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { DirectionPickerSheet, DirectionPill } from '@/components/direction-picker';
 import { StopSelector } from '@/components/stop-selector';
 import { alpha, BottomTabInset, type AppColors } from '@/constants/theme';
+import { useActiveDirection } from '@/hooks/use-active-direction';
 import { useAppColors } from '@/hooks/use-app-colors';
 import { useArrivals } from '@/hooks/use-arrivals';
 import { useClosestStop } from '@/hooks/use-closest-stop';
@@ -830,10 +831,10 @@ export default function HomeScreen({ isActive = false }: { isActive?: boolean })
   const {
     settings,
     update,
-    setSharedDirection,
     toggleKojoriFavorite,
     toggleTbilisiFavorite,
   } = useSettings();
+  const { activeDirection, selectDirection } = useActiveDirection();
   const { status: ttcStatus, lastSuccessAt } = useTtcHealth();
   const { widgetMode, widgetStopId } = useLocalSearchParams<{
     widgetMode?: string;
@@ -844,7 +845,7 @@ export default function HomeScreen({ isActive = false }: { isActive?: boolean })
   const [now, setNow] = useState(() => new Date());
   const [directionSheetOpen, setDirectionSheetOpen] = useState(false);
   const handledWidgetLink = useRef<string | null>(null);
-  const mode = directionToMode(settings.sharedDirection);
+  const mode = directionToMode(activeDirection);
 
   useEffect(() => {
     if (widgetMode !== 'kojori' && widgetMode !== 'tbilisi') return;
@@ -853,7 +854,7 @@ export default function HomeScreen({ isActive = false }: { isActive?: boolean })
     if (handledWidgetLink.current === nextKey) return;
     handledWidgetLink.current = nextKey;
 
-    setSharedDirection(modeToDirection(widgetMode));
+    selectDirection(modeToDirection(widgetMode), { persist: 'immediate' });
 
     if (!widgetStopId) return;
 
@@ -876,7 +877,7 @@ export default function HomeScreen({ isActive = false }: { isActive?: boolean })
       activeKojoriStopId: widgetStopId,
     });
   }, [
-    setSharedDirection,
+    selectDirection,
     settings.kojoriFavorites,
     settings.tbilisiFavorites,
     update,
@@ -905,7 +906,6 @@ export default function HomeScreen({ isActive = false }: { isActive?: boolean })
   }, []);
 
   const accentColor = mode === 'kojori' ? colors.route380 : colors.route316;
-  const activeDirection = settings.sharedDirection;
   const activeStopId = mode === 'kojori' ? settings.activeTbilisiStopId : settings.activeKojoriStopId;
 
   async function handleRefresh() {

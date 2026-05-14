@@ -16,6 +16,7 @@ import Svg, { Circle, Defs, G, LinearGradient, Path, Polygon, Rect, Stop } from 
 import { KojoriIllustration, TbilisiIllustration } from '@/components/onboarding-illustrations';
 import { SettingsSwitch } from '@/components/settings-switch';
 import { alpha, type AppColors } from '@/constants/theme';
+import { useActiveDirection } from '@/hooks/use-active-direction';
 import { useAppColors } from '@/hooks/use-app-colors';
 import { getClosestStopCandidate } from '@/hooks/use-closest-stop';
 import { useI18n } from '@/hooks/use-i18n';
@@ -36,7 +37,8 @@ export function StartScreen({ onDone }: { onDone: () => void }) {
   const styles = useStyles();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
-  const { settings, update, setSharedDirection } = useSettings();
+  const { selectDirection } = useActiveDirection();
+  const { settings, update } = useSettings();
   const { t } = useI18n();
   const pickedRef = useRef(false);
   const smartEnabled = settings.launchBehavior === 'smart';
@@ -51,7 +53,7 @@ export function StartScreen({ onDone }: { onDone: () => void }) {
   function handlePick(mode: Mode) {
     if (pickedRef.current) return;
     pickedRef.current = true;
-    setSharedDirection(modeToDirection(mode));
+    selectDirection(modeToDirection(mode), { persist: 'deferred' });
     onDone();
   }
 
@@ -76,7 +78,7 @@ export function StartScreen({ onDone }: { onDone: () => void }) {
       });
     }
 
-    setSharedDirection(direction, false);
+    selectDirection(direction, { manual: false, persist: 'immediate' });
     onDone();
   }
 

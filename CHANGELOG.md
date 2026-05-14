@@ -10,6 +10,7 @@
 - Russian app copy now uses friendlier wording across the start screen, live departure labels, and Settings
 - Destination picker now stays focused on manual direction choices without the extra location action
 - Departures now keeps both destination panes mounted, so switching sides no longer waits for the route screen to rebuild
+- Direction changes now update visible app state before persisting the remembered direction, making picker switches feel immediate
 - Direction and stop-selection bottom sheets now use native Android swipe-down dismissal
 
 ### Fixed

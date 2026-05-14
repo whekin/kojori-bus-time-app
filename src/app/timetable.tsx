@@ -14,6 +14,7 @@ import { DirectionPickerSheet, DirectionPill } from '@/components/direction-pick
 import { StopSelector } from '@/components/stop-selector';
 import { TtcStatusHeaderBadge } from '@/components/ttc-status-banner';
 import { BottomTabInset, alpha, type AppColors } from '@/constants/theme';
+import { useActiveDirection } from '@/hooks/use-active-direction';
 import { useAppColors } from '@/hooks/use-app-colors';
 import { useClosestStop } from '@/hooks/use-closest-stop';
 import { useI18n } from '@/hooks/use-i18n';
@@ -99,10 +100,11 @@ export default function TimetableScreen() {
   const { t } = useI18n();
   const insets = useSafeAreaInsets();
   const { settings, update, toggleKojoriFavorite, toggleTbilisiFavorite } = useSettings();
+  const { activeDirection } = useActiveDirection();
   const stopNames = useStopNames();
   const [filter, setFilter] = useState<Filter>('all');
   const [directionSheetOpen, setDirectionSheetOpen] = useState(false);
-  const direction = settings.sharedDirection;
+  const direction = activeDirection;
 
   const favoriteIds = direction === 'toKojori' ? settings.tbilisiFavorites : settings.kojoriFavorites;
   const stopId = direction === 'toKojori' ? settings.activeTbilisiStopId : settings.activeKojoriStopId;
@@ -145,14 +147,15 @@ export default function TimetableScreen() {
     }
   }
 
-  const { data: s380, isLoading: l380 } = useSchedule(
-    ROUTES['380'].id,
-    direction === 'toKojori' ? ROUTES['380'].toKojori : ROUTES['380'].toTbilisi,
-  );
-  const { data: s316, isLoading: l316 } = useSchedule(
-    ROUTES['316'].id,
-    direction === 'toKojori' ? ROUTES['316'].toKojori : ROUTES['316'].toTbilisi,
-  );
+  const { data: s380ToKojori, isLoading: l380ToKojori } = useSchedule(ROUTES['380'].id, ROUTES['380'].toKojori);
+  const { data: s316ToKojori, isLoading: l316ToKojori } = useSchedule(ROUTES['316'].id, ROUTES['316'].toKojori);
+  const { data: s380ToTbilisi, isLoading: l380ToTbilisi } = useSchedule(ROUTES['380'].id, ROUTES['380'].toTbilisi);
+  const { data: s316ToTbilisi, isLoading: l316ToTbilisi } = useSchedule(ROUTES['316'].id, ROUTES['316'].toTbilisi);
+
+  const s380 = direction === 'toKojori' ? s380ToKojori : s380ToTbilisi;
+  const s316 = direction === 'toKojori' ? s316ToKojori : s316ToTbilisi;
+  const l380 = direction === 'toKojori' ? l380ToKojori : l380ToTbilisi;
+  const l316 = direction === 'toKojori' ? l316ToKojori : l316ToTbilisi;
 
   const isLoading = l380 || l316;
   const accentColor = direction === 'toKojori' ? colors.route380 : colors.route316;

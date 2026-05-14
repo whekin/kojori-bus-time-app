@@ -5,9 +5,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { NativeBottomSheet } from '@/components/native-bottom-sheet';
 import { alpha, type AppColors } from '@/constants/theme';
+import { useActiveDirection } from '@/hooks/use-active-direction';
 import { useAppColors } from '@/hooks/use-app-colors';
 import { useI18n } from '@/hooks/use-i18n';
-import { useSettings, type SharedDirection } from '@/hooks/use-settings';
+import { type SharedDirection } from '@/hooks/use-settings';
 
 type Mode = 'kojori' | 'tbilisi';
 
@@ -38,11 +39,11 @@ export function DirectionPill({
 }) {
   const colors = useAppColors();
   const styles = usePillStyles();
-  const { settings } = useSettings();
+  const { activeDirection } = useActiveDirection();
   const { t } = useI18n();
 
-  const origin = originLabel(settings.sharedDirection, t);
-  const destination = destinationLabel(settings.sharedDirection, t);
+  const origin = originLabel(activeDirection, t);
+  const destination = destinationLabel(activeDirection, t);
 
   return (
     <Pressable
@@ -89,23 +90,18 @@ function DirectionPickerSheetInner({
   const colors = useAppColors();
   const styles = useSheetStyles();
   const insets = useSafeAreaInsets();
-  const {
-    settings,
-    setSharedDirection,
-  } = useSettings();
+  const { activeDirection, selectDirection } = useActiveDirection();
   const { t } = useI18n();
 
-  const activeMode = directionToMode(settings.sharedDirection);
+  const activeMode = directionToMode(activeDirection);
 
   function handlePickMode(mode: Mode) {
     const nextDirection = modeToDirection(mode);
     onClose();
 
-    if (nextDirection === settings.sharedDirection) return;
+    if (nextDirection === activeDirection) return;
 
-    setTimeout(() => {
-      setSharedDirection(nextDirection);
-    }, 0);
+    selectDirection(nextDirection, { persist: 'deferred' });
   }
 
   return (

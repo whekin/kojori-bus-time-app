@@ -9,6 +9,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { AnimatedSplashOverlay, AppReveal } from '@/components/animated-icon';
 import AppTabs from '@/components/app-tabs';
 import { StartScreen } from '@/components/start-screen';
+import { DirectionProvider, useActiveDirection } from '@/hooks/use-active-direction';
 import { AppColorsProvider, useAppColors, useResolvedAppThemeMode } from '@/hooks/use-app-colors';
 import { getClosestStopCandidate } from '@/hooks/use-closest-stop';
 import { useLocation } from '@/hooks/use-location';
@@ -51,7 +52,8 @@ function CachePrefiller() {
 const SMART_DIRECTION_GRACE_MS = 1800;
 
 function AppReady() {
-  const { isLoaded, settings, setSharedDirection, update } = useSettings();
+  const { isLoaded, settings, update } = useSettings();
+  const { selectDirection } = useActiveDirection();
   const [dismissedStart, setDismissedStart] = useState(false);
   const [forcedStartOpen, setForcedStartOpen] = useState(false);
   const [waitingForSmart, setWaitingForSmart] = useState(false);
@@ -90,10 +92,10 @@ function AppReady() {
       update({ activeKojoriStopId: closestStopResult.closestStop.id });
     }
 
-    setSharedDirection(direction, false);
+    selectDirection(direction, { manual: false, persist: 'immediate' });
     setDismissedStart(true);
     setWaitingForSmart(false);
-  }, [resolvedLocation, setSharedDirection, suggestedMode, toKojoriStops, toTbilisiStops, update, waitingForSmart]);
+  }, [resolvedLocation, selectDirection, suggestedMode, toKojoriStops, toTbilisiStops, update, waitingForSmart]);
 
   useEffect(() => {
     if (isLoaded && !waitingForSmart) {
@@ -187,9 +189,11 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <QueryClientProvider client={queryClient}>
         <SettingsProvider>
-          <AppColorsProvider>
-            <AppThemeShell />
-          </AppColorsProvider>
+          <DirectionProvider>
+            <AppColorsProvider>
+              <AppThemeShell />
+            </AppColorsProvider>
+          </DirectionProvider>
         </SettingsProvider>
       </QueryClientProvider>
     </GestureHandlerRootView>
