@@ -24,11 +24,6 @@ import { useRouteStops } from '@/hooks/use-route-stops';
 import { useSettings, type SharedDirection } from '@/hooks/use-settings';
 
 const DISPLAY = Platform.select({ android: 'serif', ios: 'Georgia', default: 'serif' });
-const KOJORI_ACCENT = '#12AFA1';
-const TBILISI_ACCENT = '#F2A008';
-const INK = '#071B2B';
-const MUTED = '#607889';
-const CANVAS = '#F4FBFD';
 
 type Mode = 'kojori' | 'tbilisi';
 
@@ -98,16 +93,21 @@ export function StartScreen({ onDone }: { onDone: () => void }) {
 
   const artSize = Math.min(96, Math.max(78, width * 0.22));
   const smartIssue = Boolean(locationError);
+  const kojoriAccent = colors.route380;
+  const tbilisiAccent = colors.route316;
+  const artworkBgOpacity = colors.mode === 'dark' ? '20' : '14';
+  const artworkOutline = colors.mode === 'dark' ? colors.textDim : colors.text;
+  const artworkDim = colors.textFaint;
 
   return (
     <View style={[styles.root, { paddingTop: insets.top + 10 }]}>
-      <ScenicBackdrop width={width} accent={KOJORI_ACCENT} />
+      <ScenicBackdrop width={width} accent={kojoriAccent} colors={colors} />
       <ScrollView
         contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 118 }]}
         showsVerticalScrollIndicator={false}>
         <View style={styles.topBar}>
           <View style={styles.brandRow}>
-            <MaterialCommunityIcons name="map-marker" size={27} color={KOJORI_ACCENT} />
+            <MaterialCommunityIcons name="map-marker" size={27} color={kojoriAccent} />
             <Text style={styles.eyebrow}>{t('startEyebrow')}</Text>
           </View>
         </View>
@@ -123,8 +123,9 @@ export function StartScreen({ onDone }: { onDone: () => void }) {
           {(['kojori', 'tbilisi'] as Mode[]).map(mode => {
             const label = mode === 'kojori' ? t('cityKojori') : t('cityTbilisi');
             const sub = mode === 'kojori' ? t('startKojoriSub') : t('startTbilisiSub');
-            const accent = mode === 'kojori' ? KOJORI_ACCENT : TBILISI_ACCENT;
-            const borderColor = mode === 'kojori' ? '#BFEFEB' : '#F9DFB6';
+            const accent = mode === 'kojori' ? kojoriAccent : tbilisiAccent;
+            const borderColor = alpha(accent, colors.mode === 'dark' ? '55' : '35');
+            const arrowColor = colors.mode === 'dark' ? colors.bg : colors.text;
             return (
               <Pressable
                 key={mode}
@@ -138,24 +139,24 @@ export function StartScreen({ onDone }: { onDone: () => void }) {
                     transform: [{ scale: pressed ? 0.985 : 1 }],
                   },
                 ]}>
-                <View style={[styles.cardArt, { width: artSize, height: artSize, backgroundColor: alpha(accent, '14') }]}>
+                <View style={[styles.cardArt, { width: artSize, height: artSize, backgroundColor: alpha(accent, artworkBgOpacity) }]}>
                   {mode === 'kojori' ? (
                     <KojoriIllustration
                       width={artSize}
                       height={artSize}
                       accent={accent}
-                      bg="#ECFBF9"
-                      outline="#417E8A"
-                      dim="#77A6AE"
+                      bg={colors.surfaceHigh}
+                      outline={artworkOutline}
+                      dim={artworkDim}
                     />
                   ) : (
                     <TbilisiIllustration
                       width={artSize}
                       height={artSize}
                       accent={accent}
-                      bg="#FFF6E7"
-                      outline="#7D8A91"
-                      dim="#D7AA60"
+                      bg={colors.surfaceHigh}
+                      outline={artworkOutline}
+                      dim={artworkDim}
                     />
                   )}
                 </View>
@@ -174,7 +175,7 @@ export function StartScreen({ onDone }: { onDone: () => void }) {
                   ) : null}
                 </View>
                 <View style={[styles.arrowButton, { backgroundColor: accent }]}>
-                  <MaterialCommunityIcons name="arrow-right" size={29} color="#FFFFFF" />
+                  <MaterialCommunityIcons name="arrow-right" size={29} color={arrowColor} />
                 </View>
               </Pressable>
             );
@@ -194,7 +195,7 @@ export function StartScreen({ onDone }: { onDone: () => void }) {
               <MaterialCommunityIcons
                 name={smartIssue ? 'crosshairs-off' : smartEnabled ? 'crosshairs-gps' : 'crosshairs'}
                 size={28}
-                color={smartIssue ? colors.warning : MUTED}
+                color={smartIssue ? colors.warning : colors.textDim}
               />
               <View style={styles.locationCopy}>
                 <Text style={styles.locationTitle}>
@@ -210,19 +211,19 @@ export function StartScreen({ onDone }: { onDone: () => void }) {
               </View>
             </Pressable>
             {isLocating ? (
-              <ActivityIndicator size="small" color={KOJORI_ACCENT} />
+              <ActivityIndicator size="small" color={kojoriAccent} />
             ) : (
               <SettingsSwitch
                 value={smartEnabled}
                 disabled={isLocating}
-                accentColor={KOJORI_ACCENT}
+                accentColor={kojoriAccent}
                 onValueChange={handleLocationToggle}
               />
             )}
           </View>
         </View>
         <View style={styles.privacyRow}>
-          <MaterialCommunityIcons name="lock" size={13} color="#8194A1" />
+          <MaterialCommunityIcons name="lock" size={13} color={colors.textFaint} />
           <Text style={styles.privacyText}>{t('locationPrivacyNote')}</Text>
         </View>
       </View>
@@ -230,24 +231,24 @@ export function StartScreen({ onDone }: { onDone: () => void }) {
   );
 }
 
-function ScenicBackdrop({ width, accent }: { width: number; accent: string }) {
+function ScenicBackdrop({ width, accent, colors }: { width: number; accent: string; colors: AppColors }) {
   const sceneWidth = Math.max(320, width * 0.92);
   return (
-    <View pointerEvents="none" style={stylesStatic.backdrop}>
+    <View pointerEvents="none" style={[stylesStatic.backdrop, { opacity: colors.mode === 'dark' ? 0.72 : 1 }]}>
       <Svg width={sceneWidth} height={260} viewBox="0 0 360 230" preserveAspectRatio="xMidYMid slice">
         <Defs>
           <LinearGradient id="start-mist" x1="0" y1="0" x2="0" y2="1">
-            <Stop offset="0" stopColor="#FFFFFF" stopOpacity="0" />
-            <Stop offset="1" stopColor="#FFFFFF" stopOpacity="0.72" />
+            <Stop offset="0" stopColor={colors.bg} stopOpacity="0" />
+            <Stop offset="1" stopColor={colors.bg} stopOpacity={colors.mode === 'dark' ? '0.86' : '0.72'} />
           </LinearGradient>
           <LinearGradient id="start-ridge" x1="0" y1="0" x2="0" y2="1">
-            <Stop offset="0" stopColor={accent} stopOpacity="0.26" />
-            <Stop offset="1" stopColor={accent} stopOpacity="0.08" />
+            <Stop offset="0" stopColor={accent} stopOpacity={colors.mode === 'dark' ? '0.22' : '0.26'} />
+            <Stop offset="1" stopColor={accent} stopOpacity={colors.mode === 'dark' ? '0.06' : '0.08'} />
           </LinearGradient>
         </Defs>
 
-        <Circle cx="286" cy="78" r="15" fill="#EADFC6" opacity="0.5" />
-        <Circle cx="286" cy="78" r="26" fill="#F4EBD9" opacity="0.28" />
+        <Circle cx="286" cy="78" r="15" fill={colors.warning} opacity={colors.mode === 'dark' ? '0.34' : '0.5'} />
+        <Circle cx="286" cy="78" r="26" fill={colors.sand} opacity={colors.mode === 'dark' ? '0.16' : '0.28'} />
         <Path d="M 10 152 L 52 116 L 80 144 L 122 106 L 154 136 L 194 86 L 226 120 L 262 82 L 288 102 L 322 58 L 342 72 L 368 44 L 368 230 L 10 230 Z" fill={accent} opacity="0.12" />
         <Path d="M -16 178 L 38 132 L 72 162 L 130 108 L 166 142 L 214 112 L 258 152 L 312 120 L 380 142 L 380 230 L -16 230 Z" fill="url(#start-ridge)" />
         <Path d="M 78 198 Q 142 134 218 142 Q 278 148 370 134 L 370 230 L 78 230 Z" fill={accent} opacity="0.2" />
@@ -259,13 +260,13 @@ function ScenicBackdrop({ width, accent }: { width: number; accent: string }) {
           <Rect x="200" y="62" width="5" height="11" fill={accent} />
           <Rect x="207" y="114" width="22" height="18" fill={accent} />
           <Rect x="235" y="120" width="14" height="12" fill={accent} />
-          <Path d="M 214 132 L 214 112 Q 224 101 234 112 L 234 132 Z" fill="#FFFFFF" opacity="0.38" />
+          <Path d="M 214 132 L 214 112 Q 224 101 234 112 L 234 132 Z" fill={colors.surface} opacity="0.38" />
           <Path d="M 250 132 L 250 102 L 260 94 L 270 102 L 270 132 Z" fill={accent} />
           <Rect x="195" y="52" width="2" height="10" fill={accent} />
           <Polygon points="197,52 207,55 197,58" fill={accent} />
         </G>
 
-        <G opacity="0.32" fill="#568B96">
+        <G opacity={colors.mode === 'dark' ? '0.22' : '0.32'} fill={colors.map}>
           <Polygon points="86,196 98,154 110,196" />
           <Polygon points="118,190 128,166 138,190" />
           <Polygon points="145,188 154,166 163,188" />
@@ -278,7 +279,7 @@ function ScenicBackdrop({ width, accent }: { width: number; accent: string }) {
 
 function createStyles(C: AppColors) {
   return StyleSheet.create({
-    root: { flex: 1, backgroundColor: C.mode === 'light' ? C.bg : CANVAS },
+    root: { flex: 1, backgroundColor: C.bg },
     scroll: { paddingHorizontal: 20, gap: 14 },
     topBar: {
       minHeight: 54,
@@ -293,10 +294,10 @@ function createStyles(C: AppColors) {
       alignItems: 'center',
       gap: 10,
     },
-    eyebrow: { color: '#6C7E8E', fontSize: 12, fontWeight: '900', letterSpacing: 5 },
+    eyebrow: { color: C.textFaint, fontSize: 12, fontWeight: '900', letterSpacing: 5 },
     header: { gap: 8, marginTop: 10, marginBottom: 16, maxWidth: 330 },
-    title: { color: INK, fontSize: 42, fontWeight: '700', lineHeight: 47 },
-    subtitle: { color: MUTED, fontSize: 18, lineHeight: 24 },
+    title: { color: C.text, fontSize: 42, fontWeight: '700', lineHeight: 47 },
+    subtitle: { color: C.textDim, fontSize: 18, lineHeight: 24 },
     cards: { gap: 14 },
     card: {
       minHeight: 128,
@@ -306,9 +307,9 @@ function createStyles(C: AppColors) {
       padding: 15,
       borderWidth: 1,
       borderRadius: 22,
-      backgroundColor: '#FFFFFF',
-      shadowColor: '#97B3C0',
-      shadowOpacity: 0.18,
+      backgroundColor: C.surface,
+      shadowColor: C.mode === 'dark' ? '#000000' : C.borderStrong,
+      shadowOpacity: C.mode === 'dark' ? 0.28 : 0.18,
       shadowRadius: 22,
       shadowOffset: { width: 0, height: 10 },
       elevation: 3,
@@ -325,8 +326,8 @@ function createStyles(C: AppColors) {
       gap: 2,
     },
     cardTo: { fontSize: 22, fontWeight: '400', fontStyle: 'italic', lineHeight: 25 },
-    cardLabel: { color: INK, fontSize: 32, fontWeight: '700', lineHeight: 37 },
-    cardSub: { color: MUTED, fontSize: 15, lineHeight: 20 },
+    cardLabel: { color: C.text, fontSize: 32, fontWeight: '700', lineHeight: 37 },
+    cardSub: { color: C.textDim, fontSize: 15, lineHeight: 20 },
     elevationRow: { flexDirection: 'row', alignItems: 'center', gap: 7, marginTop: 5 },
     mountainIcon: { width: 28, height: 15, position: 'relative' },
     mountainPeak: {
@@ -339,18 +340,18 @@ function createStyles(C: AppColors) {
       borderBottomWidth: 15,
       borderLeftColor: 'transparent',
       borderRightColor: 'transparent',
-      borderBottomColor: alpha(KOJORI_ACCENT, '55'),
+      borderBottomColor: alpha(C.route380, C.mode === 'dark' ? '66' : '55'),
     },
     mountainPeakLeft: { left: 0 },
-    mountainPeakRight: { left: 11, borderBottomColor: alpha(KOJORI_ACCENT, '85') },
-    elevationText: { color: MUTED, fontSize: 14, lineHeight: 18 },
+    mountainPeakRight: { left: 11, borderBottomColor: alpha(C.route380, C.mode === 'dark' ? '99' : '85') },
+    elevationText: { color: C.textDim, fontSize: 14, lineHeight: 18 },
     arrowButton: {
       width: 54,
       height: 54,
       borderRadius: 27,
       alignItems: 'center',
       justifyContent: 'center',
-      shadowColor: '#2E8F89',
+      shadowColor: C.mode === 'dark' ? '#000000' : C.route380,
       shadowOpacity: 0.22,
       shadowRadius: 14,
       shadowOffset: { width: 0, height: 8 },
@@ -365,10 +366,10 @@ function createStyles(C: AppColors) {
     locationDock: {
       borderRadius: 20,
       borderWidth: 1,
-      borderColor: '#DCE9EF',
-      backgroundColor: '#FFFFFF',
-      shadowColor: '#9DB7C4',
-      shadowOpacity: 0.14,
+      borderColor: C.border,
+      backgroundColor: C.surface,
+      shadowColor: C.mode === 'dark' ? '#000000' : C.borderStrong,
+      shadowOpacity: C.mode === 'dark' ? 0.24 : 0.14,
       shadowRadius: 18,
       shadowOffset: { width: 0, height: 8 },
       elevation: 2,
@@ -390,10 +391,10 @@ function createStyles(C: AppColors) {
       paddingTop: 13,
       paddingBottom: 8,
     },
-    locationTapTargetPressed: { backgroundColor: '#F9FDFF' },
+    locationTapTargetPressed: { backgroundColor: C.surfaceHigh },
     locationCopy: { flex: 1, minWidth: 0, gap: 2 },
-    locationTitle: { color: INK, fontSize: 15, lineHeight: 19, fontWeight: '800' },
-    locationSubtitle: { color: MUTED, fontSize: 13, lineHeight: 18 },
+    locationTitle: { color: C.text, fontSize: 15, lineHeight: 19, fontWeight: '800' },
+    locationSubtitle: { color: C.textDim, fontSize: 13, lineHeight: 18 },
     privacyRow: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -401,7 +402,7 @@ function createStyles(C: AppColors) {
       gap: 7,
       paddingHorizontal: 12,
     },
-    privacyText: { color: '#718797', fontSize: 12, lineHeight: 16, textAlign: 'center' },
+    privacyText: { color: C.textFaint, fontSize: 12, lineHeight: 16, textAlign: 'center' },
   });
 }
 

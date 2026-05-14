@@ -11,6 +11,10 @@
 - Destination picker now stays focused on manual direction choices without the extra location action
 - Direction and stop-selection bottom sheets now use native Android swipe-down dismissal
 
+### Fixed
+
+- Start screen now follows the selected light or dark theme instead of always using a light background
+
 ### Infra
 
 - Changelog entries now collect under `[UNRELEASED]`; the release script renames that section to the release version automatically
