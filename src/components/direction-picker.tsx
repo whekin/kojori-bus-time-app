@@ -98,8 +98,14 @@ function DirectionPickerSheetInner({
   const activeMode = directionToMode(settings.sharedDirection);
 
   function handlePickMode(mode: Mode) {
-    setSharedDirection(modeToDirection(mode));
+    const nextDirection = modeToDirection(mode);
     onClose();
+
+    if (nextDirection === settings.sharedDirection) return;
+
+    requestAnimationFrame(() => {
+      setSharedDirection(nextDirection);
+    });
   }
 
   return (
