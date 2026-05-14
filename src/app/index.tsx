@@ -1022,9 +1022,12 @@ export default function HomeScreen({ isActive = false }: { isActive?: boolean })
 
       <View style={styles.contentTopSpacer} />
 
-      {mode === 'kojori' ? (
+      <View style={styles.directionPaneStack}>
+        <View
+          pointerEvents={mode === 'kojori' ? 'auto' : 'none'}
+          style={[styles.directionPane, mode !== 'kojori' && styles.directionPaneHidden]}>
           <ToKojoriView
-            isActive={isActive}
+            isActive={isActive && mode === 'kojori'}
             favoriteIds={settings.tbilisiFavorites}
             activeStopId={settings.activeTbilisiStopId}
             onSelectStop={id => update({ activeTbilisiStopId: id })}
@@ -1035,9 +1038,12 @@ export default function HomeScreen({ isActive = false }: { isActive?: boolean })
             now={now}
             demoEnabled={settings.cancelledBusDemo}
           />
-        ) : (
+        </View>
+        <View
+          pointerEvents={mode === 'tbilisi' ? 'auto' : 'none'}
+          style={[styles.directionPane, mode !== 'tbilisi' && styles.directionPaneHidden]}>
           <ToTbilisiView
-            isActive={isActive}
+            isActive={isActive && mode === 'tbilisi'}
             favoriteIds={settings.kojoriFavorites}
             activeStopId={settings.activeKojoriStopId}
             onSelectStop={id => update({ activeKojoriStopId: id })}
@@ -1048,7 +1054,8 @@ export default function HomeScreen({ isActive = false }: { isActive?: boolean })
             now={now}
             demoEnabled={settings.cancelledBusDemo}
           />
-        )}
+        </View>
+      </View>
     </View>
   );
 }
@@ -1162,6 +1169,9 @@ function createStyles(C: AppColors) {
   },
 
   modeContainer: { flex: 1 },
+  directionPaneStack: { flex: 1 },
+  directionPane: { ...StyleSheet.absoluteFillObject },
+  directionPaneHidden: { opacity: 0 },
   pageScroll: { flex: 1 },
   pageScrollContent: { flexGrow: 1 },
   fixedSection: { paddingHorizontal: CONTENT_SIDE, paddingTop: 0 },

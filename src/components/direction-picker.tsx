@@ -99,13 +99,10 @@ function DirectionPickerSheetInner({
 
   function handlePickMode(mode: Mode) {
     const nextDirection = modeToDirection(mode);
-    onClose();
-
-    if (nextDirection === settings.sharedDirection) return;
-
-    setTimeout(() => {
+    if (nextDirection !== settings.sharedDirection) {
       setSharedDirection(nextDirection);
-    }, 0);
+    }
+    onClose();
   }
 
   return (

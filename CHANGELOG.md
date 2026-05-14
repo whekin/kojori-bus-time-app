@@ -9,7 +9,7 @@
 - Start screen now uses a lighter destination-picker layout with landmark cards, direct arrows, and clearer location preference copy
 - Russian app copy now uses friendlier wording across the start screen, live departure labels, and Settings
 - Destination picker now stays focused on manual direction choices without the extra location action
-- Destination changes from the in-app picker now close the sheet before immediately rerendering the active route
+- Departures now keeps both destination panes mounted, so switching sides no longer waits for the route screen to rebuild
 - Direction and stop-selection bottom sheets now use native Android swipe-down dismissal
 
 ### Fixed

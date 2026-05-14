@@ -51,10 +51,8 @@ export function StartScreen({ onDone }: { onDone: () => void }) {
   function handlePick(mode: Mode) {
     if (pickedRef.current) return;
     pickedRef.current = true;
+    setSharedDirection(modeToDirection(mode));
     onDone();
-    requestAnimationFrame(() => {
-      setSharedDirection(modeToDirection(mode));
-    });
   }
 
   async function handleEnableSmart() {
