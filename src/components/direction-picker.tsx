@@ -101,7 +101,9 @@ function DirectionPickerSheetInner({
 
     if (nextDirection === activeDirection) return;
 
-    selectDirection(nextDirection, { persist: 'deferred' });
+    setTimeout(() => {
+      selectDirection(nextDirection, { persist: 'deferred' });
+    }, 0);
   }
 
   return (
