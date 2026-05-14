@@ -5,6 +5,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
+    BackHandler,
     Linking,
     Modal,
     Platform,
@@ -122,6 +123,7 @@ type NoticeModalState = {
   title: string;
   message: string;
 };
+type SettingsSection = 'commute' | 'appearance' | 'widget' | 'data' | 'about';
 
 async function readBundledTextAsset(moduleId: number) {
   const asset = Asset.fromModule(moduleId);
@@ -990,6 +992,7 @@ export default function SettingsScreen() {
   const [modal, setModal] = useState<'kojori' | 'tbilisi' | 'widget-kojori' | 'widget-tbilisi' | null>(null);
   const [showPermissionModal, setShowPermissionModal] = useState(false);
   const [noticeModal, setNoticeModal] = useState<NoticeModalState | null>(null);
+  const [activeSection, setActiveSection] = useState<SettingsSection | null>(null);
   const [easterEggTaps, setEasterEggTaps] = useState(0);
   const [refreshingDataset, setRefreshingDataset] = useState<TtcOfflineDataset | 'weekly' | null>(null);
   const easterEggTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1009,6 +1012,17 @@ export default function SettingsScreen() {
     const intervalId = setInterval(() => setQueryMetricsNow(Date.now()), 30_000);
     return () => clearInterval(intervalId);
   }, []);
+
+  useEffect(() => {
+    if (!activeSection) return;
+
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      setActiveSection(null);
+      return true;
+    });
+
+    return () => subscription.remove();
+  }, [activeSection]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1205,17 +1219,152 @@ export default function SettingsScreen() {
     { value: 'remember' as const, label: t('settingsRestoreDirection'), caption: t('settingsRestoreNote') },
   ];
   const activeLanguageLabel = languageOptions.find(option => option.value === resolvedLanguage)?.label ?? t('commonEnglish');
+  const activePaletteLabel = t(PALETTE_TRANSLATION_KEYS[settings.paletteId].name);
+  const activeThemeLabel = settings.themeMode === 'system'
+    ? t('settingsThemeSystemShort')
+    : settings.themeMode === 'light'
+      ? t('settingsThemeLightShort')
+      : t('settingsThemeDarkShort');
+  const totalFavoriteStops = settings.kojoriFavorites.length + settings.tbilisiFavorites.length;
+  const savedDatasetLabel = t('settingsSavedDatasetCount', {
+    available: offlineStatus.availableDatasets,
+    total: offlineStatus.totalDatasets,
+  });
+  const sectionTitles: Record<SettingsSection, string> = {
+    commute: t('settingsSectionCommute'),
+    appearance: t('settingsSectionAppearance'),
+    widget: t('settingsSectionWidget'),
+    data: t('settingsSectionData'),
+    about: t('settingsSectionAbout'),
+  };
+  const headerTitle = activeSection ? sectionTitles[activeSection] : t('settingsTitle');
+  const widgetKojoriStopLabel = stopNames[settings.widgetTbilisiStopId] ?? settings.widgetTbilisiStopId;
+  const widgetTbilisiStopLabel = stopNames[settings.widgetKojoriStopId] ?? settings.widgetKojoriStopId;
+
+  function renderSectionCard({
+    section,
+    title,
+    note,
+    summary,
+    accentColor,
+  }: {
+    section: SettingsSection;
+    title: string;
+    note: string;
+    summary: string;
+    accentColor: string;
+  }) {
+    return (
+      <Pressable
+        onPress={() => setActiveSection(section)}
+        style={({ pressed }) => [
+          styles.sectionCard,
+          pressed && { backgroundColor: colors.panel },
+        ]}>
+        <View style={[styles.sectionCardRail, { backgroundColor: accentColor }]} />
+        <View style={styles.sectionCardCopy}>
+          <Text style={styles.sectionCardTitle}>{title}</Text>
+          <Text style={styles.sectionCardNote}>{note}</Text>
+          <Text style={[styles.sectionCardSummary, { color: accentColor }]} numberOfLines={1}>
+            {summary}
+          </Text>
+        </View>
+        <Text style={styles.sectionCardArrow}>→</Text>
+      </Pressable>
+    );
+  }
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>{t('settingsTitle')}</Text>
+        {activeSection ? (
+          <Pressable
+            onPress={() => setActiveSection(null)}
+            style={({ pressed }) => [styles.headerBackButton, pressed && { backgroundColor: colors.panel }]}>
+            <Text style={styles.headerBackText}>←</Text>
+          </Pressable>
+        ) : null}
+        <Text style={styles.headerTitle}>{headerTitle}</Text>
+        {activeSection ? <View style={styles.headerSpacer} /> : null}
       </View>
 
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + BottomTabInset + 32 }]}
         showsVerticalScrollIndicator={false}>
+        {activeSection === null ? (
+          <>
+            <View style={styles.summaryStrip}>
+              <View style={styles.summaryItem}>
+                <Text style={styles.summaryLabel}>{t('settingsSectionAppearance')}</Text>
+                <Text style={styles.summaryValue} numberOfLines={1}>{activePaletteLabel}</Text>
+              </View>
+              <View style={styles.summaryDivider} />
+              <View style={styles.summaryItem}>
+                <Text style={styles.summaryLabel}>{t('settingsSectionCommute')}</Text>
+                <Text style={styles.summaryValue} numberOfLines={1}>{launchBehaviorStatus.title}</Text>
+              </View>
+              <View style={styles.summaryDivider} />
+              <View style={styles.summaryItem}>
+                <Text style={styles.summaryLabel}>{t('settingsSectionData')}</Text>
+                <Text style={styles.summaryValue} numberOfLines={1}>{formatOfflineStatus(offlineStatus, t)}</Text>
+              </View>
+            </View>
+            <View style={styles.sectionCardStack}>
+              {renderSectionCard({
+                section: 'commute',
+                title: t('settingsSectionCommute'),
+                note: t('settingsSectionCommuteNote'),
+                summary: t('settingsSectionCommuteSummary', {
+                  launch: launchBehaviorStatus.title,
+                  count: totalFavoriteStops,
+                }),
+                accentColor: colors.route380,
+              })}
+              {renderSectionCard({
+                section: 'appearance',
+                title: t('settingsSectionAppearance'),
+                note: t('settingsSectionAppearanceNote'),
+                summary: t('settingsSectionAppearanceSummary', {
+                  palette: activePaletteLabel,
+                  mode: activeThemeLabel,
+                  language: activeLanguageLabel,
+                }),
+                accentColor: colors.primary,
+              })}
+              {Platform.OS === 'android' ? renderSectionCard({
+                section: 'widget',
+                title: t('settingsSectionWidget'),
+                note: t('settingsSectionWidgetNote'),
+                summary: t('settingsSectionWidgetSummary', {
+                  kojori: widgetKojoriStopLabel,
+                  tbilisi: widgetTbilisiStopLabel,
+                }),
+                accentColor: colors.route316,
+              }) : null}
+              {renderSectionCard({
+                section: 'data',
+                title: t('settingsSectionData'),
+                note: t('settingsSectionDataNote'),
+                summary: t('settingsSectionDataSummary', {
+                  status: formatOfflineStatus(offlineStatus, t),
+                  datasets: savedDatasetLabel,
+                }),
+                accentColor: colors.warning,
+              })}
+              {renderSectionCard({
+                section: 'about',
+                title: t('settingsSectionAbout'),
+                note: t('settingsSectionAboutNote'),
+                summary: t('settingsSectionAboutSummary', { version: APP_VERSION }),
+                accentColor: colors.textDim,
+              })}
+            </View>
+          </>
+        ) : null}
+
+        {activeSection === 'appearance' ? (
+          <>
         <View style={styles.paletteHero}>
           <Text style={styles.paletteEyebrow}>{t('settingsLookFeel')}</Text>
           <Text style={styles.paletteHeadline}>{t('settingsPaletteHeadline')}</Text>
@@ -1365,7 +1514,11 @@ export default function SettingsScreen() {
             <Text style={styles.launchBehaviorFooterTitle}>{t('settingsActiveLanguage', { language: activeLanguageLabel })}</Text>
           </View>
         </View>
+          </>
+        ) : null}
 
+        {activeSection === 'commute' ? (
+          <>
         <View style={styles.sectionMeta}>
           <Text style={styles.sectionHeader}>{t('settingsOnLaunch')}</Text>
           <Text style={styles.sectionNote}>{t('settingsOnLaunchNote')}</Text>
@@ -1455,8 +1608,10 @@ export default function SettingsScreen() {
           onRemove={toggleTbilisiFavorite}
           onManage={() => setModal('tbilisi')}
         />
+          </>
+        ) : null}
 
-        {Platform.OS === 'android' ? (
+        {activeSection === 'widget' && Platform.OS === 'android' ? (
           <>
             <View style={styles.sectionMeta}>
               <Text style={styles.sectionHeader}>{t('settingsAndroidWidget')}</Text>
@@ -1503,6 +1658,8 @@ export default function SettingsScreen() {
           </>
         ) : null}
 
+        {activeSection === 'data' ? (
+          <>
         <View style={styles.sectionMeta}>
           <Text style={styles.sectionHeader}>{t('settingsDataUpdates')}</Text>
           <Text style={styles.sectionNote}>{t('settingsDataUpdatesNote')}</Text>
@@ -1650,7 +1807,11 @@ export default function SettingsScreen() {
             </View>
           </View>
         ) : null}
+          </>
+        ) : null}
 
+        {activeSection === 'about' ? (
+          <>
         <View style={styles.sectionMeta}>
           <Text style={styles.sectionHeader}>{t('settingsLegal')}</Text>
         </View>
@@ -1683,6 +1844,8 @@ export default function SettingsScreen() {
             </Text>
           </Pressable>
         </View>
+          </>
+        ) : null}
       </ScrollView>
 
       <StopPickerModal
@@ -1802,10 +1965,69 @@ function LegalModal({
 function createStyles(C: AppColors) {
   return StyleSheet.create({
     screen: { flex: 1, backgroundColor: C.bg },
-    header: { paddingHorizontal: 20, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: C.border },
-    headerTitle: { color: C.text, fontSize: 20, fontWeight: '700', letterSpacing: -0.3 },
+    header: {
+      minHeight: 57,
+      paddingHorizontal: 16,
+      paddingVertical: 10,
+      borderBottomWidth: 1,
+      borderBottomColor: C.border,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    headerTitle: { flex: 1, color: C.text, fontSize: 20, fontWeight: '700', letterSpacing: -0.3 },
+    headerBackButton: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    headerBackText: { color: C.text, fontSize: 24, lineHeight: 28, fontWeight: '600' },
+    headerSpacer: { width: 36 },
     scroll: { flex: 1 },
     scrollContent: { paddingHorizontal: 20 },
+
+    summaryStrip: {
+      marginTop: 18,
+      flexDirection: 'row',
+      alignItems: 'stretch',
+      minHeight: 74,
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: C.border,
+      backgroundColor: C.panel,
+      overflow: 'hidden',
+    },
+    summaryItem: { flex: 1, minWidth: 0, paddingHorizontal: 12, paddingVertical: 12, justifyContent: 'space-between', gap: 6 },
+    summaryLabel: { color: C.textFaint, fontSize: 9, fontWeight: '800', letterSpacing: 1.2, textTransform: 'uppercase' },
+    summaryValue: { color: C.text, fontSize: 12, fontWeight: '700', lineHeight: 16 },
+    summaryDivider: { width: 1, backgroundColor: C.border },
+    sectionCardStack: { marginTop: 18, gap: 12 },
+    sectionCard: {
+      minHeight: 94,
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: C.border,
+      backgroundColor: C.surface,
+      flexDirection: 'row',
+      alignItems: 'stretch',
+      overflow: 'hidden',
+    },
+    sectionCardRail: { width: 5 },
+    sectionCardCopy: { flex: 1, minWidth: 0, paddingHorizontal: 15, paddingVertical: 14, gap: 4, justifyContent: 'center' },
+    sectionCardTitle: { color: C.text, fontSize: 17, fontWeight: '800', letterSpacing: -0.2 },
+    sectionCardNote: { color: C.textDim, fontSize: 12, lineHeight: 17 },
+    sectionCardSummary: { fontSize: 11, lineHeight: 15, fontWeight: '800' },
+    sectionCardArrow: {
+      width: 40,
+      color: C.textFaint,
+      fontSize: 21,
+      fontWeight: '500',
+      textAlign: 'center',
+      textAlignVertical: 'center',
+      alignSelf: 'center',
+    },
 
     paletteHero: { marginTop: 22, marginBottom: 16, gap: 6 },
     paletteEyebrow: { color: C.primary, fontSize: 10, fontWeight: '800', letterSpacing: 2.8 },
