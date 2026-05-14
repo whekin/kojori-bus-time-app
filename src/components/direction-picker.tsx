@@ -1,13 +1,12 @@
 import React, { useMemo } from 'react';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
-import { Modal, Pressable, StyleSheet, Text, View, ViewStyle } from 'react-native';
+import { Pressable, StyleSheet, Text, View, ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { NativeBottomSheet } from '@/components/native-bottom-sheet';
 import { alpha, type AppColors } from '@/constants/theme';
-import { LocationActionCard } from '@/components/location-action-card';
 import { useAppColors } from '@/hooks/use-app-colors';
 import { useI18n } from '@/hooks/use-i18n';
-import { useLocation } from '@/hooks/use-location';
 import { useSettings, type SharedDirection } from '@/hooks/use-settings';
 
 type Mode = 'kojori' | 'tbilisi';
@@ -77,11 +76,16 @@ export function DirectionPickerSheet({
   visible: boolean;
   onClose: () => void;
 }) {
-  if (!visible) return null;
-  return <DirectionPickerSheetInner onClose={onClose} />;
+  return <DirectionPickerSheetInner visible={visible} onClose={onClose} />;
 }
 
-function DirectionPickerSheetInner({ onClose }: { onClose: () => void }) {
+function DirectionPickerSheetInner({
+  visible,
+  onClose,
+}: {
+  visible: boolean;
+  onClose: () => void;
+}) {
   const colors = useAppColors();
   const styles = useSheetStyles();
   const insets = useSafeAreaInsets();
@@ -90,13 +94,6 @@ function DirectionPickerSheetInner({ onClose }: { onClose: () => void }) {
     setSharedDirection,
   } = useSettings();
   const { t } = useI18n();
-  const {
-    suggestedMode,
-    permission,
-    isLocating,
-    locationError,
-    requestLocationSelection,
-  } = useLocation(true);
 
   const activeMode = directionToMode(settings.sharedDirection);
 
@@ -105,81 +102,52 @@ function DirectionPickerSheetInner({ onClose }: { onClose: () => void }) {
     onClose();
   }
 
-  async function handleUseLocation() {
-    const result = await requestLocationSelection({ forceFresh: true });
-    if (result.access === 'granted' && result.suggestedMode) {
-      setSharedDirection(modeToDirection(result.suggestedMode), false);
-    }
-  }
-
   return (
-    <Modal visible transparent animationType="fade" onRequestClose={onClose}>
-      <View style={styles.root}>
-        <Pressable style={styles.backdrop} onPress={onClose} />
-        <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 16) }]}>
-          <View style={styles.handle} />
-          <Text style={styles.title}>{t('directionTitle')}</Text>
-          <Text style={styles.subtitle}>
-            {t('directionSubtitle')}
-          </Text>
+    <NativeBottomSheet
+      visible={visible}
+      onClose={onClose}
+      contentStyle={[styles.sheetContent, { paddingBottom: Math.max(insets.bottom, 16) }]}>
+      <Text style={styles.title}>{t('directionTitle')}</Text>
+      <Text style={styles.subtitle}>
+        {t('directionSubtitle')}
+      </Text>
 
-          <View style={styles.options}>
-            {(['kojori', 'tbilisi'] as Mode[]).map(mode => {
-              const isActive = activeMode === mode;
-              const label = mode === 'kojori' ? t('cityKojori') : t('cityTbilisi');
-              const sub = mode === 'kojori' ? t('directionUpMountain') : t('directionDownCity');
-              const accent = mode === 'kojori' ? colors.route380 : colors.route316;
-              return (
-                <Pressable
-                  key={mode}
-                  onPress={() => handlePickMode(mode)}
-                  style={({ pressed }) => [
-                    styles.option,
-                    {
-                      borderColor: isActive ? accent : colors.border,
-                      backgroundColor: isActive
-                        ? alpha(accent, '14')
-                        : pressed
-                          ? colors.surfaceHigh
-                          : colors.surface,
-                    },
-                  ]}>
-                  <View style={[styles.optionDot, { backgroundColor: accent }]} />
-                  <View style={styles.optionCopy}>
-                    <Text style={[styles.optionLabel, { color: isActive ? accent : colors.text }]}>
-                      <Text style={[styles.optionTo, { color: isActive ? alpha(accent, 'AA') : colors.textDim }]}>{t('directionTo')}</Text>{label}
-                    </Text>
-                    <Text style={styles.optionSub}>{sub}</Text>
-                  </View>
-                  {isActive ? (
-                    <MaterialCommunityIcons name="check-circle" size={18} color={accent} />
-                  ) : null}
-                </Pressable>
-              );
-            })}
-          </View>
-
-          <LocationActionCard
-            title={locationError ? t('locationUnavailable') : t('locationUseMine')}
-            subtitle={
-              isLocating
-                ? t('locationDetecting')
-                : locationError
-                  ? t('locationRetryManual')
-                  : suggestedMode
-                    ? t('locationSuggested', { place: suggestedMode === 'kojori' ? t('cityKojori') : t('cityTbilisi') })
-                    : permission === 'granted'
-                      ? t('locationRefresh')
-                      : t('locationAutoPickOnce')
-            }
-            onPress={handleUseLocation}
-            isLocating={isLocating}
-            tone={locationError ? 'error' : permission === 'granted' ? 'active' : 'default'}
-            compact
-          />
-        </View>
+      <View style={styles.options}>
+        {(['kojori', 'tbilisi'] as Mode[]).map(mode => {
+          const isActive = activeMode === mode;
+          const label = mode === 'kojori' ? t('cityKojori') : t('cityTbilisi');
+          const sub = mode === 'kojori' ? t('directionUpMountain') : t('directionDownCity');
+          const accent = mode === 'kojori' ? colors.route380 : colors.route316;
+          return (
+            <Pressable
+              key={mode}
+              onPress={() => handlePickMode(mode)}
+              style={({ pressed }) => [
+                styles.option,
+                {
+                  borderColor: isActive ? accent : colors.border,
+                  backgroundColor: isActive
+                    ? alpha(accent, '14')
+                    : pressed
+                      ? colors.surfaceHigh
+                      : colors.surface,
+                },
+              ]}>
+              <View style={[styles.optionDot, { backgroundColor: accent }]} />
+              <View style={styles.optionCopy}>
+                <Text style={[styles.optionLabel, { color: isActive ? accent : colors.text }]}>
+                  <Text style={[styles.optionTo, { color: isActive ? alpha(accent, 'AA') : colors.textDim }]}>{t('directionTo')}</Text>{label}
+                </Text>
+                <Text style={styles.optionSub}>{sub}</Text>
+              </View>
+              {isActive ? (
+                <MaterialCommunityIcons name="check-circle" size={18} color={accent} />
+              ) : null}
+            </Pressable>
+          );
+        })}
       </View>
-    </Modal>
+    </NativeBottomSheet>
   );
 }
 
@@ -226,26 +194,9 @@ function usePillStyles() {
 
 function createSheetStyles(C: AppColors) {
   return StyleSheet.create({
-    root: { flex: 1, justifyContent: 'flex-end' },
-    backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: `${C.bg}CC` },
-    sheet: {
-      borderTopLeftRadius: 28,
-      borderTopRightRadius: 28,
-      borderWidth: 1,
-      borderBottomWidth: 0,
-      borderColor: C.borderStrong,
-      backgroundColor: C.surface,
-      paddingTop: 10,
+    sheetContent: {
       paddingHorizontal: 20,
       gap: 14,
-    },
-    handle: {
-      alignSelf: 'center',
-      width: 44,
-      height: 4,
-      borderRadius: 999,
-      backgroundColor: C.borderStrong,
-      marginBottom: 6,
     },
     title: { color: C.text, fontSize: 22, fontWeight: '700', letterSpacing: -0.3 },
     subtitle: { color: C.textDim, fontSize: 13, lineHeight: 18, marginTop: -6 },

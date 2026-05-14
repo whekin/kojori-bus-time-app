@@ -1,17 +1,18 @@
 import React, { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  FlatList,
-  Modal,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { NativeBottomSheet } from '@/components/native-bottom-sheet';
 import { alpha, type AppColors } from '@/constants/theme';
 import { useAppColors } from '@/hooks/use-app-colors';
 import { useI18n } from '@/hooks/use-i18n';
@@ -45,6 +46,9 @@ export function StopPickerModal({
   const modalStyles = useMemo(() => createModalStyles(colors), [colors]);
   const { stops: routeStops, isLoading } = useRouteStops(direction);
   const insets = useSafeAreaInsets();
+  const { height } = useWindowDimensions();
+  const sheetMaxHeight = Math.round(height * 0.82);
+  const listHeight = Math.max(220, sheetMaxHeight - 152);
 
   const enriched = useMemo<StopInfo[]>(
     () => routeStops.map(s => ({ id: s.id, label: stopNames[s.id] ?? s.label })),
@@ -64,47 +68,55 @@ export function StopPickerModal({
   }, [enriched, favoriteSet, query]);
 
   return (
-    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
-      <View style={[modalStyles.screen, { paddingTop: insets.top }]}>
-        <View style={modalStyles.header}>
-          <Pressable onPress={onClose} style={modalStyles.backBtn} hitSlop={12}>
-            <Text style={modalStyles.backText}>←</Text>
-          </Pressable>
-          <Text style={modalStyles.headerTitle}>{title}</Text>
-          <View style={modalStyles.backBtn} />
-        </View>
+    <NativeBottomSheet
+      visible={visible}
+      onClose={onClose}
+      fallbackSheetStyle={{ maxHeight: sheetMaxHeight }}
+      contentStyle={[modalStyles.sheetContent, { paddingBottom: Math.max(insets.bottom, 16) }]}>
+      <View style={modalStyles.header}>
+        <Text style={modalStyles.headerTitle}>{title}</Text>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t('stopPickerClose')}
+          onPress={onClose}
+          style={modalStyles.closeButton}
+          hitSlop={10}>
+          <Text style={modalStyles.closeText}>×</Text>
+        </Pressable>
+      </View>
 
-        <View style={modalStyles.searchWrap}>
-          <TextInput
-            style={modalStyles.searchInput}
-            placeholder={t('stopSearch')}
-            placeholderTextColor={colors.textFaint}
-            value={search}
-            onChangeText={setSearch}
-            autoFocus
-            autoCorrect={false}
-            clearButtonMode="while-editing"
-          />
-          {isLoading ? <ActivityIndicator color={colors.textDim} size="small" style={modalStyles.spinner} /> : null}
-        </View>
+      <View style={modalStyles.searchWrap}>
+        <TextInput
+          style={modalStyles.searchInput}
+          placeholder={t('stopSearch')}
+          placeholderTextColor={colors.textFaint}
+          value={search}
+          onChangeText={setSearch}
+          autoFocus
+          autoCorrect={false}
+          clearButtonMode="while-editing"
+        />
+        {isLoading ? <ActivityIndicator color={colors.textDim} size="small" style={modalStyles.spinner} /> : null}
+      </View>
 
-        <FlatList
-          data={filtered}
-          keyExtractor={s => s.id}
-          contentContainerStyle={[modalStyles.listContent, { paddingBottom: insets.bottom + 24 }]}
-          keyboardShouldPersistTaps="handled"
-          ItemSeparatorComponent={() => <View style={modalStyles.separator} />}
-          ListEmptyComponent={
-            <Text style={modalStyles.emptyText}>
-              {isLoading ? t('stopLoading') : t('stopNoneFound')}
-            </Text>
-          }
-          renderItem={({ item }) => {
-            const isFav = favoriteSet.has(item.id);
-            const disabled = isFav && favoriteIds.length === 1;
-            const shortId = item.id.split(':')[1];
+      <ScrollView
+        nestedScrollEnabled
+        style={[modalStyles.list, { height: listHeight }]}
+        contentContainerStyle={modalStyles.listContent}
+        keyboardShouldPersistTaps="handled">
+        {filtered.length === 0 ? (
+          <Text style={modalStyles.emptyText}>
+            {isLoading ? t('stopLoading') : t('stopNoneFound')}
+          </Text>
+        ) : null}
+        {filtered.map((item, index) => {
+          const isFav = favoriteSet.has(item.id);
+          const disabled = isFav && favoriteIds.length === 1;
+          const shortId = item.id.split(':')[1] ?? item.id;
 
-            return (
+          return (
+            <React.Fragment key={item.id}>
+              {index > 0 ? <View style={modalStyles.separator} /> : null}
               <Pressable
                 style={[modalStyles.stopRow, isFav && { backgroundColor: alpha(accentColor, '0C') }, disabled && modalStyles.disabled]}
                 onPress={() => onToggle(item.id)}
@@ -115,44 +127,48 @@ export function StopPickerModal({
                 <Text style={[modalStyles.stopLabel, isFav && { color: colors.text }]} numberOfLines={1}>
                   {item.label}
                 </Text>
-                <Text style={[modalStyles.stopCode, { fontFamily: MONO }]}>{shortId}</Text>
+                <Text style={[modalStyles.stopCode, { fontFamily: MONO }]}>#{shortId}</Text>
               </Pressable>
-            );
-          }}
-        />
-      </View>
-    </Modal>
+            </React.Fragment>
+          );
+        })}
+      </ScrollView>
+    </NativeBottomSheet>
   );
 }
 
 function createModalStyles(C: AppColors) {
   return StyleSheet.create({
-    screen: { flex: 1, backgroundColor: C.bg },
+    sheetContent: { paddingHorizontal: 18, gap: 14 },
     header: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      paddingHorizontal: 16,
-      paddingVertical: 14,
-      borderBottomWidth: 1,
-      borderBottomColor: C.border,
+      gap: 14,
     },
-    backBtn: { width: 40, alignItems: 'flex-start' },
-    backText: { color: C.text, fontSize: 22 },
-    headerTitle: { color: C.text, fontSize: 17, fontWeight: '600' },
+    closeButton: {
+      width: 34,
+      height: 34,
+      borderRadius: 17,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: C.surfaceHigh,
+    },
+    closeText: { color: C.textDim, fontSize: 24, lineHeight: 28 },
+    headerTitle: { flex: 1, color: C.text, fontSize: 20, fontWeight: '700', letterSpacing: -0.3 },
     searchWrap: {
       flexDirection: 'row',
       alignItems: 'center',
-      margin: 16,
       paddingHorizontal: 14,
-      backgroundColor: C.surface,
+      backgroundColor: C.surfaceHigh,
       borderRadius: 12,
       borderWidth: 1,
       borderColor: C.border,
     },
     searchInput: { flex: 1, color: C.text, fontSize: 15, paddingVertical: 12 },
     spinner: { marginLeft: 8 },
-    listContent: { paddingHorizontal: 16 },
+    list: { borderRadius: 14 },
+    listContent: { paddingBottom: 8 },
     separator: { height: 1, backgroundColor: C.border, marginLeft: 48 },
     stopRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, gap: 12 },
     disabled: { opacity: 0.3 },
