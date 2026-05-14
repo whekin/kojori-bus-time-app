@@ -44,7 +44,7 @@ Native module at `modules/kojori-widget/`. Three sizes (2x2, 2x3, 3x3). Schedule
 
 `bun release` — date-based versioning `YYYY.M.D`. Always update CHANGELOG.md with user-facing changes before releasing.
 
-**CHANGELOG.md**: Must have a `## vX.Y.Z` section matching release version. Release script extracts this section for GitHub release notes. Group changes under `### New`, `### Improved`, `### Fixed`, `### Infra`.
+**CHANGELOG.md**: During normal development, add user-facing notes under the top `## [UNRELEASED]` section. Release script extracts that section for GitHub release notes and renames it to `## vX.Y.Z` during release. Group changes under `### New`, `### Improved`, `### Fixed`, `### Infra`.
 
 Keep `CHANGELOG.md` current during normal development too. Before creating a commit, add or update the relevant user-facing notes instead of deferring changelog work until release time.
 

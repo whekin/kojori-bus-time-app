@@ -1,5 +1,15 @@
 # Changelog
 
+## [UNRELEASED]
+
+### Improved
+
+- Android back now behaves more naturally: it returns through visited tabs and reopens the destination picker from Departures instead of immediately closing the app
+
+### Infra
+
+- Changelog entries now collect under `[UNRELEASED]`; the release script renames that section to the release version automatically
+
 ## v2026.5.13
 
 ### Improved

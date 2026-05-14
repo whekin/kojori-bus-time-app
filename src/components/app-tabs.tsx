@@ -1,7 +1,7 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import PagerView from 'react-native-pager-view';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { InteractionManager, Pressable, StyleSheet, View } from 'react-native';
+import { BackHandler, InteractionManager, Pressable, StyleSheet, View } from 'react-native';
 import Animated, {
   interpolateColor,
   useAnimatedStyle,
@@ -115,12 +115,21 @@ function TabButton({
   );
 }
 
-export default function AppTabs({ deferInactiveTabs = false }: { deferInactiveTabs?: boolean }) {
+export default function AppTabs({
+  backEnabled = true,
+  deferInactiveTabs = false,
+  onRequestDirectionPicker,
+}: {
+  backEnabled?: boolean;
+  deferInactiveTabs?: boolean;
+  onRequestDirectionPicker?: () => void;
+}) {
   const C = useAppColors();
   const styles = React.useMemo(() => createStyles(C), [C]);
   const insets = useSafeAreaInsets();
   const pagerRef = useRef<PagerView>(null);
   const [activeIndex, setActiveIndex] = useState(0);
+  const tabHistoryRef = useRef<number[]>([0]);
   const [mountedIndexes, setMountedIndexes] = useState<ReadonlySet<number>>(() => new Set([0]));
   const [navWidth, setNavWidth] = useState(0);
   const pagerProgress = useSharedValue(0);
@@ -159,6 +168,38 @@ export default function AppTabs({ deferInactiveTabs = false }: { deferInactiveTa
     }
   }, [mountTab]);
 
+  useEffect(() => {
+    if (!backEnabled) return;
+
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      const history = tabHistoryRef.current;
+
+      if (history.length > 1) {
+        history.pop();
+        const previousIndex = history[history.length - 1] ?? 0;
+        mountTab(previousIndex);
+        pagerRef.current?.setPage(previousIndex);
+        return true;
+      }
+
+      if (activeIndex !== 0) {
+        mountTab(0);
+        pagerRef.current?.setPage(0);
+        tabHistoryRef.current = [0];
+        return true;
+      }
+
+      if (onRequestDirectionPicker) {
+        onRequestDirectionPicker();
+        return true;
+      }
+
+      return false;
+    });
+
+    return () => subscription.remove();
+  }, [activeIndex, backEnabled, mountTab, onRequestDirectionPicker]);
+
   const pageScrollHandler = usePagerScrollHandler(event => {
     'worklet';
     pagerProgress.value = event.position + event.offset;
@@ -191,6 +232,10 @@ export default function AppTabs({ deferInactiveTabs = false }: { deferInactiveTa
             pagerProgress.value = nextIndex;
             mountTab(nextIndex);
             if (nextIndex === activeIndex) return;
+            tabHistoryRef.current = [
+              ...tabHistoryRef.current.filter(index => index !== nextIndex),
+              nextIndex,
+            ];
             setActiveIndex(nextIndex);
           }}>
           {tabs.map((tab, index) => {

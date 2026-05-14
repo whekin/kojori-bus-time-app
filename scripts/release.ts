@@ -1,7 +1,9 @@
 #!/usr/bin/env bun
 /**
  * Full release pipeline: preflight → stamp version → prebuild → build APK → commit → tag → push → GitHub release.
- * Release notes are pulled from CHANGELOG.md (section matching the version tag).
+ * Release notes are pulled from CHANGELOG.md. During normal development,
+ * add notes under "## [UNRELEASED]"; release renames that heading to the
+ * concrete version tag.
  *
  * Usage:
  *   bun scripts/release.ts
@@ -22,6 +24,7 @@ const changelogPath = resolve(root, 'CHANGELOG.md');
 const apkPath = resolve(root, 'android/app/build/outputs/apk/release/app-release.apk');
 const statePath = resolve(root, '.release-state.json');
 const toolPath = ['/opt/homebrew/bin', '/usr/local/bin', process.env.PATH].filter(Boolean).join(':');
+const unreleasedHeading = '## [UNRELEASED]';
 
 type Phase =
   | 'preflight'
@@ -85,22 +88,51 @@ function isDone(state: ReleaseState, phase: Phase) {
   return state.completed.includes(phase);
 }
 
-function extractChangelog(version: string): string | null {
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function findChangelogSection(heading: string): string | null {
   if (!existsSync(changelogPath)) return null;
 
   const content = readFileSync(changelogPath, 'utf-8');
-  const heading = `## v${version}`;
-  const start = content.indexOf(heading);
-  if (start === -1) return null;
+  const headingMatch = new RegExp(`^${escapeRegExp(heading)}\\s*$`, 'm').exec(content);
+  if (!headingMatch || headingMatch.index === undefined) return null;
 
-  const afterHeading = start + heading.length;
-  const nextSection = content.indexOf('\n## ', afterHeading);
+  const afterHeading = headingMatch.index + headingMatch[0].length;
+  const remaining = content.slice(afterHeading);
+  const nextHeading = /^## /m.exec(remaining);
   const section =
-    nextSection === -1
+    !nextHeading || nextHeading.index === undefined
       ? content.slice(afterHeading)
-      : content.slice(afterHeading, nextSection);
+      : content.slice(afterHeading, afterHeading + nextHeading.index);
 
   return section.trim() || null;
+}
+
+function extractChangelog(version: string): string | null {
+  return findChangelogSection(`## v${version}`);
+}
+
+function extractReleaseNotes(version: string): string | null {
+  return extractChangelog(version) ?? findChangelogSection(unreleasedHeading);
+}
+
+function finalizeChangelog(version: string) {
+  if (!existsSync(changelogPath) || extractChangelog(version)) return;
+
+  const content = readFileSync(changelogPath, 'utf-8');
+  const next = content.replace(
+    new RegExp(`^${escapeRegExp(unreleasedHeading)}\\s*$`, 'm'),
+    `## v${version}`,
+  );
+
+  if (next === content) {
+    console.error(`No "${unreleasedHeading}" section found in CHANGELOG.md.`);
+    process.exit(1);
+  }
+
+  writeFileSync(changelogPath, next);
 }
 
 function getReleaseArtifactsStatus(tag: string) {
@@ -201,10 +233,10 @@ if (!isDone(state, 'preflight')) {
 
 step('2/7  Changelog');
 
-const releaseNotes = extractChangelog(version);
+const releaseNotes = extractReleaseNotes(version);
 if (!releaseNotes) {
-  console.error(`No entry for "## v${version}" found in CHANGELOG.md.`);
-  console.error('Add release notes before running this script.');
+  console.error(`No entry for "## v${version}" or "${unreleasedHeading}" found in CHANGELOG.md.`);
+  console.error(`Add release notes under "${unreleasedHeading}" before running this script.`);
   process.exit(1);
 }
 
@@ -230,7 +262,9 @@ if (!isDone(state, 'stamp')) {
   pkgJson.version = version;
   writeFileSync(pkgJsonPath, JSON.stringify(pkgJson, null, 2) + '\n');
 
-  console.log(`app.json + package.json → ${version}`);
+  finalizeChangelog(version);
+
+  console.log(`app.json + package.json + CHANGELOG.md → ${version}`);
   markDone(state, 'stamp');
 } else {
   console.log('Already completed ✓');
@@ -273,7 +307,7 @@ if (!isDone(state, 'build')) {
 step('6/7  Commit & push');
 
 if (!isDone(state, 'commit_push')) {
-  run('git add app.json package.json');
+  run('git add app.json package.json CHANGELOG.md');
 
   const diff = String(
     run('git diff --cached --quiet || echo changed', { stdio: 'pipe' }) ?? ''

@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useGlobalSearchParams } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import React, { useEffect, useRef, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { BackHandler, StyleSheet, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { AnimatedSplashOverlay, AppReveal } from '@/components/animated-icon';
@@ -53,6 +53,7 @@ const SMART_DIRECTION_GRACE_MS = 1800;
 function AppReady() {
   const { isLoaded, settings, setSharedDirection, update } = useSettings();
   const [dismissedStart, setDismissedStart] = useState(false);
+  const [forcedStartOpen, setForcedStartOpen] = useState(false);
   const [waitingForSmart, setWaitingForSmart] = useState(false);
   const graceInitialized = useRef(false);
   const { widgetMode } = useGlobalSearchParams<{ widgetMode?: string }>();
@@ -100,22 +101,47 @@ function AppReady() {
     }
   }, [isLoaded, waitingForSmart]);
 
+  const showStart =
+    forcedStartOpen ||
+    (!dismissedStart && settings.launchBehavior !== 'remember' && !launchedFromWidget);
+
+  useEffect(() => {
+    if (!isLoaded || !showStart || !forcedStartOpen || waitingForSmart) return;
+
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      setForcedStartOpen(false);
+      setDismissedStart(true);
+      return true;
+    });
+
+    return () => subscription.remove();
+  }, [forcedStartOpen, isLoaded, showStart, waitingForSmart]);
+
   if (!isLoaded) return null;
 
-  const showStart =
-    !dismissedStart && settings.launchBehavior !== 'remember' && !launchedFromWidget;
+  function handleStartDone() {
+    setDismissedStart(true);
+    setForcedStartOpen(false);
+  }
 
   return (
     <>
       <CachePrefiller />
       {!waitingForSmart ? (
         <AppReveal>
-          <AppTabs deferInactiveTabs={showStart} />
+          <AppTabs
+            backEnabled={!showStart}
+            deferInactiveTabs={showStart}
+            onRequestDirectionPicker={() => {
+              setForcedStartOpen(true);
+              setDismissedStart(false);
+            }}
+          />
         </AppReveal>
       ) : null}
       {!waitingForSmart && showStart ? (
         <View style={styles.startOverlay}>
-          <StartScreen onDone={() => setDismissedStart(true)} />
+          <StartScreen onDone={handleStartDone} />
         </View>
       ) : null}
       <AnimatedSplashOverlay />
