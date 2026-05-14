@@ -103,9 +103,9 @@ function DirectionPickerSheetInner({
 
     if (nextDirection === settings.sharedDirection) return;
 
-    requestAnimationFrame(() => {
+    setTimeout(() => {
       setSharedDirection(nextDirection);
-    });
+    }, 0);
   }
 
   return (
