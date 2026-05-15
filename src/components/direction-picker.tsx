@@ -16,6 +16,7 @@ import { alpha, type AppColors } from "@/constants/theme";
 import { useActiveDirection } from "@/hooks/use-active-direction";
 import { useAppColors } from "@/hooks/use-app-colors";
 import { useI18n } from "@/hooks/use-i18n";
+import { useReducedMotion } from "@/hooks/use-reduced-motion";
 import { type SharedDirection } from "@/hooks/use-settings";
 
 type Mode = "kojori" | "tbilisi";
@@ -60,6 +61,7 @@ export function DirectionPill({
   const styles = usePillStyles();
   const { activeDirection, selectDirection } = useActiveDirection();
   const { t, resolvedLanguage } = useI18n();
+  const reduceMotion = useReducedMotion();
   const switchAnim = useRef(new Animated.Value(0)).current;
   const [isSwitching, setIsSwitching] = useState(false);
   const [originWidth, setOriginWidth] = useState(0);
@@ -137,7 +139,7 @@ export function DirectionPill({
     switchAnim.setValue(0);
     Animated.timing(switchAnim, {
       toValue: 1,
-      duration: PILL_SWAP_DURATION_MS,
+      duration: reduceMotion ? 1 : PILL_SWAP_DURATION_MS,
       easing: Easing.inOut(Easing.cubic),
       useNativeDriver: false,
     }).start(({ finished }) => {
@@ -158,6 +160,7 @@ export function DirectionPill({
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={t("directionAccessibility", { origin, destination })}
+      accessibilityState={{ busy: isSwitching }}
       onPress={handlePress}
       disabled={isSwitching}
       style={({ pressed }) => [
@@ -332,6 +335,12 @@ function DirectionPickerSheetInner({
           return (
             <Pressable
               key={mode}
+              accessibilityRole="button"
+              accessibilityLabel={t("directionAccessibility", {
+                origin: mode === "kojori" ? t("cityTbilisi") : t("cityKojori"),
+                destination: label,
+              })}
+              accessibilityState={{ selected: isActive }}
               onPress={() => handlePickMode(mode)}
               style={({ pressed }) => [
                 styles.option,

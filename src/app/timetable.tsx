@@ -330,6 +330,9 @@ export default function TimetableScreen() {
                       : accentColor;
                 return (
                   <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={f === "all" ? t("timetableAllBuses") : t("commonRoute") + ` ${f}`}
+                    accessibilityState={{ selected: isActive }}
                     key={f}
                     style={[
                       styles.filterChip,

@@ -83,6 +83,9 @@ function TtcStatusBannerBase({
   return (
     <View style={[headerInline ? styles.headerWrap : centered ? styles.centerWrap : styles.rowWrap]}>
       <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`${label}. ${expanded ? t('ttcStatusCollapse') : t('ttcStatusExpand')}`}
+        accessibilityState={{ expanded }}
         onPress={() => setExpanded(current => !current)}
         style={[
           styles.badge,
@@ -113,6 +116,8 @@ function TtcStatusBannerBase({
           <View style={styles.detailsFooter}>
             <Text style={styles.freshness}>{freshness}</Text>
             <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t('ttcStatusRefresh')}
               style={[styles.retryButton, { borderColor: alpha(accent, '55') }]}
               onPress={() => {
                 queryClient.refetchQueries({

@@ -13,6 +13,7 @@ import { useActiveDirection } from '@/hooks/use-active-direction';
 import { useAppColors, useResolvedAppThemeMode } from '@/hooks/use-app-colors';
 import { useI18n } from '@/hooks/use-i18n';
 import { useMapFocus } from '@/hooks/use-map-focus';
+import { useReducedMotion } from '@/hooks/use-reduced-motion';
 import { useRoutePolylines } from '@/hooks/use-route-polylines';
 import { useRouteStops } from '@/hooks/use-route-stops';
 import { getDemoVehiclePositions, useVehiclePositions } from '@/hooks/use-vehicle-positions';
@@ -158,6 +159,7 @@ const GOOGLE_DARK_MAP_STYLE = [
 export default function ExploreScreen({ isActive = false }: ExploreScreenProps) {
   const colors = useAppColors();
   const { t } = useI18n();
+  const reduceMotion = useReducedMotion();
   const resolvedThemeMode = useResolvedAppThemeMode();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
@@ -208,7 +210,7 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
   const vehiclePinSpinAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    if (isFetching) {
+    if (isFetching && !reduceMotion) {
       spinAnim.setValue(0);
       Animated.loop(
         Animated.timing(spinAnim, {
@@ -220,10 +222,11 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
       ).start();
     } else {
       spinAnim.stopAnimation();
+      spinAnim.setValue(0);
     }
-  }, [isFetching, spinAnim]);
+  }, [isFetching, reduceMotion, spinAnim]);
 
-  const shouldAnimateVehiclePins = typeof __DEV__ === 'boolean' && __DEV__ && isActive;
+  const shouldAnimateVehiclePins = typeof __DEV__ === 'boolean' && __DEV__ && isActive && !reduceMotion;
 
   useEffect(() => {
     if (!shouldAnimateVehiclePins) {
@@ -745,6 +748,10 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
             return (
               <Pressable 
                 key={bus} 
+                accessibilityRole="button"
+                accessibilityLabel={t('mapRouteVehiclesCount', { bus, count })}
+                accessibilityHint={hasActiveBuses ? t('mapCenterRouteVehicles', { bus }) : undefined}
+                accessibilityState={{ disabled: !hasActiveBuses }}
                 style={[styles.legendChip, hasActiveBuses && styles.legendChipClickable]}
                 onPress={() => hasActiveBuses && handleCenterOnBus(bus)}
                 disabled={!hasActiveBuses}>
@@ -755,7 +762,13 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
             );
           })}
           <TtcStatusChip />
-          <Pressable style={styles.refreshChip} onPress={() => refetch()} disabled={isFetching}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={isFetching ? t('mapRefreshingLive') : t('mapRefreshLive')}
+            accessibilityState={{ busy: isFetching, disabled: isFetching }}
+            style={styles.refreshChip}
+            onPress={() => refetch()}
+            disabled={isFetching}>
             <Animated.View style={{ transform: [{ rotate: spinRotation }] }}>
               <MaterialCommunityIcons name="refresh" size={14} color={isFetching ? colors.primary : colors.textDim} />
             </Animated.View>
@@ -765,6 +778,9 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
 
       {/* Locate me — bottom right */}
       <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={isLocating ? t('mapLocatingMe') : t('mapLocateMe')}
+        accessibilityState={{ busy: isLocating, disabled: isLocating }}
         style={[
           styles.locateButton,
           {

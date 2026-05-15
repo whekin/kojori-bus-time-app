@@ -46,6 +46,7 @@ import {
 import { useAppColors, useResolvedAppThemeMode } from '@/hooks/use-app-colors';
 import { useI18n, type TranslationKey } from '@/hooks/use-i18n';
 import { useLocation } from '@/hooks/use-location';
+import { useReducedMotion } from '@/hooks/use-reduced-motion';
 import { useRouteStops } from '@/hooks/use-route-stops';
 import { useSettings, type LaunchBehavior } from '@/hooks/use-settings';
 import { useStopNames } from '@/hooks/use-stop-names';
@@ -544,6 +545,9 @@ function DataRefreshCard({
         </View>
         <Pressable
           accessibilityRole="button"
+          accessibilityLabel={refreshAllCoolingDown ? t('settingsRefreshAllFresh') : t('settingsRefreshAll')}
+          accessibilityHint={progressDetail}
+          accessibilityState={{ disabled: refreshAllDisabled, busy: refreshBusy }}
           disabled={refreshAllDisabled}
           onPress={onRefreshAll}
           style={({ pressed }) => [
@@ -613,6 +617,9 @@ function DataRefreshCard({
           <React.Fragment key={dataset.value}>
             {index > 0 ? <View style={styles.itemDivider} /> : null}
             <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`${t(dataset.labelKey)}. ${resolvedStatusLabel}. ${freshnessLabel}`}
+              accessibilityState={{ disabled: rowDisabled, busy: active }}
               disabled={rowDisabled}
               onPress={() => onRefreshDataset(dataset.value)}
               style={({ pressed }) => [
@@ -823,6 +830,7 @@ function PaletteCard({
 }) {
   const { styles } = useStyles();
   const { t } = useI18n();
+  const reduceMotion = useReducedMotion();
   const darkPalette = getAppColors(paletteId, 'dark');
   const lightPalette = getAppColors(paletteId, 'light');
   const copyKeys = PALETTE_TRANSLATION_KEYS[paletteId];
@@ -834,12 +842,12 @@ function PaletteCard({
   const modeProgress = useSharedValue(resolvedMode === 'light' ? 1 : 0);
 
   useEffect(() => {
-    selectedProgress.value = withTiming(selected ? 1 : 0, { duration: 220 });
-  }, [selected, selectedProgress]);
+    selectedProgress.value = withTiming(selected ? 1 : 0, { duration: reduceMotion ? 1 : 220 });
+  }, [reduceMotion, selected, selectedProgress]);
 
   useEffect(() => {
-    modeProgress.value = withTiming(resolvedMode === 'light' ? 1 : 0, { duration: 260 });
-  }, [modeProgress, resolvedMode]);
+    modeProgress.value = withTiming(resolvedMode === 'light' ? 1 : 0, { duration: reduceMotion ? 1 : 260 });
+  }, [modeProgress, reduceMotion, resolvedMode]);
 
   const animatedCardStyle = useAnimatedStyle(() => ({
     transform: [
@@ -919,7 +927,11 @@ function PaletteCard({
   }));
 
   return (
-    <Pressable onPress={() => onSelect(paletteId)}>
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={t(copyKeys.name)}
+      accessibilityState={{ selected }}
+      onPress={() => onSelect(paletteId)}>
       <Animated.View
         style={[
           styles.paletteCard,
@@ -994,12 +1006,13 @@ function ThemeModeCard({
   onSelect: (value: AppThemeMode) => void;
 }) {
   const { styles } = useStyles();
+  const reduceMotion = useReducedMotion();
   const selectedProgress = useSharedValue(selected ? 1 : 0);
   const selectedBackground = alpha(colors.primary, '14');
 
   useEffect(() => {
-    selectedProgress.value = withTiming(selected ? 1 : 0, { duration: 220 });
-  }, [selected, selectedProgress]);
+    selectedProgress.value = withTiming(selected ? 1 : 0, { duration: reduceMotion ? 1 : 220 });
+  }, [reduceMotion, selected, selectedProgress]);
 
   const animatedStyle = useAnimatedStyle(() => ({
     borderColor: interpolateColor(selectedProgress.value, [0, 1], [colors.border, colors.primary]),
@@ -1016,7 +1029,12 @@ function ThemeModeCard({
   }));
 
   return (
-    <Pressable onPress={() => onSelect(option.value)} style={styles.themeModePressable}>
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`${option.label}. ${option.caption}`}
+      accessibilityState={{ selected }}
+      onPress={() => onSelect(option.value)}
+      style={styles.themeModePressable}>
       <Animated.View style={[styles.themeModeButton, animatedStyle]}>
         <Animated.Text
           style={[styles.themeModeLabel, labelStyle]}
@@ -1338,6 +1356,8 @@ export default function SettingsScreen() {
   }) {
     return (
       <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={t('settingsOpenSectionA11y', { section: title, summary })}
         onPress={() => setActiveSection(section)}
         style={({ pressed }) => [
           styles.sectionCard,
@@ -1361,6 +1381,8 @@ export default function SettingsScreen() {
       <View style={styles.header}>
         {activeSection ? (
           <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t('settingsBackToSections')}
             onPress={() => setActiveSection(null)}
             style={({ pressed }) => [styles.headerBackButton, pressed && { backgroundColor: colors.panel }]}>
             <Text style={styles.headerBackText}>←</Text>
@@ -1555,6 +1577,9 @@ export default function SettingsScreen() {
               <React.Fragment key={option.value}>
                 {index > 0 ? <View style={styles.itemDivider} /> : null}
                 <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`${label}. ${caption}`}
+                  accessibilityState={{ selected }}
                   onPress={() => setLanguage(option.value)}
                   style={({ pressed }) => [
                     styles.launchBehaviorRow,
@@ -1613,6 +1638,9 @@ export default function SettingsScreen() {
               <React.Fragment key={option.value}>
                 {index > 0 ? <View style={styles.itemDivider} /> : null}
                 <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`${option.label}. ${option.caption}`}
+                  accessibilityState={{ selected, busy: option.value === 'smart' && isLocating }}
                   onPress={() => {
                     void handleLaunchBehaviorSelect(option.value);
                   }}

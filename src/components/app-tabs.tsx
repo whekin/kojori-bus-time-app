@@ -97,6 +97,9 @@ function TabButton({
     <Pressable
       style={styles.navButton}
       android_ripple={{ color: 'transparent' }}
+      accessibilityRole="tab"
+      accessibilityLabel={tab.title}
+      accessibilityState={{ selected: index === activeIndex }}
       onPress={() => {
         if (index === activeIndex) return;
         onPress();
