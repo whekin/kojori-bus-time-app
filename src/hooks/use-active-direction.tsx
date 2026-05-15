@@ -1,7 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { InteractionManager } from 'react-native';
 
 import { useSettings, type SharedDirection } from '@/hooks/use-settings';
+import { scheduleIdleTask } from '@/utils/idle-task';
 
 type PersistTiming = 'deferred' | 'immediate';
 
@@ -37,7 +37,7 @@ export function DirectionProvider({ children }: { children: React.ReactNode }) {
 
   const persistDeferred = useCallback(() => {
     deferredHandleRef.current?.cancel();
-    deferredHandleRef.current = InteractionManager.runAfterInteractions(() => {
+    deferredHandleRef.current = scheduleIdleTask(() => {
       const pending = pendingPersistRef.current;
       pendingPersistRef.current = null;
       deferredHandleRef.current = null;

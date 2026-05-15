@@ -1,7 +1,7 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import PagerView from 'react-native-pager-view';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { BackHandler, InteractionManager, Pressable, StyleSheet, View } from 'react-native';
+import { BackHandler, Pressable, StyleSheet, View } from 'react-native';
 import Animated, {
   interpolateColor,
   useAnimatedStyle,
@@ -21,6 +21,7 @@ import { useAppColors } from '@/hooks/use-app-colors';
 import { useI18n } from '@/hooks/use-i18n';
 import { MapFocusProvider } from '@/hooks/use-map-focus';
 import { TabNavProvider, type TabRoute } from '@/hooks/use-tab-nav';
+import { scheduleIdleTask } from '@/utils/idle-task';
 
 
 type TabItem = {
@@ -145,7 +146,7 @@ export default function AppTabs({
   useEffect(() => {
     if (deferInactiveTabs) return;
 
-    const handle = InteractionManager.runAfterInteractions(() => {
+    const handle = scheduleIdleTask(() => {
       setMountedIndexes(ALL_TAB_INDEXES);
     });
 

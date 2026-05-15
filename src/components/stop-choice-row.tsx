@@ -14,7 +14,7 @@ import { alpha, type AppColors } from '@/constants/theme';
 import { useAppColors } from '@/hooks/use-app-colors';
 import { useI18n } from '@/hooks/use-i18n';
 import { useMapFocus } from '@/hooks/use-map-focus';
-import { useTabNav } from '@/hooks/use-tab-nav';
+import { useTabNav, type TabRoute } from '@/hooks/use-tab-nav';
 import type { StopInfo } from '@/services/ttc';
 
 const MONO = Platform.select({ android: 'monospace', ios: 'Menlo', default: 'monospace' });
@@ -31,6 +31,7 @@ export function StopChoiceRow({
   onRemove,
   removeDisabled = false,
   onMapPress,
+  mapReturnRoute,
 }: {
   stop: StopInfo;
   direction: StopDirection;
@@ -43,6 +44,7 @@ export function StopChoiceRow({
   onRemove?: () => void;
   removeDisabled?: boolean;
   onMapPress?: () => void;
+  mapReturnRoute?: TabRoute;
 }) {
   const colors = useAppColors();
   const styles = createStyles(colors);
@@ -54,7 +56,7 @@ export function StopChoiceRow({
 
   function handleMapPress(event: GestureResponderEvent) {
     event.stopPropagation();
-    requestStopFocus(stop, direction);
+    requestStopFocus(stop, direction, { returnRoute: mapReturnRoute });
     navigateToTab?.('explore');
     onMapPress?.();
   }

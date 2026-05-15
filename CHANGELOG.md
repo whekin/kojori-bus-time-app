@@ -4,6 +4,7 @@
 
 ### Improved
 
+- Map now uses code-drawn circular live bus icons with custom popups and TTC-style route stop markers, with saved stops emphasized and focused stops opening a larger callout.
 - Stop pickers now start with curated Kojori and Tbilisi stops, local hints, and in-app map focus buttons.
 - Start screen destination cards now use generated full-card landmark imagery for Kojori's Azeula Fortress and Tbilisi's Liberty Square.
 - Android back now behaves more naturally: it returns through visited tabs and reopens the destination picker from Departures instead of immediately closing the app
@@ -30,6 +31,7 @@
 - Direction pills now adapt their width for localized city names while keeping the swap animation consistent
 - Georgian start-screen destination cards now avoid clipping display text
 - First-install defaults now explicitly start Tbilisi departures at Elene Akhvlediani Street and Kojori departures at Kojori Center
+- Sorbet Static now uses the requested lilac and mint route colors for buses 380 and 316
 
 ### Fixed
 

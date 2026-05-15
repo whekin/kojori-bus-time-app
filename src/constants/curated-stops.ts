@@ -11,7 +11,7 @@ export type StopCuration = {
 
 export const CURATED_STOP_IDS: Record<StopDirection, string[]> = {
   toKojori: ['1:2994', '1:3932', '1:853', '1:857'],
-  toTbilisi: ['1:3078', '1:2856', '1:2139', '1:3782', '1:3537'],
+  toTbilisi: ['1:3078', '1:4186', '1:2856', '1:2139', '1:3782', '1:3537'],
 };
 
 const CURATED_STOP_COPY: Record<StopDirection, Record<string, StopCuration>> = {
@@ -45,7 +45,7 @@ const CURATED_STOP_COPY: Record<StopDirection, Record<string, StopCuration>> = {
       hint: {
         en: 'Gergeti backup start. When Liberty Square is overloaded, buses may begin here.',
         ka: 'გერგეთის სათადარიგო სტარტი. როცა თავისუფლების მოედანი გადატვირთულია, ავტობუსები შეიძლება აქედან დაიწყონ.',
-        ru: 'Запасной старт на Гергети. Когда площадь Свободы перегружена, автобусы могут начать отсюда.',
+        ru: 'Запасной старт на Гергети. Когда площадь Свободы перекрывают из-за митинга, парада или события, автобусы стартуют отсюда.',
       },
     },
   },
@@ -58,12 +58,20 @@ const CURATED_STOP_COPY: Record<StopDirection, Record<string, StopCuration>> = {
         ru: 'Центр Коджори у Никоры, простой ориентир для посадки.',
       },
     },
-    '1:2856': {
+    '1:4186': {
       badge: { en: 'Azeula', ka: 'აზეულა', ru: 'Азеула' },
       hint: {
-        en: 'First Kojori stop and closest one to Azeula.',
-        ka: 'კოჯრის პირველი გაჩერება და აზეულასთან ყველაზე ახლოს.',
-        ru: 'Первая остановка в Коджори и ближайшая к Азеуле.',
+        en: 'First Kojori-side stop and closest one to Azeula.',
+        ka: 'კოჯრის მხრიდან პირველი გაჩერება და აზეულასთან ყველაზე ახლოს.',
+        ru: 'Первая остановка со стороны Коджори и ближайшая к Азеуле.',
+      },
+    },
+    '1:2856': {
+      badge: { en: 'Local', ka: 'ლოკალური', ru: 'Местная' },
+      hint: {
+        en: 'Vazha-Pshavela-side Kojori stop.',
+        ka: 'კოჯრის ვაჟა-ფშაველას მხარის გაჩერება.',
+        ru: 'Остановка Коджори со стороны Важа-Пшавела.',
       },
     },
     '1:2139': {

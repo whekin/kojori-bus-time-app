@@ -296,6 +296,7 @@ export default function TimetableScreen() {
                 activeStopId={stopId}
                 accentColor={accentColor}
                 onSelectStop={handleSelectStop}
+                mapReturnRoute="timetable"
                 locationSuggestion={locationSuggestion}
                 addStopModal={{
                   title:

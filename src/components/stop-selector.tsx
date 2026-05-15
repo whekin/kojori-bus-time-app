@@ -1,5 +1,5 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Platform,
   Pressable,
@@ -20,7 +20,7 @@ import { alpha } from '@/constants/theme';
 import { useAppColors } from '@/hooks/use-app-colors';
 import { useI18n } from '@/hooks/use-i18n';
 import { useMapFocus } from '@/hooks/use-map-focus';
-import { useTabNav } from '@/hooks/use-tab-nav';
+import { useTabNav, type TabRoute } from '@/hooks/use-tab-nav';
 
 const MONO = Platform.select({ android: 'monospace', ios: 'Menlo', default: 'monospace' });
 const DISPLAY = Platform.select({ android: 'serif', ios: 'Georgia', default: 'serif' });
@@ -49,6 +49,7 @@ interface StopSelectorProps {
     onToggle: (id: string) => void;
   };
   label?: string;
+  mapReturnRoute: TabRoute;
 }
 
 function formatIndex(index: number) {
@@ -137,13 +138,14 @@ export function StopSelector({
   onAddStop,
   addStopModal,
   label,
+  mapReturnRoute,
 }: StopSelectorProps) {
   const colors = useAppColors();
   const styles = useStopSelectorStyles();
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
   const { t } = useI18n();
-  const { requestStopFocus } = useMapFocus();
+  const { requestStopFocus, stopSheetReturnRequest } = useMapFocus();
   const navigateToTab = useTabNav();
   const [open, setOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
@@ -154,6 +156,14 @@ export function StopSelector({
   const totalStops = stops.length;
   const sheetMaxHeight = Math.round(height * 0.88);
   const optionsHeight = Math.max(260, sheetMaxHeight - 214 - Math.max(insets.bottom, 16));
+
+  useEffect(() => {
+    if (!stopSheetReturnRequest) return;
+    if (stopSheetReturnRequest.route !== mapReturnRoute) return;
+    if (stopSheetReturnRequest.direction !== (addStopModal?.direction ?? 'toKojori')) return;
+
+    setOpen(true);
+  }, [addStopModal?.direction, mapReturnRoute, stopSheetReturnRequest]);
 
   const optionList = useMemo(
     () =>
@@ -173,17 +183,18 @@ export function StopSelector({
               setOpen(false);
             }}
             onMapPress={() => setOpen(false)}
+            mapReturnRoute={mapReturnRoute}
           />
         );
       }),
-    [accentColor, activeStop?.id, addStopModal?.direction, onSelectStop, stops],
+    [accentColor, activeStop?.id, addStopModal?.direction, mapReturnRoute, onSelectStop, stops],
   );
 
   if (!activeStop) return null;
 
   function handleShowActiveStopOnMap(event?: GestureResponderEvent) {
     event?.stopPropagation();
-    requestStopFocus(activeStop, addStopModal?.direction ?? 'toKojori');
+    requestStopFocus(activeStop, addStopModal?.direction ?? 'toKojori', { returnRoute: mapReturnRoute });
     navigateToTab?.('explore');
   }
 
@@ -276,106 +287,106 @@ export function StopSelector({
             paddingBottom: Math.max(insets.bottom, 16),
           },
         ]}>
-        <View style={styles.sheetHeader}>
-          <View style={styles.sheetCopy}>
-            <Text style={styles.sheetEyebrow}>{resolvedLabel}</Text>
-            <Text style={styles.sheetTitle}>{t('stopSheetTitle')}</Text>
-            <Text style={styles.sheetNote}>
-              {t('stopSheetNote')}
-            </Text>
-          </View>
-
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={t('stopPickerClose')}
-            hitSlop={10}
-            onPress={() => setOpen(false)}
-            style={styles.closeButton}>
-            <Text style={styles.closeGlyph}>×</Text>
-          </Pressable>
-        </View>
-
-        <View
-          style={[
-            styles.currentRow,
-            {
-              borderColor: accentColor + '28',
-              backgroundColor: accentColor + '0d',
-            },
-          ]}>
-          <View style={[styles.currentMarker, { backgroundColor: accentColor }]} />
-          <View style={styles.currentCopy}>
-            <Text style={styles.currentLabel}>{t('stopCurrentLabel')}</Text>
-            <Text style={[styles.currentValue, { fontFamily: DISPLAY }]} numberOfLines={1}>
-              {activeStop.label}
-            </Text>
-            <Text style={[styles.currentCode, { fontFamily: MONO }]}>{stopCode(activeStop.id)}</Text>
-          </View>
-          {totalStops > 1 && (
-            <Text style={[styles.currentCount, { color: accentColor, fontFamily: MONO }]}>
-              {formatCount(activeIndex, totalStops)}
-            </Text>
-          )}
-        </View>
-
-        <ScrollView
-          nestedScrollEnabled
-          style={{ height: optionsHeight }}
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.optionsContent}>
-          {locationSuggestion ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={t('stopUseClosest', { stop: locationSuggestion.stop.label })}
-              onPress={() => {
-                onSelectStop(locationSuggestion.stop.id);
-                setOpen(false);
-              }}
-              style={({ pressed }) => [
-                styles.closestStopCard,
-                {
-                  borderColor: accentColor + '45',
-                  backgroundColor: pressed ? accentColor + '18' : accentColor + '10',
-                },
-              ]}>
-              <View style={styles.closestStopIcon}>
-                <MaterialCommunityIcons name="crosshairs-gps" size={18} color={accentColor} />
-              </View>
-              <View style={styles.closestStopCopy}>
-                <Text style={styles.closestStopEyebrow}>{t('stopClosest')}</Text>
-                <Text style={[styles.closestStopTitle, { fontFamily: DISPLAY }]} numberOfLines={2}>
-                  {locationSuggestion.stop.label}
-                </Text>
-                <Text style={[styles.closestStopDistance, { fontFamily: MONO }]}>
-                  {formatDistance(locationSuggestion.distanceMeters, t)}
+            <View style={styles.sheetHeader}>
+              <View style={styles.sheetCopy}>
+                <Text style={styles.sheetEyebrow}>{resolvedLabel}</Text>
+                <Text style={styles.sheetTitle}>{t('stopSheetTitle')}</Text>
+                <Text style={styles.sheetNote}>
+                  {t('stopSheetNote')}
                 </Text>
               </View>
-              <MaterialCommunityIcons name="chevron-right" size={18} color={accentColor} />
-            </Pressable>
-          ) : null}
-          {optionList}
-          {addStopModal ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={t('stopAddAnother')}
-              onPress={() => {
-                setOpen(false);
-                setAddOpen(true);
-              }}
-              style={({ pressed }) => [
-                styles.addStopBtn,
+
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={t('stopPickerClose')}
+                hitSlop={10}
+                onPress={() => setOpen(false)}
+                style={styles.closeButton}>
+                <Text style={styles.closeGlyph}>×</Text>
+              </Pressable>
+            </View>
+
+            <View
+              style={[
+                styles.currentRow,
                 {
-                  borderColor: accentColor + '55',
-                  backgroundColor: pressed ? accentColor + '18' : accentColor + '0C',
+                  borderColor: accentColor + '28',
+                  backgroundColor: accentColor + '0d',
                 },
               ]}>
-              <Text style={[styles.addStopPlus, { color: accentColor }]}>+</Text>
-              <Text style={[styles.addStopText, { color: accentColor }]}>
-                {t('stopAddAnother')}
-              </Text>
-            </Pressable>
-          ) : null}
-        </ScrollView>
+              <View style={[styles.currentMarker, { backgroundColor: accentColor }]} />
+              <View style={styles.currentCopy}>
+                <Text style={styles.currentLabel}>{t('stopCurrentLabel')}</Text>
+                <Text style={[styles.currentValue, { fontFamily: DISPLAY }]} numberOfLines={1}>
+                  {activeStop.label}
+                </Text>
+                <Text style={[styles.currentCode, { fontFamily: MONO }]}>{stopCode(activeStop.id)}</Text>
+              </View>
+              {totalStops > 1 && (
+                <Text style={[styles.currentCount, { color: accentColor, fontFamily: MONO }]}>
+                  {formatCount(activeIndex, totalStops)}
+                </Text>
+              )}
+            </View>
+
+            <ScrollView
+              nestedScrollEnabled
+              style={{ height: optionsHeight }}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.optionsContent}>
+              {locationSuggestion ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={t('stopUseClosest', { stop: locationSuggestion.stop.label })}
+                  onPress={() => {
+                    onSelectStop(locationSuggestion.stop.id);
+                    setOpen(false);
+                  }}
+                  style={({ pressed }) => [
+                    styles.closestStopCard,
+                    {
+                      borderColor: accentColor + '45',
+                      backgroundColor: pressed ? accentColor + '18' : accentColor + '10',
+                    },
+                  ]}>
+                  <View style={styles.closestStopIcon}>
+                    <MaterialCommunityIcons name="crosshairs-gps" size={18} color={accentColor} />
+                  </View>
+                  <View style={styles.closestStopCopy}>
+                    <Text style={styles.closestStopEyebrow}>{t('stopClosest')}</Text>
+                    <Text style={[styles.closestStopTitle, { fontFamily: DISPLAY }]} numberOfLines={2}>
+                      {locationSuggestion.stop.label}
+                    </Text>
+                    <Text style={[styles.closestStopDistance, { fontFamily: MONO }]}>
+                      {formatDistance(locationSuggestion.distanceMeters, t)}
+                    </Text>
+                  </View>
+                  <MaterialCommunityIcons name="chevron-right" size={18} color={accentColor} />
+                </Pressable>
+              ) : null}
+              {optionList}
+              {addStopModal ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={t('stopAddAnother')}
+                  onPress={() => {
+                    setOpen(false);
+                    setAddOpen(true);
+                  }}
+                  style={({ pressed }) => [
+                    styles.addStopBtn,
+                    {
+                      borderColor: accentColor + '55',
+                      backgroundColor: pressed ? accentColor + '18' : accentColor + '0C',
+                    },
+                  ]}>
+                  <Text style={[styles.addStopPlus, { color: accentColor }]}>+</Text>
+                  <Text style={[styles.addStopText, { color: accentColor }]}>
+                    {t('stopAddAnother')}
+                  </Text>
+                </Pressable>
+              ) : null}
+            </ScrollView>
       </NativeBottomSheet>
 
       {addStopModal ? (
@@ -504,9 +515,84 @@ function createStyles(C: ReturnType<typeof useAppColors>) {
   sheetFrame: {
     maxHeight: '76%',
   },
+  peekSheetFrame: {
+    marginHorizontal: 12,
+    marginBottom: 92,
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
+    borderBottomWidth: 1,
+  },
   sheetContent: {
     paddingHorizontal: 18,
     maxHeight: '76%',
+  },
+  peekSheetContent: {
+    paddingHorizontal: 12,
+  },
+  peekStopTray: {
+    minHeight: 76,
+    borderRadius: 20,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  peekStopMarker: {
+    width: 4,
+    alignSelf: 'stretch',
+    borderRadius: 999,
+  },
+  peekStopCopy: {
+    flex: 1,
+    minWidth: 0,
+    gap: 3,
+  },
+  peekStopEyebrow: {
+    color: C.textFaint,
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 1.6,
+    textTransform: 'uppercase',
+  },
+  peekStopTitle: {
+    color: C.text,
+    fontSize: 16,
+    lineHeight: 20,
+    fontWeight: '700',
+  },
+  peekStopCode: {
+    color: C.textDim,
+    fontSize: 11,
+    lineHeight: 14,
+  },
+  peekStopAction: {
+    height: 34,
+    borderRadius: 17,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    flexShrink: 0,
+  },
+  peekStopActionText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  peekCloseButton: {
+    width: 30,
+    height: 34,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  peekCloseGlyph: {
+    color: C.textDim,
+    fontSize: 22,
+    lineHeight: 22,
+    marginTop: -1,
   },
   sheetHeader: {
     flexDirection: 'row',

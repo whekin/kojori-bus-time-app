@@ -872,6 +872,7 @@ function ToKojoriView({
             activeStopId={activeStopId}
             accentColor={colors.route380}
             onSelectStop={onSelectStop}
+            mapReturnRoute="index"
             locationSuggestion={locationSuggestion}
             addStopModal={{
               title: t("timetableTbilisiStops"),
@@ -1041,6 +1042,7 @@ function ToTbilisiView({
             activeStopId={activeStopId}
             accentColor={colors.route316}
             onSelectStop={onSelectStop}
+            mapReturnRoute="index"
             locationSuggestion={locationSuggestion}
             addStopModal={{
               title: t("timetableKojoriStops"),

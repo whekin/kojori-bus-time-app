@@ -1,20 +1,24 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import * as Location from 'expo-location';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Easing, Image, Pressable, StyleSheet, Text, View } from 'react-native';
-import MapView, { Marker, Polyline, type Region } from 'react-native-maps';
+import { Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-native';
+import MapView, { Callout, Marker, Polyline, type MapMarker, type Region } from 'react-native-maps';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { DirectionPill } from '@/components/direction-picker';
 import { TtcStatusChip } from '@/components/ttc-status-banner';
-import { BottomTabInset } from '@/constants/theme';
+import { getCuratedStopIds } from '@/constants/curated-stops';
+import { alpha, BottomTabInset } from '@/constants/theme';
 import { useActiveDirection } from '@/hooks/use-active-direction';
 import { useAppColors, useResolvedAppThemeMode } from '@/hooks/use-app-colors';
 import { useI18n } from '@/hooks/use-i18n';
 import { useMapFocus } from '@/hooks/use-map-focus';
 import { useRoutePolylines } from '@/hooks/use-route-polylines';
+import { useRouteStops } from '@/hooks/use-route-stops';
 import { getDemoVehiclePositions, useVehiclePositions } from '@/hooks/use-vehicle-positions';
 import { useSettings } from '@/hooks/use-settings';
+import { useTabNav } from '@/hooks/use-tab-nav';
+import { findStop } from '@/services/ttc';
 import { splitPolylinesByOverlap } from '@/utils/polyline-offset';
 
 const DEFAULT_REGION: Region = {
@@ -39,17 +43,62 @@ function routeAccent(bus: '380' | '316', colors: ReturnType<typeof useAppColors>
   return bus === '380' ? colors.route380 : colors.route316;
 }
 
-const MARKER_BADGE_IMAGES: Record<'380' | '316', number> = {
-  '380': require('../../assets/images/map-marker-380.png'),
-  '316': require('../../assets/images/map-marker-316.png'),
-};
+function BusStopGlyph({
+  size,
+  color,
+  shiftX = 0.1,
+  shiftY = 0.1,
+}: {
+  size: number;
+  color: string;
+  shiftX?: number;
+  shiftY?: number;
+}) {
+  const poleWidth = Math.max(2, Math.round(size * 0.12));
+  const dotSize = Math.max(4, Math.round(size * 0.24));
+  const busSize = Math.round(size * 0.88);
+  const poleHeight = Math.round(size * 0.72);
+  const xOffset = size * shiftX;
+  const yOffset = size * shiftY;
 
-const MARKER_HEADING_IMAGES: Record<'380' | '316', number> = {
-  '380': require('../../assets/images/map-heading-380.png'),
-  '316': require('../../assets/images/map-heading-316.png'),
-};
+  return (
+    <View style={{ width: size, height: size, transform: [{ translateX: xOffset }, { translateY: yOffset }] }}>
+      <View
+        style={{
+          position: 'absolute',
+          left: Math.round(size * 0.06),
+          top: Math.round(size * 0.08),
+          width: dotSize,
+          alignItems: 'center',
+        }}>
+        <View
+          style={{
+            width: dotSize,
+            height: dotSize,
+            borderRadius: dotSize / 2,
+            backgroundColor: color,
+          }}
+        />
+        <View
+          style={{
+            width: poleWidth,
+            height: poleHeight,
+            borderRadius: poleWidth / 2,
+            backgroundColor: color,
+          }}
+        />
+      </View>
+      <View style={{ position: 'absolute', left: Math.round(size * 0.32), top: Math.round(size * 0.1) }}>
+        <MaterialCommunityIcons name="bus" size={busSize} color={color} />
+      </View>
+    </View>
+  );
+}
 
-const MARKER_ANCHOR = { x: 0.5, y: 54 / 84 };
+const VEHICLE_PIN_CANVAS_SIZE = 92;
+const VEHICLE_PIN_ANCHOR = { x: 0.5, y: 0.5 };
+const STOP_MARKER_ANCHOR = { x: 0.5, y: 0.5 };
+const SHOW_ALL_STOPS_LAT_DELTA = 0.14;
 const GOOGLE_DARK_MAP_STYLE = [
   { elementType: 'geometry', stylers: [{ color: '#1d1d1d' }] },
   { elementType: 'labels.text.stroke', stylers: [{ color: '#1d1d1d' }] },
@@ -71,9 +120,11 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
   const styles = useMemo(() => createStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
   const mapRef = useRef<MapView>(null);
+  const focusedStopMarkerRef = useRef<MapMarker | null>(null);
   const { activeDirection } = useActiveDirection();
   const { settings } = useSettings();
-  const { focusedStop } = useMapFocus();
+  const { focusedStop, requestStopSheetReturn } = useMapFocus();
+  const navigateToTab = useTabNav();
   const lastFitKeyRef = useRef<string | null>(null);
 
   const [mapReady, setMapReady] = useState(false);
@@ -100,6 +151,7 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
 
   const { data: toKojoriRouteData } = useRoutePolylines('toKojori');
   const { data: toTbilisiRouteData } = useRoutePolylines('toTbilisi');
+  const { stops: routeStops } = useRouteStops(direction);
   const { data: livePositions = [], refetch, isFetching } = useVehiclePositions(direction, isActive);
 
   useEffect(() => {
@@ -111,6 +163,7 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
   }, [isActive, settings.cancelledBusDemo]);
 
   const spinAnim = useRef(new Animated.Value(0)).current;
+  const vehiclePinSpinAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     if (isFetching) {
@@ -128,7 +181,34 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
     }
   }, [isFetching, spinAnim]);
 
+  const shouldAnimateVehiclePins = typeof __DEV__ === 'boolean' && __DEV__ && isActive;
+
+  useEffect(() => {
+    if (!shouldAnimateVehiclePins) {
+      vehiclePinSpinAnim.stopAnimation();
+      vehiclePinSpinAnim.setValue(0);
+      return;
+    }
+
+    vehiclePinSpinAnim.setValue(0);
+    const animation = Animated.loop(
+      Animated.timing(vehiclePinSpinAnim, {
+        toValue: 1,
+        duration: 4000,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      }),
+    );
+    animation.start();
+
+    return () => animation.stop();
+  }, [shouldAnimateVehiclePins, vehiclePinSpinAnim]);
+
   const spinRotation = spinAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '360deg'],
+  });
+  const vehiclePinDebugRotation = vehiclePinSpinAnim.interpolate({
     inputRange: [0, 1],
     outputRange: ['0deg', '360deg'],
   });
@@ -190,6 +270,33 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
   const showMarkers = useMemo(() => {
     return currentRegion.latitudeDelta < 0.5;
   }, [currentRegion.latitudeDelta]);
+  const showAllStopMarkers = currentRegion.latitudeDelta < SHOW_ALL_STOPS_LAT_DELTA;
+  const favoriteStopIds = direction === 'toKojori' ? settings.tbilisiFavorites : settings.kojoriFavorites;
+  const curatedStopIds = getCuratedStopIds(direction);
+
+  const stopMarkers = useMemo(() => {
+    const favoriteStopSet = new Set(favoriteStopIds);
+    const curatedStopSet = new Set(curatedStopIds);
+    const promotedStopSet = new Set([...favoriteStopIds, ...curatedStopIds]);
+    const routeStopMap = new Map(routeStops.map(stop => [stop.id, stop]));
+    const stopsWithPromotedFallbacks = [
+      ...routeStops,
+      ...Array.from(promotedStopSet)
+        .filter(stopId => !routeStopMap.has(stopId))
+        .map(stopId => findStop(stopId))
+        .filter((stop): stop is NonNullable<ReturnType<typeof findStop>> => Boolean(stop)),
+    ];
+
+    return stopsWithPromotedFallbacks
+      .filter(stop => typeof stop.lat === 'number' && typeof stop.lon === 'number')
+      .filter(stop => stop.id !== focusedStop?.id)
+      .filter(stop => showAllStopMarkers || promotedStopSet.has(stop.id))
+      .map(stop => ({
+        stop,
+        isPromoted: favoriteStopSet.has(stop.id) || curatedStopSet.has(stop.id),
+      }))
+      .sort((a, b) => Number(a.isPromoted) - Number(b.isPromoted));
+  }, [curatedStopIds, favoriteStopIds, focusedStop?.id, routeStops, showAllStopMarkers]);
 
   function handleCenterOnBus(bus: '380' | '316') {
     const busPositions = positions.filter(p => p.bus === bus);
@@ -268,6 +375,18 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
 
     return () => clearTimeout(timeoutId);
   }, [focusedRouteData?.polylines, focusedStop, focusedStopCoordinate, isActive, mapReady]);
+
+  useEffect(() => {
+    if (!isActive || !mapReady || typeof focusedStop?.lat !== 'number' || typeof focusedStop.lon !== 'number') {
+      return;
+    }
+
+    const timeoutId = setTimeout(() => {
+      focusedStopMarkerRef.current?.showCallout();
+    }, 700);
+
+    return () => clearTimeout(timeoutId);
+  }, [focusedStop?.lat, focusedStop?.lon, focusedStop?.requestedAt, isActive, mapReady]);
 
   useEffect(() => {
     lastFitKeyRef.current = null;
@@ -377,48 +496,182 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
             </>
           )
           : null}
+        {showMarkers && stopMarkers.map(({ stop, isPromoted }) => {
+          const markerSize = isPromoted ? 30 : 22;
+          const iconSize = isPromoted ? 18 : 14;
+          const glyphShiftX = isPromoted ? 0.1 : -0.02;
+          const glyphShiftY = isPromoted ? 0.18 : -0.05;
+          const stopAccent = direction === 'toKojori' ? colors.route380 : colors.route316;
+          const markerColor = isPromoted ? stopAccent : colors.map;
+
+          return (
+            <Marker
+              key={`stop-${direction}-${stop.id}`}
+              coordinate={{ latitude: stop.lat!, longitude: stop.lon! }}
+              anchor={STOP_MARKER_ANCHOR}
+              tracksViewChanges={false}
+              zIndex={isPromoted ? 6 : 4}>
+              <View
+                style={[
+                  styles.stopMarkerOuter,
+                  {
+                    width: markerSize + (isPromoted ? 10 : 4),
+                    height: markerSize + (isPromoted ? 10 : 4),
+                    borderRadius: (markerSize + (isPromoted ? 10 : 4)) / 2,
+                    backgroundColor: isPromoted ? alpha(markerColor, '22') : 'transparent',
+                    opacity: isPromoted ? 1 : 0.72,
+                  },
+                ]}>
+                <View
+                  style={[
+                    styles.stopMarker,
+                    isPromoted && styles.favoriteStopMarker,
+                    {
+                      width: markerSize,
+                      height: markerSize,
+                      borderRadius: isPromoted ? 10 : 8,
+                      borderColor: isPromoted ? alpha(markerColor, 'D9') : alpha(colors.panel, 'CC'),
+                      backgroundColor: isPromoted
+                        ? markerColor
+                        : alpha(colors.map, resolvedThemeMode === 'dark' ? 'CC' : 'E8'),
+                    },
+                  ]}>
+                  <BusStopGlyph
+                    size={iconSize}
+                    color="#FFFFFF"
+                    shiftX={glyphShiftX}
+                    shiftY={glyphShiftY}
+                  />
+                </View>
+              </View>
+              <Callout tooltip>
+                <View style={styles.stopCallout}>
+                  <View
+                    style={[
+                      styles.stopCalloutIcon,
+                      { backgroundColor: isPromoted ? markerColor : colors.map },
+                    ]}>
+                    <BusStopGlyph size={18} color="#FFFFFF" shiftY={0.14} />
+                  </View>
+                  <View style={styles.stopCalloutCopy}>
+                    <Text style={styles.stopCalloutLabel} numberOfLines={2}>
+                      {stop.label}
+                    </Text>
+                    <Text style={styles.stopCalloutCode}>
+                      Stop [{stop.id.split(':')[1] ?? stop.id}]
+                    </Text>
+                  </View>
+                </View>
+              </Callout>
+            </Marker>
+          );
+        })}
         {showMarkers && positions.map(position => {
-          const markerWidth = 72 * markerScale;
-          const markerHeight = 84 * markerScale;
+          const accent = routeAccent(position.bus, colors);
+          const pinWidth = VEHICLE_PIN_CANVAS_SIZE;
+          const pinHeight = VEHICLE_PIN_CANVAS_SIZE;
+          const busIconSize = 22;
+          const routeFontSize = 12;
+          const routeDigits = position.bus.split('');
+          const destination = direction === 'toKojori' ? t('cityKojori') : t('cityTbilisi');
+          const heading = Number.isFinite(position.heading) ? position.heading : 0;
           
           return (
             <React.Fragment key={`${position.bus}-${position.vehicleId}`}>
               <Marker
                 coordinate={{ latitude: position.lat, longitude: position.lon }}
-                anchor={MARKER_ANCHOR}
-                tracksViewChanges={false}
-                title={`${position.bus} ${t('directionTo')}${direction === 'toKojori' ? t('cityKojori') : t('cityTbilisi')}`}
-                description={t('mapVehicle', { id: position.vehicleId })}>
-                <Image
-                  source={MARKER_BADGE_IMAGES[position.bus]}
-                  style={{ width: markerWidth, height: markerHeight }}
-                  resizeMode="contain"
-                />
-              </Marker>
-              <Marker
-                coordinate={{ latitude: position.lat, longitude: position.lon }}
-                anchor={MARKER_ANCHOR}
-                flat
-                rotation={position.heading}
-                tracksViewChanges={false}>
-                <Image
-                  source={MARKER_HEADING_IMAGES[position.bus]}
-                  style={{ width: markerWidth, height: markerHeight }}
-                  resizeMode="contain"
-                />
+                anchor={VEHICLE_PIN_ANCHOR}
+                tracksViewChanges={shouldAnimateVehiclePins}
+                zIndex={21}>
+                <View style={[styles.vehiclePin, { width: pinWidth, height: pinHeight }]}>
+                  <Animated.View
+                    style={[
+                      styles.vehiclePinShape,
+                      { transform: [{ rotate: `${heading}deg` }, { rotate: vehiclePinDebugRotation }] },
+                    ]}>
+                    <View style={styles.vehiclePinOuterCircle} />
+                    <View style={styles.vehiclePinOuterPoint} />
+                    <View style={[styles.vehiclePinInnerCircle, { backgroundColor: accent }]} />
+                    <View style={[styles.vehiclePinInnerPoint, { borderBottomColor: accent }]} />
+                  </Animated.View>
+                  <View style={styles.vehiclePinContent}>
+                    <View style={styles.vehiclePinBusIconSlot}>
+                      <MaterialCommunityIcons
+                        name="bus"
+                        size={busIconSize}
+                        color="#FFFFFF"
+                        style={styles.vehiclePinBusIcon}
+                      />
+                    </View>
+                    <View style={styles.vehicleRouteDigits}>
+                      {routeDigits.map((digit, index) => (
+                        <Text
+                          key={`${position.bus}-${index}`}
+                          allowFontScaling={false}
+                          style={[
+                            styles.vehicleRouteLabel,
+                            {
+                              fontSize: routeFontSize,
+                              lineHeight: routeFontSize + 2,
+                            },
+                          ]}>
+                          {digit}
+                        </Text>
+                      ))}
+                    </View>
+                  </View>
+                </View>
+                <Callout tooltip>
+                  <View style={styles.vehicleCallout}>
+                    <View style={[styles.vehicleCalloutIcon, { backgroundColor: accent }]}>
+                      <MaterialCommunityIcons name="bus" size={22} color="#FFFFFF" />
+                    </View>
+                    <View style={styles.vehicleCalloutCopy}>
+                      <Text style={styles.vehicleCalloutTitle} numberOfLines={1}>
+                        {position.bus} {t('directionTo')}{destination}
+                      </Text>
+                      <Text style={styles.vehicleCalloutSubtitle} numberOfLines={1}>
+                        {t('mapVehicle', { id: position.vehicleId })}
+                      </Text>
+                    </View>
+                  </View>
+                </Callout>
               </Marker>
             </React.Fragment>
           );
         })}
         {focusedStop && focusedStopCoordinate ? (
           <Marker
+            ref={focusedStopMarkerRef}
             key={`focused-stop-${focusedStop.id}-${focusedStop.requestedAt}`}
             coordinate={focusedStopCoordinate}
-            pinColor={focusedStopAccent}
-            title={focusedStop.label}
-            description={`#${focusedStop.id.split(':')[1] ?? focusedStop.id}`}
-            zIndex={10}
-          />
+            anchor={{ x: 0.5, y: 1 }}
+            centerOffset={{ x: 0, y: -24 }}
+            tracksViewChanges={false}
+            zIndex={30}
+          >
+            <View style={styles.focusedStopMarker}>
+              <View style={styles.focusedStopMarkerHalo} />
+              <View style={styles.focusedStopMarkerCore}>
+                <BusStopGlyph size={19} color="#FFFFFF" shiftY={0.18} />
+              </View>
+            </View>
+            <Callout tooltip>
+              <View style={styles.focusedStopCallout}>
+                <View style={styles.focusedStopCalloutIcon}>
+                  <BusStopGlyph size={22} color="#FFFFFF" shiftY={0.14} />
+                </View>
+                <View style={styles.focusedStopCalloutCopy}>
+                  <Text style={styles.focusedStopCalloutLabel} numberOfLines={2}>
+                    {focusedStop.label}
+                  </Text>
+                  <Text style={styles.focusedStopCalloutCode}>
+                    Stop [{focusedStop.id.split(':')[1] ?? focusedStop.id}]
+                  </Text>
+                </View>
+              </View>
+            </Callout>
+          </Marker>
         ) : null}
       </MapView>
 
@@ -459,7 +712,11 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
       <Pressable
         style={[
           styles.locateButton,
-          { bottom: insets.bottom + BottomTabInset + 24 },
+          {
+            bottom: focusedStop
+              ? insets.bottom + BottomTabInset + 108
+              : insets.bottom + BottomTabInset + 24,
+          },
           isLocating && styles.locateButtonActive,
         ]}
         onPress={handleLocateMe}
@@ -475,6 +732,49 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
         <View style={[styles.bottomPillContainer, { bottom: insets.bottom + BottomTabInset + 18 }]}>
           <View style={styles.bottomPill}>
             <Text style={styles.bottomPillText}>{locationMessage}</Text>
+          </View>
+        </View>
+      ) : null}
+
+      {focusedStop ? (
+        <View style={[styles.focusedStopTrayWrap, { bottom: insets.bottom + BottomTabInset + 18 }]}>
+          <View
+            style={[
+              styles.focusedStopTray,
+              {
+                borderColor: alpha(focusedStopAccent, '42'),
+                backgroundColor: alpha(colors.panel, resolvedThemeMode === 'dark' ? 'F2' : 'FA'),
+              },
+            ]}
+          >
+            <View style={[styles.focusedStopTrayRail, { backgroundColor: focusedStopAccent }]} />
+            <View style={styles.focusedStopTrayCopy}>
+              <Text style={styles.focusedStopTrayEyebrow}>
+                {focusedStop.direction === 'toKojori' ? t('cityKojori') : t('cityTbilisi')}
+              </Text>
+              <Text style={styles.focusedStopTrayTitle} numberOfLines={1}>
+                {focusedStop.label}
+              </Text>
+              <Text style={[styles.focusedStopTrayCode, { color: focusedStopAccent }]}>
+                #{focusedStop.id.split(':')[1] ?? focusedStop.id}
+              </Text>
+            </View>
+            {focusedStop.returnRoute ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={t('stopSheetTitle')}
+                onPress={() => {
+                  requestStopSheetReturn();
+                  navigateToTab?.(focusedStop.returnRoute ?? 'index');
+                }}
+                style={[styles.focusedStopTrayAction, { borderColor: alpha(focusedStopAccent, '42') }]}
+              >
+                <MaterialCommunityIcons name="chevron-up" size={15} color={focusedStopAccent} />
+                <Text style={[styles.focusedStopTrayActionText, { color: focusedStopAccent }]}>
+                  {t('commonChange')}
+                </Text>
+              </Pressable>
+            ) : null}
           </View>
         </View>
       ) : null}
@@ -564,6 +864,336 @@ function createStyles(C: ReturnType<typeof useAppColors>) {
     borderColor: C.border,
   },
   bottomPillText: { color: C.textDim, fontSize: 12 },
+  focusedStopTrayWrap: {
+    position: 'absolute',
+    left: 16,
+    right: 16,
+  },
+  focusedStopTray: {
+    minHeight: 78,
+    borderRadius: 20,
+    borderWidth: 1,
+    paddingHorizontal: 13,
+    paddingVertical: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 11,
+    shadowColor: '#000',
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 6,
+  },
+  focusedStopTrayRail: {
+    width: 4,
+    alignSelf: 'stretch',
+    borderRadius: 999,
+  },
+  focusedStopTrayCopy: {
+    flex: 1,
+    minWidth: 0,
+    gap: 3,
+  },
+  focusedStopTrayEyebrow: {
+    color: C.textFaint,
+    fontSize: 9,
+    lineHeight: 12,
+    fontWeight: '800',
+    letterSpacing: 1.4,
+    textTransform: 'uppercase',
+  },
+  focusedStopTrayTitle: {
+    color: C.text,
+    fontSize: 16,
+    lineHeight: 20,
+    fontWeight: '800',
+  },
+  focusedStopTrayCode: {
+    fontSize: 13,
+    lineHeight: 16,
+    fontWeight: '700',
+  },
+  focusedStopTrayAction: {
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    flexShrink: 0,
+  },
+  focusedStopTrayActionText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  stopMarkerOuter: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stopMarker: {
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.16,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
+  favoriteStopMarker: {
+    borderWidth: 2,
+    shadowOpacity: 0.24,
+    shadowRadius: 7,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 5,
+  },
+  stopCallout: {
+    width: 272,
+    minHeight: 72,
+    borderRadius: 5,
+    paddingHorizontal: 16,
+    paddingVertical: 13,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOpacity: 0.16,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 5,
+  },
+  stopCalloutIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  stopCalloutCopy: {
+    flex: 1,
+    minWidth: 0,
+    gap: 3,
+  },
+  stopCalloutLabel: {
+    color: '#32343A',
+    fontSize: 16,
+    lineHeight: 20,
+    fontWeight: '700',
+  },
+  stopCalloutCode: {
+    color: '#6F737C',
+    fontSize: 13,
+    lineHeight: 16,
+    fontWeight: '600',
+  },
+  vehiclePin: {
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    overflow: 'visible',
+    shadowColor: '#000',
+    shadowOpacity: 0.24,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 6,
+  },
+  vehiclePinShape: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: VEHICLE_PIN_CANVAS_SIZE,
+    height: VEHICLE_PIN_CANVAS_SIZE,
+    alignItems: 'center',
+    overflow: 'visible',
+  },
+  vehiclePinOuterCircle: {
+    position: 'absolute',
+    top: 17,
+    left: 17,
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    backgroundColor: alpha('#FFFFFF', 'F2'),
+  },
+  vehiclePinOuterPoint: {
+    position: 'absolute',
+    top: 3,
+    left: 30,
+    width: 0,
+    height: 0,
+    borderLeftWidth: 16,
+    borderRightWidth: 16,
+    borderBottomWidth: 24,
+    borderLeftColor: 'transparent',
+    borderRightColor: 'transparent',
+    borderBottomColor: alpha('#FFFFFF', 'F2'),
+  },
+  vehiclePinInnerCircle: {
+    position: 'absolute',
+    top: 21,
+    left: 21,
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+  },
+  vehiclePinInnerPoint: {
+    position: 'absolute',
+    top: 10,
+    left: 34,
+    width: 0,
+    height: 0,
+    borderLeftWidth: 12,
+    borderRightWidth: 12,
+    borderBottomWidth: 19,
+    borderLeftColor: 'transparent',
+    borderRightColor: 'transparent',
+  },
+  vehiclePinContent: {
+    position: 'absolute',
+    top: 24,
+    left: 21,
+    width: 50,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  vehiclePinBusIconSlot: {
+    width: 24,
+    height: 23,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'visible',
+  },
+  vehiclePinBusIcon: {
+    lineHeight: 22,
+    transform: [{ translateX: 0.5 }, { translateY: 1 }],
+  },
+  vehicleRouteDigits: {
+    marginTop: -1,
+    width: 42,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  vehicleRouteLabel: {
+    color: '#FFFFFF',
+    fontWeight: '900',
+    textAlign: 'center',
+    includeFontPadding: false,
+  },
+  vehicleCallout: {
+    width: 260,
+    minHeight: 72,
+    borderRadius: 8,
+    paddingHorizontal: 15,
+    paddingVertical: 13,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOpacity: 0.18,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 6,
+  },
+  vehicleCalloutIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  vehicleCalloutCopy: {
+    flex: 1,
+    minWidth: 0,
+    gap: 3,
+  },
+  vehicleCalloutTitle: {
+    color: '#32343A',
+    fontSize: 17,
+    lineHeight: 21,
+    fontWeight: '800',
+  },
+  vehicleCalloutSubtitle: {
+    color: '#6F737C',
+    fontSize: 13,
+    lineHeight: 16,
+    fontWeight: '600',
+  },
+  focusedStopMarker: {
+    width: 50,
+    height: 50,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  focusedStopMarkerHalo: {
+    position: 'absolute',
+    width: 50,
+    height: 50,
+    borderRadius: 15,
+    backgroundColor: alpha(C.error, '20'),
+  },
+  focusedStopMarkerCore: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: alpha('#FFFFFF', 'E6'),
+    backgroundColor: C.error,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.28,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 7,
+  },
+  focusedStopCallout: {
+    width: 340,
+    minHeight: 86,
+    borderRadius: 5,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 18,
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOpacity: 0.18,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 6,
+  },
+  focusedStopCalloutIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 11,
+    backgroundColor: C.error,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  focusedStopCalloutCopy: {
+    flex: 1,
+    minWidth: 0,
+    gap: 4,
+  },
+  focusedStopCalloutLabel: {
+    color: '#32343A',
+    fontSize: 21,
+    lineHeight: 26,
+    fontWeight: '700',
+  },
+  focusedStopCalloutCode: {
+    color: '#6F737C',
+    fontSize: 15,
+    lineHeight: 18,
+    fontWeight: '600',
+  },
   configOverlay: {
     position: 'absolute',
     left: 24,
