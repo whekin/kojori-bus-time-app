@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * Full release pipeline: preflight → stamp version → prebuild → build APK → commit → tag → push → GitHub release.
+ * Full release pipeline: preflight → changelog → bake TTC data → stamp version → prebuild → build APK → commit → tag → push → GitHub release.
  * Release notes are pulled from CHANGELOG.md. During normal development,
  * add notes under "## [UNRELEASED]"; release renames that heading to the
  * concrete version tag.
@@ -29,6 +29,7 @@ const unreleasedHeading = '## [UNRELEASED]';
 type Phase =
   | 'preflight'
   | 'changelog'
+  | 'bake_ttc'
   | 'stamp'
   | 'prebuild'
   | 'build'
@@ -247,9 +248,21 @@ if (!isDone(state, 'changelog')) {
   console.log('Already completed ✓');
 }
 
-// ── 3. Stamp version ────────────────────────────────────────────────────────
+// ── 3. Bake TTC data ────────────────────────────────────────────────────────
 
-step('3/7  Stamp version');
+step('3/8  Bake TTC data');
+
+if (!isDone(state, 'bake_ttc')) {
+  run('bun run bake:ttc');
+  console.log('Fresh TTC data baked ✓');
+  markDone(state, 'bake_ttc');
+} else {
+  console.log('Already completed ✓');
+}
+
+// ── 4. Stamp version ────────────────────────────────────────────────────────
+
+step('4/8  Stamp version');
 
 if (!isDone(state, 'stamp')) {
   const appJson = JSON.parse(readFileSync(appJsonPath, 'utf-8'));
@@ -270,9 +283,9 @@ if (!isDone(state, 'stamp')) {
   console.log('Already completed ✓');
 }
 
-// ── 4. Prebuild ─────────────────────────────────────────────────────────────
+// ── 5. Prebuild ─────────────────────────────────────────────────────────────
 
-step('4/7  Prebuild');
+step('5/8  Prebuild');
 
 if (!isDone(state, 'prebuild')) {
   run('bunx --env-file=.env.local expo prebuild --platform android');
@@ -282,9 +295,9 @@ if (!isDone(state, 'prebuild')) {
   console.log('Already completed ✓');
 }
 
-// ── 5. Build APK ────────────────────────────────────────────────────────────
+// ── 6. Build APK ────────────────────────────────────────────────────────────
 
-step('5/7  Build APK');
+step('6/8  Build APK');
 
 if (!isDone(state, 'build')) {
   run('cd android && ./gradlew --stop', { allowFailure: true });
@@ -302,12 +315,12 @@ if (!isDone(state, 'build')) {
   console.log('Already completed ✓');
 }
 
-// ── 6. Commit, tag, push ────────────────────────────────────────────────────
+// ── 7. Commit, tag, push ────────────────────────────────────────────────────
 
-step('6/7  Commit & push');
+step('7/8  Commit & push');
 
 if (!isDone(state, 'commit_push')) {
-  run('git add app.json package.json CHANGELOG.md');
+  run('git add app.json package.json CHANGELOG.md assets/ttc-baked.ts');
 
   const diff = String(
     run('git diff --cached --quiet || echo changed', { stdio: 'pipe' }) ?? ''
@@ -329,9 +342,9 @@ if (!isDone(state, 'commit_push')) {
   console.log('Already completed ✓');
 }
 
-// ── 7. GitHub release ───────────────────────────────────────────────────────
+// ── 8. GitHub release ───────────────────────────────────────────────────────
 
-step('7/7  GitHub release');
+step('8/8  GitHub release');
 
 if (!isDone(state, 'github_release')) {
   const apkName = `kojoring-time-${tag}.apk`;

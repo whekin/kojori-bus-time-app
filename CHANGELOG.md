@@ -26,6 +26,7 @@
 ### Infra
 
 - Changelog entries now collect under `[UNRELEASED]`; the release script renames that section to the release version automatically
+- Release builds now bake fresh TTC static data before prebuild so packaged schedules stay current
 
 ## v2026.5.13
 
