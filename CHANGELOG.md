@@ -4,6 +4,7 @@
 
 ### Improved
 
+- Map zoom now stays around the Tbilisi-Kojori route area, uses smaller live bus pins, and makes ordinary stop markers clearer at route zooms while keeping saved stops visible.
 - Map now uses code-drawn circular live bus icons with custom popups and TTC-style route stop markers, with saved stops emphasized and focused stops opening a larger callout.
 - Stop pickers now start with curated Kojori and Tbilisi stops, local hints, and in-app map focus buttons.
 - Start screen destination cards now use generated full-card landmark imagery for Kojori's Azeula Fortress and Tbilisi's Liberty Square.

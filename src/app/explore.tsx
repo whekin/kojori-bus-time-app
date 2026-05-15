@@ -46,18 +46,18 @@ function routeAccent(bus: '380' | '316', colors: ReturnType<typeof useAppColors>
 function BusStopGlyph({
   size,
   color,
-  shiftX = 0.1,
-  shiftY = 0.1,
+  shiftX = 0,
+  shiftY = 0,
 }: {
   size: number;
   color: string;
   shiftX?: number;
   shiftY?: number;
 }) {
-  const poleWidth = Math.max(2, Math.round(size * 0.12));
-  const dotSize = Math.max(4, Math.round(size * 0.24));
-  const busSize = Math.round(size * 0.88);
-  const poleHeight = Math.round(size * 0.72);
+  const poleWidth = Math.max(1, Math.round(size * 0.1));
+  const dotSize = Math.max(2, Math.round(size * 0.2));
+  const busSize = Math.round(size * 0.68);
+  const poleHeight = Math.round(size * 0.62);
   const xOffset = size * shiftX;
   const yOffset = size * shiftY;
 
@@ -66,8 +66,8 @@ function BusStopGlyph({
       <View
         style={{
           position: 'absolute',
-          left: Math.round(size * 0.06),
-          top: Math.round(size * 0.08),
+          left: Math.round(size * 0.04),
+          top: Math.round(size * 0.15),
           width: dotSize,
           alignItems: 'center',
         }}>
@@ -88,17 +88,59 @@ function BusStopGlyph({
           }}
         />
       </View>
-      <View style={{ position: 'absolute', left: Math.round(size * 0.32), top: Math.round(size * 0.1) }}>
+      <View style={{ position: 'absolute', left: Math.round(size * 0.32), top: Math.round(size * 0.18) }}>
         <MaterialCommunityIcons name="bus" size={busSize} color={color} />
       </View>
     </View>
   );
 }
 
-const VEHICLE_PIN_CANVAS_SIZE = 92;
+function MapStopGlyph({ size, color }: { size: number; color: string }) {
+  const poleWidth = Math.max(1, Math.round(size * 0.1));
+  const dotSize = Math.max(2, Math.round(size * 0.2));
+  const poleHeight = Math.round(size * 0.58);
+  const busSize = Math.round(size * 0.78);
+
+  return (
+    <View style={{ width: size, height: size }}>
+      <View
+        style={{
+          position: 'absolute',
+          left: Math.round(size * 0.1),
+          top: Math.round(size * 0.18),
+          width: dotSize,
+          alignItems: 'center',
+        }}>
+        <View
+          style={{
+            width: dotSize,
+            height: dotSize,
+            borderRadius: dotSize / 2,
+            backgroundColor: color,
+          }}
+        />
+        <View
+          style={{
+            width: poleWidth,
+            height: poleHeight,
+            borderRadius: poleWidth / 2,
+            backgroundColor: color,
+          }}
+        />
+      </View>
+      <View style={{ position: 'absolute', left: Math.round(size * 0.32), top: Math.round(size * 0.14) }}>
+        <MaterialCommunityIcons name="bus" size={busSize} color={color} />
+      </View>
+    </View>
+  );
+}
+
+const VEHICLE_PIN_CANVAS_SIZE = 66;
 const VEHICLE_PIN_ANCHOR = { x: 0.5, y: 0.5 };
 const STOP_MARKER_ANCHOR = { x: 0.5, y: 0.5 };
-const SHOW_ALL_STOPS_LAT_DELTA = 0.14;
+const MAP_MIN_ZOOM_LEVEL = 11;
+const SHOW_ORDINARY_STOPS_LAT_DELTA = 0.14;
+const FULL_STOP_MARKERS_LAT_DELTA = 0.055;
 const GOOGLE_DARK_MAP_STYLE = [
   { elementType: 'geometry', stylers: [{ color: '#1d1d1d' }] },
   { elementType: 'labels.text.stroke', stylers: [{ color: '#1d1d1d' }] },
@@ -259,18 +301,15 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
     '316': positions.filter(position => position.bus === '316').length,
   }), [positions]);
 
-  const markerScale = useMemo(() => {
-    const delta = currentRegion.latitudeDelta;
-    if (delta > 0.15) return 0.7;
-    if (delta > 0.08) return 0.85;
-    if (delta < 0.03) return 1.2;
-    return 1.0;
-  }, [currentRegion.latitudeDelta]);
-
   const showMarkers = useMemo(() => {
     return currentRegion.latitudeDelta < 0.5;
   }, [currentRegion.latitudeDelta]);
-  const showAllStopMarkers = currentRegion.latitudeDelta < SHOW_ALL_STOPS_LAT_DELTA;
+  const stopMarkerZoomTier = currentRegion.latitudeDelta >= SHOW_ORDINARY_STOPS_LAT_DELTA
+    ? 'overview'
+    : currentRegion.latitudeDelta >= FULL_STOP_MARKERS_LAT_DELTA
+      ? 'mid'
+      : 'close';
+  const showOrdinaryStopMarkers = stopMarkerZoomTier !== 'overview';
   const favoriteStopIds = direction === 'toKojori' ? settings.tbilisiFavorites : settings.kojoriFavorites;
   const curatedStopIds = getCuratedStopIds(direction);
 
@@ -290,13 +329,13 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
     return stopsWithPromotedFallbacks
       .filter(stop => typeof stop.lat === 'number' && typeof stop.lon === 'number')
       .filter(stop => stop.id !== focusedStop?.id)
-      .filter(stop => showAllStopMarkers || promotedStopSet.has(stop.id))
+      .filter(stop => showOrdinaryStopMarkers || promotedStopSet.has(stop.id))
       .map(stop => ({
         stop,
         isPromoted: favoriteStopSet.has(stop.id) || curatedStopSet.has(stop.id),
       }))
       .sort((a, b) => Number(a.isPromoted) - Number(b.isPromoted));
-  }, [curatedStopIds, favoriteStopIds, focusedStop?.id, routeStops, showAllStopMarkers]);
+  }, [curatedStopIds, favoriteStopIds, focusedStop?.id, routeStops, showOrdinaryStopMarkers]);
 
   function handleCenterOnBus(bus: '380' | '316') {
     const busPositions = positions.filter(p => p.bus === bus);
@@ -459,6 +498,7 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
         showsBuildings={false}
         showsIndoors={false}
         showsTraffic={false}
+        minZoomLevel={MAP_MIN_ZOOM_LEVEL}
         onMapReady={() => {
           setMapReady(true);
           setMapTimedOut(false);
@@ -497,12 +537,20 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
           )
           : null}
         {showMarkers && stopMarkers.map(({ stop, isPromoted }) => {
-          const markerSize = isPromoted ? 30 : 22;
-          const iconSize = isPromoted ? 18 : 14;
-          const glyphShiftX = isPromoted ? 0.1 : -0.02;
-          const glyphShiftY = isPromoted ? 0.18 : -0.05;
+          const isOverviewZoom = stopMarkerZoomTier === 'overview';
+          const isMidZoom = stopMarkerZoomTier === 'mid';
+          const isSimpleOrdinaryStop = !isPromoted && isMidZoom;
+          const markerSize = isPromoted
+            ? isOverviewZoom ? 24 : isMidZoom ? 28 : 30
+            : isSimpleOrdinaryStop ? 16 : 24;
+          const hitSize = isPromoted
+            ? markerSize + (isOverviewZoom ? 6 : 10)
+            : isSimpleOrdinaryStop ? 32 : markerSize + 6;
+          const iconSize = isPromoted
+            ? isOverviewZoom ? 16 : 20
+            : isSimpleOrdinaryStop ? 0 : 17;
           const stopAccent = direction === 'toKojori' ? colors.route380 : colors.route316;
-          const markerColor = isPromoted ? stopAccent : colors.map;
+          const markerColor = isPromoted || isSimpleOrdinaryStop ? stopAccent : colors.map;
 
           return (
             <Marker
@@ -512,36 +560,42 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
               tracksViewChanges={false}
               zIndex={isPromoted ? 6 : 4}>
               <View
+                collapsable={false}
                 style={[
                   styles.stopMarkerOuter,
                   {
-                    width: markerSize + (isPromoted ? 10 : 4),
-                    height: markerSize + (isPromoted ? 10 : 4),
-                    borderRadius: (markerSize + (isPromoted ? 10 : 4)) / 2,
-                    backgroundColor: isPromoted ? alpha(markerColor, '22') : 'transparent',
-                    opacity: isPromoted ? 1 : 0.72,
+                    width: hitSize,
+                    height: hitSize,
+                    borderRadius: hitSize / 2,
+                    backgroundColor: 'transparent',
+                    opacity: isPromoted ? isOverviewZoom ? 0.92 : 1 : isSimpleOrdinaryStop ? 0.78 : 0.82,
                   },
                 ]}>
                 <View
                   style={[
                     styles.stopMarker,
-                    isPromoted && styles.favoriteStopMarker,
+                    isPromoted && !isOverviewZoom && styles.favoriteStopMarker,
+                    isSimpleOrdinaryStop && styles.simpleStopMarker,
                     {
                       width: markerSize,
                       height: markerSize,
-                      borderRadius: isPromoted ? 10 : 8,
-                      borderColor: isPromoted ? alpha(markerColor, 'D9') : alpha(colors.panel, 'CC'),
-                      backgroundColor: isPromoted
+                      borderRadius: isSimpleOrdinaryStop ? markerSize / 2 : isPromoted ? 10 : 8,
+                      borderColor: isSimpleOrdinaryStop
+                        ? alpha(colors.panel, 'D9')
+                        : isPromoted ? alpha(markerColor, 'D9') : alpha(colors.panel, 'E6'),
+                      backgroundColor: isSimpleOrdinaryStop
+                        ? alpha(markerColor, resolvedThemeMode === 'dark' ? 'D9' : 'EE')
+                        : isPromoted
                         ? markerColor
                         : alpha(colors.map, resolvedThemeMode === 'dark' ? 'CC' : 'E8'),
                     },
                   ]}>
-                  <BusStopGlyph
-                    size={iconSize}
-                    color="#FFFFFF"
-                    shiftX={glyphShiftX}
-                    shiftY={glyphShiftY}
-                  />
+                  {isSimpleOrdinaryStop ? null : (
+                    <MapStopGlyph
+                      size={iconSize}
+                      color="#FFFFFF"
+                    />
+                  )}
                 </View>
               </View>
               <Callout tooltip>
@@ -570,8 +624,8 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
           const accent = routeAccent(position.bus, colors);
           const pinWidth = VEHICLE_PIN_CANVAS_SIZE;
           const pinHeight = VEHICLE_PIN_CANVAS_SIZE;
-          const busIconSize = 22;
-          const routeFontSize = 12;
+          const busIconSize = 16;
+          const routeFontSize = 10;
           const routeDigits = position.bus.split('');
           const destination = direction === 'toKojori' ? t('cityKojori') : t('cityTbilisi');
           const heading = Number.isFinite(position.heading) ? position.heading : 0;
@@ -583,7 +637,7 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
                 anchor={VEHICLE_PIN_ANCHOR}
                 tracksViewChanges={shouldAnimateVehiclePins}
                 zIndex={21}>
-                <View style={[styles.vehiclePin, { width: pinWidth, height: pinHeight }]}>
+                <View collapsable={false} style={[styles.vehiclePin, { width: pinWidth, height: pinHeight }]}>
                   <Animated.View
                     style={[
                       styles.vehiclePinShape,
@@ -594,8 +648,8 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
                     <View style={[styles.vehiclePinInnerCircle, { backgroundColor: accent }]} />
                     <View style={[styles.vehiclePinInnerPoint, { borderBottomColor: accent }]} />
                   </Animated.View>
-                  <View style={styles.vehiclePinContent}>
-                    <View style={styles.vehiclePinBusIconSlot}>
+                  <View collapsable={false} style={styles.vehiclePinContent}>
+                    <View collapsable={false} style={styles.vehiclePinBusIconSlot}>
                       <MaterialCommunityIcons
                         name="bus"
                         size={busIconSize}
@@ -650,7 +704,7 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
             tracksViewChanges={false}
             zIndex={30}
           >
-            <View style={styles.focusedStopMarker}>
+            <View collapsable={false} style={styles.focusedStopMarker}>
               <View style={styles.focusedStopMarkerHalo} />
               <View style={styles.focusedStopMarkerCore}>
                 <BusStopGlyph size={19} color="#FFFFFF" shiftY={0.18} />
@@ -943,10 +997,17 @@ function createStyles(C: ReturnType<typeof useAppColors>) {
   },
   favoriteStopMarker: {
     borderWidth: 2,
-    shadowOpacity: 0.24,
-    shadowRadius: 7,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 5,
+    shadowOpacity: 0,
+    shadowRadius: 0,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 0,
+  },
+  simpleStopMarker: {
+    borderWidth: 1,
+    shadowOpacity: 0.12,
+    shadowRadius: 3,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 1,
   },
   stopCallout: {
     width: 272,
@@ -1007,72 +1068,75 @@ function createStyles(C: ReturnType<typeof useAppColors>) {
     height: VEHICLE_PIN_CANVAS_SIZE,
     alignItems: 'center',
     overflow: 'visible',
+    zIndex: 1,
   },
   vehiclePinOuterCircle: {
     position: 'absolute',
-    top: 17,
-    left: 17,
-    width: 58,
-    height: 58,
-    borderRadius: 29,
+    top: 12,
+    left: 12,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     backgroundColor: alpha('#FFFFFF', 'F2'),
   },
   vehiclePinOuterPoint: {
     position: 'absolute',
-    top: 3,
-    left: 30,
+    top: 2,
+    left: 21,
     width: 0,
     height: 0,
-    borderLeftWidth: 16,
-    borderRightWidth: 16,
-    borderBottomWidth: 24,
+    borderLeftWidth: 12,
+    borderRightWidth: 12,
+    borderBottomWidth: 17,
     borderLeftColor: 'transparent',
     borderRightColor: 'transparent',
     borderBottomColor: alpha('#FFFFFF', 'F2'),
   },
   vehiclePinInnerCircle: {
     position: 'absolute',
-    top: 21,
-    left: 21,
-    width: 50,
-    height: 50,
-    borderRadius: 25,
+    top: 15,
+    left: 15,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
   },
   vehiclePinInnerPoint: {
     position: 'absolute',
-    top: 10,
-    left: 34,
+    top: 7,
+    left: 24,
     width: 0,
     height: 0,
-    borderLeftWidth: 12,
-    borderRightWidth: 12,
-    borderBottomWidth: 19,
+    borderLeftWidth: 9,
+    borderRightWidth: 9,
+    borderBottomWidth: 14,
     borderLeftColor: 'transparent',
     borderRightColor: 'transparent',
   },
   vehiclePinContent: {
     position: 'absolute',
-    top: 24,
-    left: 21,
-    width: 50,
-    height: 44,
+    top: 16,
+    left: 15,
+    width: 36,
+    height: 34,
     alignItems: 'center',
     justifyContent: 'center',
+    zIndex: 2,
+    elevation: 2,
   },
   vehiclePinBusIconSlot: {
-    width: 24,
-    height: 23,
+    width: 18,
+    height: 18,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'visible',
   },
   vehiclePinBusIcon: {
-    lineHeight: 22,
-    transform: [{ translateX: 0.5 }, { translateY: 1 }],
+    lineHeight: 16,
+    transform: [{ translateX: 0.5 }, { translateY: 0.5 }],
   },
   vehicleRouteDigits: {
     marginTop: -1,
-    width: 42,
+    width: 34,
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
