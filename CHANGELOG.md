@@ -21,6 +21,7 @@
 - Data refresh no longer calls individual stop-detail endpoints for stop names, reducing TTC rate-limit pressure
 - Direction controls now use a FROM / TO card style and toggle destination directly without opening a sheet
 - Direction toggles now animate Kojori and Tbilisi swapping places, with the accent color easing into the next route before the rest of the screen updates
+- Map route overlays now wait until the Map tab is active before catching up to direction changes made elsewhere
 
 ### Fixed
 

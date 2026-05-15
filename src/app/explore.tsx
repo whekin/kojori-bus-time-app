@@ -70,7 +70,7 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
   const styles = useMemo(() => createStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
   const mapRef = useRef<MapView>(null);
-  const { activeDirection: direction } = useActiveDirection();
+  const { activeDirection } = useActiveDirection();
   const { settings } = useSettings();
   const lastFitKeyRef = useRef<string | null>(null);
 
@@ -81,6 +81,14 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
   const [locationMessage, setLocationMessage] = useState<string | null>(null);
   const [currentRegion, setCurrentRegion] = useState<Region>(DEFAULT_REGION);
   const [demoNow, setDemoNow] = useState(() => Date.now());
+  const [inactiveMapDirection, setInactiveMapDirection] = useState(activeDirection);
+
+  const direction = isActive ? activeDirection : inactiveMapDirection;
+
+  useEffect(() => {
+    if (!isActive || inactiveMapDirection === activeDirection) return;
+    setInactiveMapDirection(activeDirection);
+  }, [activeDirection, inactiveMapDirection, isActive]);
 
   useEffect(() => {
     if (mapReady) return;
