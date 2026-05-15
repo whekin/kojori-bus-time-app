@@ -1,6 +1,6 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
-import { Pressable, StyleSheet, Text, View, ViewStyle } from 'react-native';
+import { Animated, Easing, Pressable, StyleSheet, Text, View, ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { NativeBottomSheet } from '@/components/native-bottom-sheet';
@@ -11,6 +11,13 @@ import { useI18n } from '@/hooks/use-i18n';
 import { type SharedDirection } from '@/hooks/use-settings';
 
 type Mode = 'kojori' | 'tbilisi';
+const PILL_ROUTE_SLOT_WIDTH = 58;
+const PILL_ROUTE_ARROW_SPACE = 24;
+const PILL_ROUTE_SWAP_DISTANCE = PILL_ROUTE_SLOT_WIDTH + PILL_ROUTE_ARROW_SPACE;
+const PILL_ROUTE_TRACK_WIDTH = PILL_ROUTE_SLOT_WIDTH * 2 + PILL_ROUTE_ARROW_SPACE;
+const PILL_ROUTE_TRACK_HEIGHT = 22;
+const PILL_ROUTE_ARROW_LEFT = PILL_ROUTE_SLOT_WIDTH + (PILL_ROUTE_ARROW_SPACE - 15) / 2;
+const PILL_SWAP_DURATION_MS = 500;
 
 function directionToMode(direction: SharedDirection): Mode {
   return direction === 'toKojori' ? 'kojori' : 'tbilisi';
@@ -30,42 +37,136 @@ function destinationLabel(direction: SharedDirection, t: ReturnType<typeof useI1
 
 export function DirectionPill({
   accentColor,
-  onPress,
   style,
 }: {
   accentColor: string;
-  onPress: () => void;
   style?: ViewStyle;
 }) {
   const colors = useAppColors();
   const styles = usePillStyles();
-  const { activeDirection } = useActiveDirection();
+  const { activeDirection, selectDirection } = useActiveDirection();
   const { t } = useI18n();
+  const switchAnim = useRef(new Animated.Value(0)).current;
+  const [isSwitching, setIsSwitching] = useState(false);
 
   const origin = originLabel(activeDirection, t);
   const destination = destinationLabel(activeDirection, t);
+  const nextDirection = activeDirection === 'toKojori' ? 'toTbilisi' : 'toKojori';
+  const nextAccentColor = nextDirection === 'toKojori' ? colors.route380 : colors.route316;
+  const swapRotation = switchAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '180deg'],
+  });
+  const originTranslate = switchAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, PILL_ROUTE_SWAP_DISTANCE],
+  });
+  const destinationTranslate = switchAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, -PILL_ROUTE_SWAP_DISTANCE],
+  });
+  const arrowScale = switchAnim.interpolate({
+    inputRange: [0, 0.5, 1],
+    outputRange: [1, 0.72, 1],
+  });
+  const arrowOpacity = switchAnim.interpolate({
+    inputRange: [0, 0.5, 1],
+    outputRange: [1, 0.42, 1],
+  });
+  const animatedAccentColor = switchAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [accentColor, nextAccentColor],
+  });
+  const animatedBorderColor = switchAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [alpha(accentColor, '40'), alpha(nextAccentColor, '40')],
+  });
+
+  function handlePress() {
+    if (isSwitching) return;
+
+    setIsSwitching(true);
+    switchAnim.stopAnimation();
+    switchAnim.setValue(0);
+    Animated.timing(switchAnim, {
+      toValue: 1,
+      duration: PILL_SWAP_DURATION_MS,
+      easing: Easing.inOut(Easing.cubic),
+      useNativeDriver: false,
+    }).start(({ finished }) => {
+      if (!finished) {
+        setIsSwitching(false);
+        return;
+      }
+
+      selectDirection(nextDirection, { persist: 'deferred' });
+      requestAnimationFrame(() => {
+        switchAnim.setValue(0);
+        setIsSwitching(false);
+      });
+    });
+  }
 
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={t('directionAccessibility', { origin, destination })}
-      onPress={onPress}
+      onPress={handlePress}
+      disabled={isSwitching}
       style={({ pressed }) => [
         styles.pill,
         {
-          borderColor: alpha(accentColor, '40'),
-          backgroundColor: pressed ? colors.surfaceHigh : colors.surface,
+          borderColor: alpha(accentColor, '00'),
+          backgroundColor: pressed && !isSwitching ? colors.surfaceHigh : colors.surface,
         },
         style,
       ]}>
-      <View style={[styles.pillDot, { backgroundColor: accentColor }]} />
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          styles.pillBorder,
+          {
+            borderColor: animatedBorderColor,
+          },
+        ]}
+      />
       <View style={styles.pillText}>
-        <Text style={styles.pillEyebrow} numberOfLines={1}>{t('directionFrom', { origin }).toUpperCase()}</Text>
-        <Text style={styles.pillDest} numberOfLines={1}>
-          <Text style={styles.pillTo}>{t('directionTo')}</Text>{destination}
-        </Text>
+        <Text style={styles.pillEyebrow} numberOfLines={1}>{t('directionFromTo').toUpperCase()}</Text>
+        <View style={styles.pillRouteRow}>
+          <Animated.View style={[styles.pillDot, { backgroundColor: animatedAccentColor }]} />
+          <View style={styles.pillRouteTrack}>
+            <Animated.View
+              style={[
+                styles.pillRouteSlot,
+                styles.pillRouteSlotOrigin,
+                { transform: [{ translateX: originTranslate }] },
+              ]}>
+              <Text style={styles.pillPlace} numberOfLines={1}>{origin}</Text>
+            </Animated.View>
+            <Animated.View
+              style={[
+                styles.pillRouteArrow,
+                {
+                  opacity: arrowOpacity,
+                  transform: [{ scale: arrowScale }],
+                },
+              ]}>
+              <MaterialCommunityIcons name="arrow-right" size={15} color={colors.textDim} />
+            </Animated.View>
+            <Animated.View
+              style={[
+                styles.pillRouteSlot,
+                styles.pillRouteSlotDestination,
+                { transform: [{ translateX: destinationTranslate }] },
+              ]}>
+              <Text style={styles.pillPlace} numberOfLines={1}>{destination}</Text>
+            </Animated.View>
+          </View>
+        </View>
       </View>
-      <MaterialCommunityIcons name="chevron-down" size={14} color={colors.textDim} />
+      <Animated.View style={{ transform: [{ rotate: swapRotation }] }}>
+        <MaterialCommunityIcons name="swap-horizontal" size={17} color={colors.textDim} />
+      </Animated.View>
     </Pressable>
   );
 }
@@ -160,33 +261,75 @@ function createPillStyles(C: AppColors) {
     pill: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 8,
-      paddingLeft: 10,
-      paddingRight: 8,
-      paddingVertical: 6,
-      borderRadius: 999,
+      gap: 10,
+      position: 'relative',
+      paddingLeft: 14,
+      paddingRight: 12,
+      paddingVertical: 10,
+      borderRadius: 16,
       borderWidth: 1,
-      minHeight: 34,
+      minHeight: 58,
+      minWidth: 202,
+      maxWidth: 260,
+      shadowColor: '#000',
+      shadowOpacity: 0.08,
+      shadowRadius: 12,
+      shadowOffset: { width: 0, height: 6 },
+      elevation: 2,
     },
-    pillDot: { width: 8, height: 8, borderRadius: 4 },
-    pillText: { minWidth: 0, flexShrink: 1 },
+    pillBorder: {
+      ...StyleSheet.absoluteFillObject,
+      borderRadius: 16,
+      borderWidth: 1,
+    },
+    pillDot: { width: 9, height: 9, borderRadius: 4.5, flexShrink: 0 },
+    pillText: { minWidth: 0, flex: 1, gap: 4 },
     pillEyebrow: {
       color: C.textFaint,
       fontSize: 9,
       fontWeight: '800',
-      letterSpacing: 1.2,
+      letterSpacing: 2,
     },
-    pillDest: {
+    pillRouteRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      minWidth: 0,
+    },
+    pillRouteTrack: {
+      width: PILL_ROUTE_TRACK_WIDTH,
+      height: PILL_ROUTE_TRACK_HEIGHT,
+      flexShrink: 0,
+    },
+    pillRouteSlot: {
+      position: 'absolute',
+      top: 0,
+      width: PILL_ROUTE_SLOT_WIDTH,
+      height: PILL_ROUTE_TRACK_HEIGHT,
+      justifyContent: 'center',
+    },
+    pillRouteSlotOrigin: {
+      left: 0,
+      alignItems: 'center',
+    },
+    pillRouteSlotDestination: {
+      left: PILL_ROUTE_SWAP_DISTANCE,
+      alignItems: 'center',
+    },
+    pillRouteArrow: {
+      position: 'absolute',
+      left: PILL_ROUTE_ARROW_LEFT,
+      top: 1,
+      width: 15,
+      height: 20,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    pillPlace: {
       color: C.text,
-      fontSize: 13,
+      fontSize: 15,
       fontWeight: '700',
       letterSpacing: 0.2,
-    },
-    pillTo: {
-      color: C.textDim,
-      fontSize: 12,
-      fontWeight: '500',
-      fontStyle: 'italic',
     },
   });
 }

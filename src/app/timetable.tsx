@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { DirectionPickerSheet, DirectionPill } from '@/components/direction-picker';
+import { DirectionPill } from '@/components/direction-picker';
 import { StopSelector } from '@/components/stop-selector';
 import { TtcStatusHeaderBadge } from '@/components/ttc-status-banner';
 import { BottomTabInset, alpha, type AppColors } from '@/constants/theme';
@@ -103,7 +103,6 @@ export default function TimetableScreen() {
   const { activeDirection } = useActiveDirection();
   const stopNames = useStopNames();
   const [filter, setFilter] = useState<Filter>('all');
-  const [directionSheetOpen, setDirectionSheetOpen] = useState(false);
   const direction = activeDirection;
 
   const favoriteIds = direction === 'toKojori' ? settings.tbilisiFavorites : settings.kojoriFavorites;
@@ -192,7 +191,6 @@ export default function TimetableScreen() {
       <View style={styles.header}>
         <DirectionPill
           accentColor={accentColor}
-          onPress={() => setDirectionSheetOpen(true)}
         />
         <TtcStatusHeaderBadge />
         <View style={styles.headerRight}>
@@ -203,11 +201,6 @@ export default function TimetableScreen() {
           )}
         </View>
       </View>
-
-      <DirectionPickerSheet
-        visible={directionSheetOpen}
-        onClose={() => setDirectionSheetOpen(false)}
-      />
 
       <SectionList
         sections={sections}
@@ -253,8 +246,6 @@ export default function TimetableScreen() {
                 );
               })}
             </View>
-
-
           </View>
         }
         ListEmptyComponent={
@@ -299,12 +290,12 @@ function createStyles(C: AppColors) {
   headerRight: { minWidth: 72, alignItems: 'flex-end' },
   headerCount: { color: C.textDim, fontSize: 13, fontWeight: '500' },
 
-  stopSelectorWrap: { paddingTop: 6, paddingBottom: 10 },
+  stopSelectorWrap: { paddingTop: 2, paddingBottom: 8 },
 
-  filterRow: { flexDirection: 'row', gap: 8, paddingBottom: 12 },
+  filterRow: { flexDirection: 'row', gap: 8, paddingBottom: 4 },
   filterChip: {
-    paddingHorizontal: 16,
-    paddingVertical: 7,
+    paddingHorizontal: 15,
+    paddingVertical: 6,
     borderRadius: 100,
     backgroundColor: C.surface,
     borderWidth: 1,
@@ -332,7 +323,8 @@ function createStyles(C: AppColors) {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    paddingVertical: 14,
+    paddingTop: 10,
+    paddingBottom: 8,
   },
   sectionHeaderText: { color: C.textFaint, fontSize: 10, fontWeight: '700', letterSpacing: 2.5 },
   sectionHeaderLine: { flex: 1, height: 1, backgroundColor: C.border },

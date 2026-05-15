@@ -18,7 +18,6 @@ import {
     fetchRoutePolylineFromStops,
     fetchRouteStops,
     fetchSchedule,
-    fetchStopDetails,
     PolylinePoint,
     RouteGeometrySource,
     ROUTES,
@@ -27,7 +26,7 @@ import {
 } from '@/services/ttc';
 
 type Direction = 'toKojori' | 'toTbilisi';
-export type TtcOfflineDataset = 'schedules' | 'routeStops' | 'polylines' | 'stopNames';
+export type TtcOfflineDataset = 'schedules' | 'routeStops' | 'polylines';
 
 interface CacheEnvelope<T> {
   cachedAt: number;
@@ -86,7 +85,7 @@ export const ROUTE_STOPS_CACHE_TTL = 24 * 60 * 60 * 1000;
 export const ROUTE_POLYLINES_CACHE_TTL = 30 * 24 * 60 * 60 * 1000;
 export const STOP_NAMES_CACHE_TTL = 7 * 24 * 60 * 60 * 1000;
 export const TTC_OFFLINE_AUTO_REFRESH_INTERVAL = 7 * 24 * 60 * 60 * 1000;
-export const TTC_OFFLINE_THROTTLE_MS = 10_000;
+export const TTC_OFFLINE_THROTTLE_MS = 0;
 
 const STOP_NAMES_CACHE_KEY = '@ttc_stop_names_v2';
 const ROUTE_PATTERN_PAIRS = [
@@ -96,9 +95,8 @@ const ROUTE_PATTERN_PAIRS = [
   { routeId: ROUTES['316'].id, patternSuffix: ROUTES['316'].toTbilisi },
 ] as const;
 const DIRECTIONS: Direction[] = ['toKojori', 'toTbilisi'];
-const IMPORTANT_STOP_IDS = [...new Set([...ALL_TBILISI_STOPS, ...ALL_KOJORI_STOPS].map(stop => stop.id))];
-const TOTAL_OFFLINE_DATASETS = 4;
-const TOTAL_OFFLINE_STEPS = 4;
+const TOTAL_OFFLINE_DATASETS = 3;
+const TOTAL_OFFLINE_STEPS = 3;
 const BAKED_AT_MS = new Date(BAKED_AT).getTime();
 let throttleMs = TTC_OFFLINE_THROTTLE_MS;
 
@@ -142,7 +140,6 @@ function createBundledDatasetSync(): TtcDatasetSyncMap {
     schedules: buildDatasetSyncState('schedules', [null, null, null, null]),
     routeStops: buildDatasetSyncState('routeStops', [null, null]),
     polylines: buildDatasetSyncState('polylines', [null, null]),
-    stopNames: buildDatasetSyncState('stopNames', [null]),
   };
 }
 
@@ -303,7 +300,7 @@ async function runThrottledRequests(
   });
 
   for (const request of requests) {
-    if (throttleState.apiCallsMade > 0) {
+    if (throttleState.apiCallsMade > 0 && throttleMs > 0) {
       updateSnapshot({
         activeRequestLabel: request.label,
         nextRequestAt: Date.now() + throttleMs,
@@ -376,25 +373,22 @@ async function refreshStep(
 }
 
 async function loadAvailability() {
-  const [scheduleCachedAtValues, routeStopCachedAtValues, polylineCachedAtValues, stopNameCachedAt] = await Promise.all([
+  const [scheduleCachedAtValues, routeStopCachedAtValues, polylineCachedAtValues] = await Promise.all([
     Promise.all(ROUTE_PATTERN_PAIRS.map(pair => readCachedAt(scheduleCacheKey(pair.routeId, pair.patternSuffix)))),
     Promise.all(DIRECTIONS.map(direction => readCachedAt(routeStopsCacheKey(direction)))),
     Promise.all(DIRECTIONS.map(direction => readCachedAt(routePolylinesCacheKey(direction)))),
-    readCachedAt(STOP_NAMES_CACHE_KEY),
   ]);
 
   const datasetSync = {
     schedules: buildDatasetSyncState('schedules', scheduleCachedAtValues),
     routeStops: buildDatasetSyncState('routeStops', routeStopCachedAtValues),
     polylines: buildDatasetSyncState('polylines', polylineCachedAtValues),
-    stopNames: buildDatasetSyncState('stopNames', [stopNameCachedAt]),
   } satisfies TtcDatasetSyncMap;
 
   const availability = {
     schedules: true,
     routeStops: true,
     polylines: true,
-    stopNames: true,
   } satisfies Record<TtcOfflineDataset, boolean>;
 
   const availableDatasets = Object.values(availability).filter(Boolean).length;
@@ -840,49 +834,6 @@ async function refreshPolylines(
   if (!anySucceeded) throw new Error('Could not refresh route polylines');
 }
 
-async function refreshStopNames(
-  client: QueryClient,
-  force: boolean,
-  throttleState: TtcThrottleState,
-) {
-  const freshNames = force ? {} : await readStopNameCache();
-  const missingStopIds = force ? IMPORTANT_STOP_IDS : IMPORTANT_STOP_IDS.filter(id => !freshNames[id]);
-
-  if (missingStopIds.length === 0) {
-    buildStopNamesQueryData(freshNames).forEach(entry => {
-      client.setQueryData(entry.queryKey, entry.data);
-    });
-    return;
-  }
-
-  const nextNames = { ...freshNames };
-  let anyFetched = false;
-  const requests = missingStopIds.map<TtcOfflineRequest>(id => ({
-    label: `Stop #${id.split(':')[1] ?? id}`,
-    run: async () => {
-      const data = await fetchStopDetails(id);
-      nextNames[data.id] = data.name;
-      client.setQueryData(['stop', data.id], data);
-      anyFetched = true;
-    },
-  }));
-
-  const result = await runThrottledRequests(requests, throttleState);
-  appendRequestErrors('stopNames', result.errors);
-
-  if (anyFetched) {
-    await writeStopNameCache(nextNames);
-  }
-
-  if (!anyFetched && missingStopIds.length > 0) {
-    throw new Error('Could not refresh stop names');
-  }
-
-  buildStopNamesQueryData(nextNames).forEach(entry => {
-    client.setQueryData(entry.queryKey, entry.data);
-  });
-}
-
 async function refreshDataset(
   client: QueryClient,
   dataset: TtcOfflineDataset,
@@ -898,9 +849,6 @@ async function refreshDataset(
       break;
     case 'polylines':
       await refreshPolylines(client, force, throttleState);
-      break;
-    case 'stopNames':
-      await refreshStopNames(client, force, throttleState);
       break;
   }
 }
@@ -948,11 +896,31 @@ export async function refreshTtcOfflineDataset(
 }
 
 /**
- * Gradually refreshes all offline datasets, throttling every TTC API request to
- * avoid rate limiting. Cached data is used without delay; only actual fetches wait.
+ * Gradually refreshes all offline datasets, throttling every TTC API request.
+ * Cached data is used without delay unless force is enabled.
  */
-export async function warmTtcOfflineData(client: QueryClient) {
+export async function warmTtcOfflineData(
+  client: QueryClient,
+  options: { force?: boolean; skipFreshMs?: number } = {},
+) {
   const throttleState = createThrottleState();
+  const force = options.force ?? false;
+  const startedAt = Date.now();
+  const initialDatasetSync = force && options.skipFreshMs
+    ? (await loadAvailability()).datasetSync
+    : null;
+
+  function shouldForceDataset(dataset: TtcOfflineDataset) {
+    if (!force) return false;
+    if (!options.skipFreshMs || !initialDatasetSync) return true;
+
+    const sync = initialDatasetSync[dataset];
+    return !(
+      sync.source === 'cache' &&
+      typeof sync.effectiveUpdatedAt === 'number' &&
+      startedAt - sync.effectiveUpdatedAt < options.skipFreshMs
+    );
+  }
 
   updateSnapshot({
     status: 'warming',
@@ -966,7 +934,7 @@ export async function warmTtcOfflineData(client: QueryClient) {
   await refreshStep(
     'schedules',
     async () => {
-      await refreshSchedules(client, false, throttleState);
+      await refreshSchedules(client, shouldForceDataset('schedules'), throttleState);
       return true;
     },
     1,
@@ -975,7 +943,7 @@ export async function warmTtcOfflineData(client: QueryClient) {
   await refreshStep(
     'routeStops',
     async () => {
-      await refreshRouteStops(client, false, throttleState);
+      await refreshRouteStops(client, shouldForceDataset('routeStops'), throttleState);
       return true;
     },
     2,
@@ -984,19 +952,10 @@ export async function warmTtcOfflineData(client: QueryClient) {
   await refreshStep(
     'polylines',
     async () => {
-      await refreshPolylines(client, false, throttleState);
+      await refreshPolylines(client, shouldForceDataset('polylines'), throttleState);
       return true;
     },
     3,
-  );
-
-  await refreshStep(
-    'stopNames',
-    async () => {
-      await refreshStopNames(client, false, throttleState);
-      return true;
-    },
-    4,
   );
 
   await finishRefresh();

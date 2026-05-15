@@ -1,104 +1,133 @@
-import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
-import { useQueryClient } from '@tanstack/react-query';
-import { useLocalSearchParams } from 'expo-router';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, AppState, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View, ViewStyle } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-
-import { DirectionPickerSheet, DirectionPill } from '@/components/direction-picker';
-import { StopSelector } from '@/components/stop-selector';
-import { alpha, BottomTabInset, type AppColors } from '@/constants/theme';
-import { useActiveDirection } from '@/hooks/use-active-direction';
-import { useAppColors } from '@/hooks/use-app-colors';
-import { useArrivals } from '@/hooks/use-arrivals';
-import { useClosestStop } from '@/hooks/use-closest-stop';
-import { useI18n } from '@/hooks/use-i18n';
-import { useRouteStops } from '@/hooks/use-route-stops';
-import { useSchedule } from '@/hooks/use-schedule';
-import { useSettings } from '@/hooks/use-settings';
-import { useStopNames } from '@/hooks/use-stop-names';
-import { useTtcHealth } from '@/hooks/use-ttc-health';
+import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
+import { useQueryClient } from "@tanstack/react-query";
+import { useLocalSearchParams } from "expo-router";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
-    BusLine,
-    computeUpcomingDepartures,
-    Departure,
-    findStop,
-    injectCancelledDemo,
-    mergeArrivalsIntoSchedule,
-    ROUTES,
-    type StopInfo,
-} from '@/services/ttc';
+  ActivityIndicator,
+  AppState,
+  Platform,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+  ViewStyle,
+} from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-const MONO = Platform.select({ android: 'monospace', ios: 'Menlo', default: 'monospace' });
-type SharedMode = 'kojori' | 'tbilisi';
+import { DirectionPill } from "@/components/direction-picker";
+import { StopSelector } from "@/components/stop-selector";
+import { alpha, BottomTabInset, type AppColors } from "@/constants/theme";
+import { useActiveDirection } from "@/hooks/use-active-direction";
+import { useAppColors } from "@/hooks/use-app-colors";
+import { useArrivals } from "@/hooks/use-arrivals";
+import { useClosestStop } from "@/hooks/use-closest-stop";
+import { useI18n } from "@/hooks/use-i18n";
+import { useRouteStops } from "@/hooks/use-route-stops";
+import { useSchedule } from "@/hooks/use-schedule";
+import { useSettings } from "@/hooks/use-settings";
+import { useStopNames } from "@/hooks/use-stop-names";
+import { useTtcHealth } from "@/hooks/use-ttc-health";
+import {
+  BusLine,
+  computeUpcomingDepartures,
+  Departure,
+  findStop,
+  injectCancelledDemo,
+  mergeArrivalsIntoSchedule,
+  ROUTES,
+  type StopInfo,
+} from "@/services/ttc";
+
+const MONO = Platform.select({
+  android: "monospace",
+  ios: "Menlo",
+  default: "monospace",
+});
+type SharedMode = "kojori" | "tbilisi";
 const CONTENT_SIDE = 20;
 const SECTION_SPACE = 12;
+const TOP_DIVIDER_TOP_SPACE = 4;
+const TOP_DIVIDER_BOTTOM_SPACE = SECTION_SPACE + TOP_DIVIDER_TOP_SPACE;
 
 function modeToDirection(mode: SharedMode) {
-  return mode === 'kojori' ? 'toKojori' : 'toTbilisi';
+  return mode === "kojori" ? "toKojori" : "toTbilisi";
 }
 
-function directionToMode(direction: 'toKojori' | 'toTbilisi'): SharedMode {
-  return direction === 'toKojori' ? 'kojori' : 'tbilisi';
+function directionToMode(direction: "toKojori" | "toTbilisi"): SharedMode {
+  return direction === "toKojori" ? "kojori" : "tbilisi";
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function formatHeaderTime(date = new Date()) {
-  return date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  return date.toLocaleTimeString("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
-function formatMins(mins: number, t: ReturnType<typeof useI18n>['t']) {
-  if (mins < 1) return t('commonNow');
-  if (mins < 60) return t('timePlusMinutes', { minutes: mins });
+function formatMins(mins: number, t: ReturnType<typeof useI18n>["t"]) {
+  if (mins < 1) return t("commonNow");
+  if (mins < 60) return t("timePlusMinutes", { minutes: mins });
   const h = Math.floor(mins / 60);
   const m = mins % 60;
-  return m > 0 ? t('timePlusHours', { hours: h, minutes: m }) : t('timePlusHour', { hours: h });
+  return m > 0
+    ? t("timePlusHours", { hours: h, minutes: m })
+    : t("timePlusHour", { hours: h });
 }
 
-function getRealtimeStatus(dep: Departure, colors: AppColors, t: ReturnType<typeof useI18n>['t']) {
+function getRealtimeStatus(
+  dep: Departure,
+  colors: AppColors,
+  t: ReturnType<typeof useI18n>["t"],
+) {
   if (!dep.live) return null;
 
   const drift = dep.driftMinutes ?? 0;
   if (drift > 0) {
     return {
-      label: t('liveLate', { minutes: drift }),
+      label: t("liveLate", { minutes: drift }),
       textColor: colors.live,
-      backgroundColor: alpha(colors.live, '14'),
-      borderColor: alpha(colors.live, '38'),
+      backgroundColor: alpha(colors.live, "14"),
+      borderColor: alpha(colors.live, "38"),
     };
   }
 
   if (drift < 0) {
     return {
-      label: t('liveEarly', { minutes: Math.abs(drift) }),
+      label: t("liveEarly", { minutes: Math.abs(drift) }),
       textColor: colors.live,
-      backgroundColor: alpha(colors.live, '14'),
-      borderColor: alpha(colors.live, '38'),
+      backgroundColor: alpha(colors.live, "14"),
+      borderColor: alpha(colors.live, "38"),
     };
   }
 
   return {
-    label: t('liveOnTime'),
+    label: t("liveOnTime"),
     textColor: colors.live,
-    backgroundColor: alpha(colors.live, '14'),
-    borderColor: alpha(colors.live, '38'),
+    backgroundColor: alpha(colors.live, "14"),
+    borderColor: alpha(colors.live, "38"),
   };
 }
 
 function routeColor(bus: BusLine, colors: ReturnType<typeof useAppColors>) {
-  return bus === '380' ? colors.route380 : colors.route316;
+  return bus === "380" ? colors.route380 : colors.route316;
 }
 
 function getDisplayedDepartures(departures: Departure[]) {
-  const next = departures.find(dep => dep.status !== 'cancelled');
+  const next = departures.find((dep) => dep.status !== "cancelled");
   const hiddenKeys = new Set<string>();
 
   if (next) hiddenKeys.add(`${next.key}:${next.status}`);
-  if (next?.replacedCancelledDeparture) hiddenKeys.add(`${next.replacedCancelledDeparture.key}:cancelled`);
+  if (next?.replacedCancelledDeparture)
+    hiddenKeys.add(`${next.replacedCancelledDeparture.key}:cancelled`);
 
   return {
     next,
-    upcoming: departures.filter(dep => !hiddenKeys.has(`${dep.key}:${dep.status}`)),
+    upcoming: departures.filter(
+      (dep) => !hiddenKeys.has(`${dep.key}:${dep.status}`),
+    ),
   };
 }
 
@@ -115,13 +144,14 @@ function buildStopSelectorStops({
   stopNames: Record<string, string>;
   stopFallback: (id: string) => string;
 }) {
-  const routeStopMap = new Map(routeStops.map(stop => [stop.id, stop]));
+  const routeStopMap = new Map(routeStops.map((stop) => [stop.id, stop]));
   const ids = favoriteIds.includes(activeStopId)
     ? favoriteIds
     : [...favoriteIds, activeStopId];
 
-  return ids.map(id => {
-    const base = routeStopMap.get(id) ?? findStop(id) ?? { id, label: stopFallback(id) };
+  return ids.map((id) => {
+    const base = routeStopMap.get(id) ??
+      findStop(id) ?? { id, label: stopFallback(id) };
     return { ...base, label: stopNames[id] ?? base.label };
   });
 }
@@ -133,7 +163,9 @@ function BusTag({ bus }: { bus: BusLine }) {
   const color = routeColor(bus, colors);
   return (
     <View style={[styles.busTag, { borderColor: color }]}>
-      <Text style={[styles.busTagText, { color, fontFamily: MONO }]}>{bus}</Text>
+      <Text style={[styles.busTagText, { color, fontFamily: MONO }]}>
+        {bus}
+      </Text>
     </View>
   );
 }
@@ -141,10 +173,18 @@ function BusTag({ bus }: { bus: BusLine }) {
 function LiveDot({ color }: { color?: string }) {
   const colors = useAppColors();
   const styles = useHomeStyles();
-  return <View style={[styles.liveDot, { backgroundColor: color ?? colors.live }]} />;
+  return (
+    <View style={[styles.liveDot, { backgroundColor: color ?? colors.live }]} />
+  );
 }
 
-function ScheduledTimeHint({ time, compact = false }: { time?: string; compact?: boolean }) {
+function ScheduledTimeHint({
+  time,
+  compact = false,
+}: {
+  time?: string;
+  compact?: boolean;
+}) {
   const colors = useAppColors();
   const styles = useHomeStyles();
   const { t } = useI18n();
@@ -153,8 +193,9 @@ function ScheduledTimeHint({ time, compact = false }: { time?: string; compact?:
   return (
     <View
       accessible
-      accessibilityLabel={t('homeScheduledTimeA11y', { time })}
-      style={[styles.scheduledHint, compact && styles.scheduledHintCompact]}>
+      accessibilityLabel={t("homeScheduledTimeA11y", { time })}
+      style={[styles.scheduledHint, compact && styles.scheduledHintCompact]}
+    >
       <MaterialCommunityIcons
         name="calendar-clock"
         size={compact ? 12 : 14}
@@ -166,19 +207,35 @@ function ScheduledTimeHint({ time, compact = false }: { time?: string; compact?:
           compact && styles.scheduledHintTextCompact,
           { fontFamily: MONO },
         ]}
-        numberOfLines={1}>
+        numberOfLines={1}
+      >
         {time}
       </Text>
     </View>
   );
 }
 
-function SectionDivider({ label, style }: { label: string; style?: ViewStyle }) {
+function SectionDivider({
+  label,
+  style,
+}: {
+  label: string;
+  style?: ViewStyle;
+}) {
   const styles = useHomeStyles();
   return (
     <View style={[styles.divider, style]}>
       <View style={styles.dividerLine} />
       <Text style={styles.dividerLabel}>{label}</Text>
+      <View style={styles.dividerLine} />
+    </View>
+  );
+}
+
+function PlainDivider({ style }: { style?: ViewStyle }) {
+  const styles = useHomeStyles();
+  return (
+    <View style={[styles.plainDivider, style]}>
       <View style={styles.dividerLine} />
     </View>
   );
@@ -201,10 +258,11 @@ function ErrorBanner({ message }: { message: string }) {
       style={[
         styles.errorBanner,
         {
-          backgroundColor: alpha(colors.error, '18'),
-          borderColor: alpha(colors.error, '40'),
+          backgroundColor: alpha(colors.error, "18"),
+          borderColor: alpha(colors.error, "40"),
         },
-      ]}>
+      ]}
+    >
       <Text style={[styles.errorText, { color: colors.error }]}>{message}</Text>
     </View>
   );
@@ -223,57 +281,80 @@ type IslandStatusItem = {
   onDismiss?: () => void;
 };
 
-function StatusIsland({
-  items,
-}: {
-  items: IslandStatusItem[];
-}) {
+function StatusIsland({ items }: { items: IslandStatusItem[] }) {
   const colors = useAppColors();
   const styles = useHomeStyles();
   const { t } = useI18n();
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
-  const [dismissedTokens, setDismissedTokens] = useState<Record<string, string>>({});
+  const [dismissedTokens, setDismissedTokens] = useState<
+    Record<string, string>
+  >({});
 
-  const visibleItems = items.filter(item => dismissedTokens[item.key] !== item.dismissToken);
+  const visibleItems = items.filter(
+    (item) => dismissedTokens[item.key] !== item.dismissToken,
+  );
 
   useEffect(() => {
-    if (expandedKey && !visibleItems.some(item => item.key === expandedKey)) {
+    if (expandedKey && !visibleItems.some((item) => item.key === expandedKey)) {
       setExpandedKey(null);
     }
   }, [expandedKey, visibleItems]);
 
   if (visibleItems.length === 0) return null;
 
-  const expandedItem = visibleItems.find(item => item.key === expandedKey) ?? null;
+  const expandedItem =
+    visibleItems.find((item) => item.key === expandedKey) ?? null;
 
   function handleDismiss(item: IslandStatusItem) {
     item.onDismiss?.();
-    setDismissedTokens(current => ({ ...current, [item.key]: item.dismissToken }));
-    setExpandedKey(current => current === item.key ? null : current);
+    setDismissedTokens((current) => ({
+      ...current,
+      [item.key]: item.dismissToken,
+    }));
+    setExpandedKey((current) => (current === item.key ? null : current));
   }
 
   return (
     <View style={styles.statusIslandWrap}>
       <View style={styles.statusIslandRow}>
-        {visibleItems.map(item => {
+        {visibleItems.map((item) => {
           const isExpanded = expandedKey === item.key;
           return (
             <Pressable
               key={item.key}
-              onPress={() => setExpandedKey(current => current === item.key ? null : item.key)}
+              onPress={() =>
+                setExpandedKey((current) =>
+                  current === item.key ? null : item.key,
+                )
+              }
               style={[
                 styles.statusPill,
                 {
-                  backgroundColor: alpha(item.accentColor, isExpanded ? '20' : '14'),
-                  borderColor: alpha(item.accentColor, isExpanded ? '66' : '42'),
+                  backgroundColor: alpha(
+                    item.accentColor,
+                    isExpanded ? "20" : "14",
+                  ),
+                  borderColor: alpha(
+                    item.accentColor,
+                    isExpanded ? "66" : "42",
+                  ),
                 },
-              ]}>
-              <View style={[styles.statusPillDot, { backgroundColor: item.accentColor }]} />
-              <Text style={[styles.statusPillLabel, { color: item.textColor }]} numberOfLines={1}>
+              ]}
+            >
+              <View
+                style={[
+                  styles.statusPillDot,
+                  { backgroundColor: item.accentColor },
+                ]}
+              />
+              <Text
+                style={[styles.statusPillLabel, { color: item.textColor }]}
+                numberOfLines={1}
+              >
                 {item.label}
               </Text>
               <MaterialCommunityIcons
-                name={isExpanded ? 'chevron-up' : 'chevron-down'}
+                name={isExpanded ? "chevron-up" : "chevron-down"}
                 size={15}
                 color={item.textColor}
               />
@@ -287,22 +368,38 @@ function StatusIsland({
           style={[
             styles.statusPanel,
             {
-              borderColor: alpha(expandedItem.accentColor, '42'),
+              borderColor: alpha(expandedItem.accentColor, "42"),
               backgroundColor: colors.surface,
             },
-          ]}>
+          ]}
+        >
           <View style={styles.statusPanelHeader}>
             <View style={styles.statusPanelHeaderMain}>
-              <View style={[styles.statusPillDot, { backgroundColor: expandedItem.accentColor }]} />
-              <Text style={[styles.statusPanelTitle, { color: expandedItem.textColor }]}>
+              <View
+                style={[
+                  styles.statusPillDot,
+                  { backgroundColor: expandedItem.accentColor },
+                ]}
+              />
+              <Text
+                style={[
+                  styles.statusPanelTitle,
+                  { color: expandedItem.textColor },
+                ]}
+              >
                 {expandedItem.label}
               </Text>
             </View>
             <Pressable
               hitSlop={8}
               onPress={() => setExpandedKey(null)}
-              style={styles.statusPanelClose}>
-              <MaterialCommunityIcons name="close" size={15} color={expandedItem.textColor} />
+              style={styles.statusPanelClose}
+            >
+              <MaterialCommunityIcons
+                name="close"
+                size={15}
+                color={expandedItem.textColor}
+              />
             </Pressable>
           </View>
           <Text style={styles.statusPanelText}>{expandedItem.detail}</Text>
@@ -315,11 +412,17 @@ function StatusIsland({
                 style={[
                   styles.statusPanelButton,
                   styles.statusPanelDismissButton,
-                  { borderColor: alpha(expandedItem.accentColor, '36') },
+                  { borderColor: alpha(expandedItem.accentColor, "36") },
                 ]}
-                onPress={() => handleDismiss(expandedItem)}>
-                <Text style={[styles.statusPanelButtonText, { color: colors.textDim }]}>
-                  {t('commonDismiss')}
+                onPress={() => handleDismiss(expandedItem)}
+              >
+                <Text
+                  style={[
+                    styles.statusPanelButtonText,
+                    { color: colors.textDim },
+                  ]}
+                >
+                  {t("commonDismiss")}
                 </Text>
               </Pressable>
             </View>
@@ -327,10 +430,16 @@ function StatusIsland({
               <Pressable
                 style={[
                   styles.statusPanelButton,
-                  { borderColor: alpha(expandedItem.accentColor, '55') },
+                  { borderColor: alpha(expandedItem.accentColor, "55") },
                 ]}
-                onPress={expandedItem.onAction}>
-                <Text style={[styles.statusPanelButtonText, { color: expandedItem.textColor }]}>
+                onPress={expandedItem.onAction}
+              >
+                <Text
+                  style={[
+                    styles.statusPanelButtonText,
+                    { color: expandedItem.textColor },
+                  ]}
+                >
                   {expandedItem.actionLabel}
                 </Text>
               </Pressable>
@@ -349,18 +458,31 @@ function DepartureRow({ dep, isLast }: { dep: Departure; isLast: boolean }) {
   const { t } = useI18n();
   const countdown = formatMins(dep.minsUntil, t);
   const realtimeStatus = getRealtimeStatus(dep, colors, t);
-  const isCancelled = dep.status === 'cancelled';
+  const isCancelled = dep.status === "cancelled";
 
   return (
-    <View style={[styles.row, isCancelled && styles.rowCancelled, !isLast && styles.rowDivider]}>
+    <View
+      style={[
+        styles.row,
+        isCancelled && styles.rowCancelled,
+        !isLast && styles.rowDivider,
+      ]}
+    >
       <BusTag bus={dep.bus} />
       <View style={styles.rowMain}>
         <Text
-          style={[styles.rowTime, isCancelled && styles.rowTimeCancelled, { fontFamily: MONO }]}
-          numberOfLines={1}>
+          style={[
+            styles.rowTime,
+            isCancelled && styles.rowTimeCancelled,
+            { fontFamily: MONO },
+          ]}
+          numberOfLines={1}
+        >
           {dep.time}
         </Text>
-        {dep.live ? <ScheduledTimeHint time={dep.scheduledTime} compact /> : null}
+        {dep.live ? (
+          <ScheduledTimeHint time={dep.scheduledTime} compact />
+        ) : null}
       </View>
       <View style={styles.rowMeta}>
         {realtimeStatus ? (
@@ -372,9 +494,16 @@ function DepartureRow({ dep, isLast }: { dep: Departure; isLast: boolean }) {
                 backgroundColor: realtimeStatus.backgroundColor,
                 borderColor: realtimeStatus.borderColor,
               },
-            ]}>
+            ]}
+          >
             <LiveDot color={realtimeStatus.textColor} />
-            <Text style={[styles.liveBadgeSmallText, { color: realtimeStatus.textColor }]} numberOfLines={1}>
+            <Text
+              style={[
+                styles.liveBadgeSmallText,
+                { color: realtimeStatus.textColor },
+              ]}
+              numberOfLines={1}
+            >
               {realtimeStatus.label}
             </Text>
           </View>
@@ -384,12 +513,19 @@ function DepartureRow({ dep, isLast }: { dep: Departure; isLast: boolean }) {
               styles.cancelledBadgeSmall,
               styles.rowMetaBadge,
               {
-                backgroundColor: alpha(colors.warning, '12'),
-                borderColor: alpha(colors.warning, '30'),
+                backgroundColor: alpha(colors.warning, "12"),
+                borderColor: alpha(colors.warning, "30"),
               },
-            ]}>
-            <Text style={[styles.cancelledBadgeSmallText, { color: colors.warning }]} numberOfLines={1}>
-              {t('homeLikelyCancelled')}
+            ]}
+          >
+            <Text
+              style={[
+                styles.cancelledBadgeSmallText,
+                { color: colors.warning },
+              ]}
+              numberOfLines={1}
+            >
+              {t("homeLikelyCancelled")}
             </Text>
           </View>
         ) : null}
@@ -400,15 +536,20 @@ function DepartureRow({ dep, isLast }: { dep: Departure; isLast: boolean }) {
             isCancelled && { color: colors.warning },
             { fontFamily: MONO },
           ]}
-          numberOfLines={1}>
-          {isCancelled ? t('homeSkip') : countdown}
+          numberOfLines={1}
+        >
+          {isCancelled ? t("homeSkip") : countdown}
         </Text>
       </View>
     </View>
   );
 }
 
-function CancelledDepartureSlab({ dep }: { dep: NonNullable<Departure['replacedCancelledDeparture']> }) {
+function CancelledDepartureSlab({
+  dep,
+}: {
+  dep: NonNullable<Departure["replacedCancelledDeparture"]>;
+}) {
   const colors = useAppColors();
   const styles = useHomeStyles();
   const { t } = useI18n();
@@ -417,25 +558,32 @@ function CancelledDepartureSlab({ dep }: { dep: NonNullable<Departure['replacedC
       style={[
         styles.cancelledSlab,
         {
-          borderColor: alpha(colors.warning, '30'),
-          backgroundColor: alpha(colors.warning, '10'),
+          borderColor: alpha(colors.warning, "30"),
+          backgroundColor: alpha(colors.warning, "10"),
         },
-      ]}>
+      ]}
+    >
       <View style={styles.cancelledSlabHeader}>
         <BusTag bus={dep.bus} />
         <View style={styles.cancelledSlabCopy}>
-          <Text style={[styles.cancelledEyebrow, { color: alpha(colors.warning, 'CC') }]}>
-            {t('homeScheduledBeforeLive')}
+          <Text
+            style={[
+              styles.cancelledEyebrow,
+              { color: alpha(colors.warning, "CC") },
+            ]}
+          >
+            {t("homeScheduledBeforeLive")}
           </Text>
           <Text
             style={[
               styles.cancelledTime,
               {
-                color: alpha(colors.warning, 'F0'),
-                textDecorationColor: alpha(colors.warning, 'C0'),
+                color: alpha(colors.warning, "F0"),
+                textDecorationColor: alpha(colors.warning, "C0"),
                 fontFamily: MONO,
               },
-            ]}>
+            ]}
+          >
             {dep.time}
           </Text>
         </View>
@@ -443,11 +591,14 @@ function CancelledDepartureSlab({ dep }: { dep: NonNullable<Departure['replacedC
           style={[
             styles.cancelledPill,
             {
-              backgroundColor: alpha(colors.warning, '18'),
-              borderColor: alpha(colors.warning, '38'),
+              backgroundColor: alpha(colors.warning, "18"),
+              borderColor: alpha(colors.warning, "38"),
             },
-          ]}>
-          <Text style={[styles.cancelledPillText, { color: colors.warning }]}>{t('homeLikelyCancelled')}</Text>
+          ]}
+        >
+          <Text style={[styles.cancelledPillText, { color: colors.warning }]}>
+            {t("homeLikelyCancelled")}
+          </Text>
         </View>
       </View>
     </View>
@@ -475,13 +626,17 @@ function NextCard({
     );
   }
   if (!dep) {
-    return <EmptyState message={t('homeNoDepartures')} />;
+    return <EmptyState message={t("homeNoDepartures")} />;
   }
-  const minsLabel = dep.minsUntil < 1
-    ? t('commonNow')
-    : dep.minsUntil < 60
-      ? t('timeInMinutes', { minutes: dep.minsUntil })
-      : t('timeInHours', { hours: Math.floor(dep.minsUntil / 60), minutes: dep.minsUntil % 60 });
+  const minsLabel =
+    dep.minsUntil < 1
+      ? t("commonNow")
+      : dep.minsUntil < 60
+        ? t("timeInMinutes", { minutes: dep.minsUntil })
+        : t("timeInHours", {
+            hours: Math.floor(dep.minsUntil / 60),
+            minutes: dep.minsUntil % 60,
+          });
   const realtimeStatus = getRealtimeStatus(dep, colors, t);
   const busColor = routeColor(dep.bus, colors);
   const highlightColor = busColor;
@@ -492,26 +647,31 @@ function NextCard({
         borderColor: realtimeStatus.borderColor,
       }
     : {
-        backgroundColor: alpha(colors.surfaceHigh, '55'),
-        borderColor: alpha(colors.borderStrong, '55'),
+        backgroundColor: alpha(colors.surfaceHigh, "55"),
+        borderColor: alpha(colors.borderStrong, "55"),
       };
   return (
     <View style={styles.nextBlock}>
-      <View style={[styles.nextCard, { borderColor: alpha(highlightColor, '30') }]}>
-        <View style={[styles.nextAccentBar, { backgroundColor: highlightColor }]} />
+      <View
+        style={[styles.nextCard, { borderColor: alpha(highlightColor, "30") }]}
+      >
+        <View
+          style={[styles.nextAccentBar, { backgroundColor: highlightColor }]}
+        />
         <View style={styles.nextContent}>
           <View style={styles.nextHeaderRow}>
             <View style={styles.nextHeaderLeft}>
-              <View
-                style={[
-                  styles.nextRouteBadge,
-                  { borderColor: busColor },
-                ]}>
-                <Text style={[styles.nextRouteBadgeText, { color: busColor, fontFamily: MONO }]}>
+              <View style={[styles.nextRouteBadge, { borderColor: busColor }]}>
+                <Text
+                  style={[
+                    styles.nextRouteBadgeText,
+                    { color: busColor, fontFamily: MONO },
+                  ]}
+                >
                   {dep.bus}
                 </Text>
               </View>
-              <Text style={styles.nextEyebrow}>{t('homeNextDeparture')}</Text>
+              <Text style={styles.nextEyebrow}>{t("homeNextDeparture")}</Text>
             </View>
           </View>
 
@@ -521,19 +681,23 @@ function NextCard({
                 style={[styles.nextTime, { fontFamily: MONO }]}
                 numberOfLines={1}
                 adjustsFontSizeToFit
-                minimumFontScale={0.72}>
+                minimumFontScale={0.72}
+              >
                 {dep.time}
               </Text>
               {dep.live ? <ScheduledTimeHint time={dep.scheduledTime} /> : null}
             </View>
-            <View
-              style={[
-                styles.nextArrivalPanel,
-                arrivalPanelStyle,
-              ]}>
+            <View style={[styles.nextArrivalPanel, arrivalPanelStyle]}>
               <View style={styles.nextArrivalHeader}>
-                <Text style={[styles.nextCountdownLabel, { color: arrivalStatusColor }]}>
-                  {realtimeStatus ? t('homeArrivalSignal') : t('homeScheduleSignal')}
+                <Text
+                  style={[
+                    styles.nextCountdownLabel,
+                    { color: arrivalStatusColor },
+                  ]}
+                >
+                  {realtimeStatus
+                    ? t("homeArrivalSignal")
+                    : t("homeScheduleSignal")}
                 </Text>
                 {realtimeStatus ? (
                   <View
@@ -545,25 +709,38 @@ function NextCard({
                 ) : null}
               </View>
               <Text
-                style={[styles.nextCountdownValue, { color: arrivalStatusColor, fontFamily: MONO }]}
+                style={[
+                  styles.nextCountdownValue,
+                  { color: arrivalStatusColor, fontFamily: MONO },
+                ]}
                 numberOfLines={1}
                 adjustsFontSizeToFit
-                minimumFontScale={0.8}>
+                minimumFontScale={0.8}
+              >
                 {minsLabel}
               </Text>
               <Text
                 style={[
                   styles.nextArrivalMeta,
-                  { color: realtimeStatus ? realtimeStatus.textColor : colors.textDim },
+                  {
+                    color: realtimeStatus
+                      ? realtimeStatus.textColor
+                      : colors.textDim,
+                  },
                 ]}
-                numberOfLines={1}>
-                {realtimeStatus ? realtimeStatus.label : t('homeScheduledEstimate')}
+                numberOfLines={1}
+              >
+                {realtimeStatus
+                  ? realtimeStatus.label
+                  : t("homeScheduledEstimate")}
               </Text>
             </View>
           </View>
         </View>
       </View>
-      {dep.replacedCancelledDeparture ? <CancelledDepartureSlab dep={dep.replacedCancelledDeparture} /> : null}
+      {dep.replacedCancelledDeparture ? (
+        <CancelledDepartureSlab dep={dep.replacedCancelledDeparture} />
+      ) : null}
     </View>
   );
 }
@@ -596,12 +773,12 @@ function ToKojoriView({
   const styles = useHomeStyles();
   const { t } = useI18n();
   const stopNames = useStopNames();
-  const { stops: routeStops } = useRouteStops('toKojori');
+  const { stops: routeStops } = useRouteStops("toKojori");
   const {
     closestStop,
     distanceMeters: closestStopDistance,
     status: closestStopStatus,
-  } = useClosestStop('toKojori', activeStopId, isActive);
+  } = useClosestStop("toKojori", activeStopId, isActive);
   const favoriteStops = useMemo(
     () =>
       buildStopSelectorStops({
@@ -609,13 +786,16 @@ function ToKojoriView({
         activeStopId,
         routeStops,
         stopNames,
-        stopFallback: id => t('commonStopNumber', { id: id.split(':')[1] ?? id }),
+        stopFallback: (id) =>
+          t("commonStopNumber", { id: id.split(":")[1] ?? id }),
       }),
     [activeStopId, favoriteIds, routeStops, stopNames, t],
   );
   const locationSuggestion = useMemo(
     () =>
-      closestStopStatus === 'available' && closestStop && closestStopDistance != null
+      closestStopStatus === "available" &&
+      closestStop &&
+      closestStopDistance != null
         ? {
             stop: {
               ...closestStop,
@@ -627,9 +807,21 @@ function ToKojoriView({
     [closestStop, closestStopDistance, closestStopStatus, stopNames],
   );
 
-  const { data: s380, isLoading: l380, isError: e380 } = useSchedule(ROUTES['380'].id, ROUTES['380'].toKojori);
-  const { data: s316, isLoading: l316, isError: e316 } = useSchedule(ROUTES['316'].id, ROUTES['316'].toKojori);
-  const { arrivals, dataUpdatedAt } = useArrivals(activeStopId, 'toKojori', isActive);
+  const {
+    data: s380,
+    isLoading: l380,
+    isError: e380,
+  } = useSchedule(ROUTES["380"].id, ROUTES["380"].toKojori);
+  const {
+    data: s316,
+    isLoading: l316,
+    isError: e316,
+  } = useSchedule(ROUTES["316"].id, ROUTES["316"].toKojori);
+  const { arrivals, dataUpdatedAt } = useArrivals(
+    activeStopId,
+    "toKojori",
+    isActive,
+  );
 
   const rawDepartures = useMemo(
     () => computeUpcomingDepartures(s380, s316, activeStopId, undefined, now),
@@ -637,19 +829,30 @@ function ToKojoriView({
   );
 
   const departures = useMemo(() => {
-    const merged = mergeArrivalsIntoSchedule(rawDepartures, arrivals, now, dataUpdatedAt);
+    const merged = mergeArrivalsIntoSchedule(
+      rawDepartures,
+      arrivals,
+      now,
+      dataUpdatedAt,
+    );
     return demoEnabled ? injectCancelledDemo(merged, now) : merged;
   }, [rawDepartures, arrivals, now, dataUpdatedAt, demoEnabled]);
 
   const isLoading = l380 || l316;
   const isError = (e380 || e316) && !s380 && !s316;
-  const { next, upcoming } = useMemo(() => getDisplayedDepartures(departures), [departures]);
+  const { next, upcoming } = useMemo(
+    () => getDisplayedDepartures(departures),
+    [departures],
+  );
 
   return (
     <View style={styles.modeContainer}>
       <ScrollView
         style={styles.pageScroll}
-        contentContainerStyle={[styles.pageScrollContent, { paddingBottom: bottomInset + BottomTabInset + 24 }]}
+        contentContainerStyle={[
+          styles.pageScrollContent,
+          { paddingBottom: bottomInset + BottomTabInset + 24 },
+        ]}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
@@ -659,8 +862,11 @@ function ToKojoriView({
             colors={[colors.text]}
             progressBackgroundColor={colors.surfaceHigh}
           />
-        }>
+        }
+      >
         <View style={styles.fixedSection}>
+          <PlainDivider style={styles.topDivider} />
+
           <StopSelector
             stops={favoriteStops}
             activeStopId={activeStopId}
@@ -668,20 +874,27 @@ function ToKojoriView({
             onSelectStop={onSelectStop}
             locationSuggestion={locationSuggestion}
             addStopModal={{
-              title: t('timetableTbilisiStops'),
-              direction: 'toKojori',
+              title: t("timetableTbilisiStops"),
+              direction: "toKojori",
               favoriteIds,
               onToggle: onToggleFavorite,
             }}
           />
 
-          {isError && <ErrorBanner message={t('homeScheduleError')} />}
+          {isError && <ErrorBanner message={t("homeScheduleError")} />}
 
-          <SectionDivider label={t('homeNext')} style={styles.nextDivider} />
-          <NextCard dep={next} accentColor={colors.route380} isLoading={isLoading} />
+          <SectionDivider label={t("homeNext")} style={styles.nextDivider} />
+          <NextCard
+            dep={next}
+            accentColor={colors.route380}
+            isLoading={isLoading}
+          />
         </View>
 
-        <SectionDivider label={t('homeUpcoming')} style={styles.dividerPadded} />
+        <SectionDivider
+          label={t("homeUpcoming")}
+          style={styles.dividerPadded}
+        />
 
         {upcoming.length > 0 ? (
           <View style={[styles.list, styles.listSection]}>
@@ -694,7 +907,7 @@ function ToKojoriView({
             ))}
           </View>
         ) : !isLoading ? (
-          <EmptyState message={t('homeNoDepartures')} />
+          <EmptyState message={t("homeNoDepartures")} />
         ) : null}
       </ScrollView>
     </View>
@@ -729,12 +942,12 @@ function ToTbilisiView({
   const styles = useHomeStyles();
   const { t } = useI18n();
   const stopNames = useStopNames();
-  const { stops: routeStops } = useRouteStops('toTbilisi');
+  const { stops: routeStops } = useRouteStops("toTbilisi");
   const {
     closestStop,
     distanceMeters: closestStopDistance,
     status: closestStopStatus,
-  } = useClosestStop('toTbilisi', activeStopId, isActive);
+  } = useClosestStop("toTbilisi", activeStopId, isActive);
   const favoriteStops = useMemo(
     () =>
       buildStopSelectorStops({
@@ -742,13 +955,16 @@ function ToTbilisiView({
         activeStopId,
         routeStops,
         stopNames,
-        stopFallback: id => t('commonStopNumber', { id: id.split(':')[1] ?? id }),
+        stopFallback: (id) =>
+          t("commonStopNumber", { id: id.split(":")[1] ?? id }),
       }),
     [activeStopId, favoriteIds, routeStops, stopNames, t],
   );
   const locationSuggestion = useMemo(
     () =>
-      closestStopStatus === 'available' && closestStop && closestStopDistance != null
+      closestStopStatus === "available" &&
+      closestStop &&
+      closestStopDistance != null
         ? {
             stop: {
               ...closestStop,
@@ -760,9 +976,21 @@ function ToTbilisiView({
     [closestStop, closestStopDistance, closestStopStatus, stopNames],
   );
 
-  const { data: s380, isLoading: l380, isError: e380 } = useSchedule(ROUTES['380'].id, ROUTES['380'].toTbilisi);
-  const { data: s316, isLoading: l316, isError: e316 } = useSchedule(ROUTES['316'].id, ROUTES['316'].toTbilisi);
-  const { arrivals, dataUpdatedAt, isError: eArrival } = useArrivals(activeStopId, 'toTbilisi', isActive);
+  const {
+    data: s380,
+    isLoading: l380,
+    isError: e380,
+  } = useSchedule(ROUTES["380"].id, ROUTES["380"].toTbilisi);
+  const {
+    data: s316,
+    isLoading: l316,
+    isError: e316,
+  } = useSchedule(ROUTES["316"].id, ROUTES["316"].toTbilisi);
+  const {
+    arrivals,
+    dataUpdatedAt,
+    isError: eArrival,
+  } = useArrivals(activeStopId, "toTbilisi", isActive);
 
   const rawDepartures = useMemo(
     () => computeUpcomingDepartures(s380, s316, activeStopId, undefined, now),
@@ -770,19 +998,30 @@ function ToTbilisiView({
   );
 
   const departures = useMemo(() => {
-    const merged = mergeArrivalsIntoSchedule(rawDepartures, arrivals, now, dataUpdatedAt);
+    const merged = mergeArrivalsIntoSchedule(
+      rawDepartures,
+      arrivals,
+      now,
+      dataUpdatedAt,
+    );
     return demoEnabled ? injectCancelledDemo(merged, now) : merged;
   }, [rawDepartures, arrivals, now, dataUpdatedAt, demoEnabled]);
 
   const isLoading = l380 || l316;
   const isError = (e380 || e316 || eArrival) && !s380 && !s316;
-  const { next, upcoming } = useMemo(() => getDisplayedDepartures(departures), [departures]);
+  const { next, upcoming } = useMemo(
+    () => getDisplayedDepartures(departures),
+    [departures],
+  );
 
   return (
     <View style={styles.modeContainer}>
       <ScrollView
         style={styles.pageScroll}
-        contentContainerStyle={[styles.pageScrollContent, { paddingBottom: bottomInset + BottomTabInset + 24 }]}
+        contentContainerStyle={[
+          styles.pageScrollContent,
+          { paddingBottom: bottomInset + BottomTabInset + 24 },
+        ]}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
@@ -792,8 +1031,11 @@ function ToTbilisiView({
             colors={[colors.text]}
             progressBackgroundColor={colors.surfaceHigh}
           />
-        }>
+        }
+      >
         <View style={styles.fixedSection}>
+          <PlainDivider style={styles.topDivider} />
+
           <StopSelector
             stops={favoriteStops}
             activeStopId={activeStopId}
@@ -801,20 +1043,27 @@ function ToTbilisiView({
             onSelectStop={onSelectStop}
             locationSuggestion={locationSuggestion}
             addStopModal={{
-              title: t('timetableKojoriStops'),
-              direction: 'toTbilisi',
+              title: t("timetableKojoriStops"),
+              direction: "toTbilisi",
               favoriteIds,
               onToggle: onToggleFavorite,
             }}
           />
 
-          {isError && <ErrorBanner message={t('homeScheduleError')} />}
+          {isError && <ErrorBanner message={t("homeScheduleError")} />}
 
-          <SectionDivider label={t('homeNext')} style={styles.nextDivider} />
-          <NextCard dep={next} accentColor={colors.route316} isLoading={isLoading} />
+          <SectionDivider label={t("homeNext")} style={styles.nextDivider} />
+          <NextCard
+            dep={next}
+            accentColor={colors.route316}
+            isLoading={isLoading}
+          />
         </View>
 
-        <SectionDivider label={t('homeUpcoming')} style={styles.dividerPadded} />
+        <SectionDivider
+          label={t("homeUpcoming")}
+          style={styles.dividerPadded}
+        />
 
         {upcoming.length > 0 ? (
           <View style={[styles.list, styles.listSection]}>
@@ -827,7 +1076,7 @@ function ToTbilisiView({
             ))}
           </View>
         ) : !isLoading ? (
-          <EmptyState message={t('homeNoDepartures')} />
+          <EmptyState message={t("homeNoDepartures")} />
         ) : null}
       </ScrollView>
     </View>
@@ -835,18 +1084,18 @@ function ToTbilisiView({
 }
 
 // ── Root ──────────────────────────────────────────────────────────────────────
-export default function HomeScreen({ isActive = false }: { isActive?: boolean }) {
+export default function HomeScreen({
+  isActive = false,
+}: {
+  isActive?: boolean;
+}) {
   const colors = useAppColors();
   const styles = useHomeStyles();
   const { t } = useI18n();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
-  const {
-    settings,
-    update,
-    toggleKojoriFavorite,
-    toggleTbilisiFavorite,
-  } = useSettings();
+  const { settings, update, toggleKojoriFavorite, toggleTbilisiFavorite } =
+    useSettings();
   const { activeDirection, selectDirection } = useActiveDirection();
   const { status: ttcStatus, lastSuccessAt } = useTtcHealth();
   const { widgetMode, widgetStopId } = useLocalSearchParams<{
@@ -856,22 +1105,21 @@ export default function HomeScreen({ isActive = false }: { isActive?: boolean })
 
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [now, setNow] = useState(() => new Date());
-  const [directionSheetOpen, setDirectionSheetOpen] = useState(false);
   const handledWidgetLink = useRef<string | null>(null);
   const mode = directionToMode(activeDirection);
 
   useEffect(() => {
-    if (widgetMode !== 'kojori' && widgetMode !== 'tbilisi') return;
+    if (widgetMode !== "kojori" && widgetMode !== "tbilisi") return;
 
-    const nextKey = `${widgetMode}:${widgetStopId ?? ''}`;
+    const nextKey = `${widgetMode}:${widgetStopId ?? ""}`;
     if (handledWidgetLink.current === nextKey) return;
     handledWidgetLink.current = nextKey;
 
-    selectDirection(modeToDirection(widgetMode), { persist: 'immediate' });
+    selectDirection(modeToDirection(widgetMode), { persist: "immediate" });
 
     if (!widgetStopId) return;
 
-    if (widgetMode === 'kojori') {
+    if (widgetMode === "kojori") {
       const nextFavorites = settings.tbilisiFavorites.includes(widgetStopId)
         ? settings.tbilisiFavorites
         : [widgetStopId, ...settings.tbilisiFavorites];
@@ -900,15 +1148,18 @@ export default function HomeScreen({ isActive = false }: { isActive?: boolean })
 
   useEffect(() => {
     let intervalId: ReturnType<typeof setInterval> | undefined;
-    const timeoutId = setTimeout(() => {
-      setNow(new Date());
-      intervalId = setInterval(() => {
+    const timeoutId = setTimeout(
+      () => {
         setNow(new Date());
-      }, 60_000);
-    }, 60_000 - (Date.now() % 60_000));
+        intervalId = setInterval(() => {
+          setNow(new Date());
+        }, 60_000);
+      },
+      60_000 - (Date.now() % 60_000),
+    );
 
-    const sub = AppState.addEventListener('change', state => {
-      if (state === 'active') setNow(new Date());
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state === "active") setNow(new Date());
     });
 
     return () => {
@@ -918,8 +1169,11 @@ export default function HomeScreen({ isActive = false }: { isActive?: boolean })
     };
   }, []);
 
-  const accentColor = mode === 'kojori' ? colors.route380 : colors.route316;
-  const activeStopId = mode === 'kojori' ? settings.activeTbilisiStopId : settings.activeKojoriStopId;
+  const accentColor = mode === "kojori" ? colors.route380 : colors.route316;
+  const activeStopId =
+    mode === "kojori"
+      ? settings.activeTbilisiStopId
+      : settings.activeKojoriStopId;
 
   async function handleRefresh() {
     if (isRefreshing) return;
@@ -929,14 +1183,25 @@ export default function HomeScreen({ isActive = false }: { isActive?: boolean })
     try {
       await Promise.all([
         queryClient.refetchQueries({
-          predicate: query => Array.isArray(query.queryKey) && query.queryKey[0] === 'arrivals' && query.queryKey[1] === activeStopId,
+          predicate: (query) =>
+            Array.isArray(query.queryKey) &&
+            query.queryKey[0] === "arrivals" &&
+            query.queryKey[1] === activeStopId,
         }),
         queryClient.refetchQueries({
-          queryKey: ['schedule', ROUTES['380'].id, ROUTES['380'][activeDirection]],
+          queryKey: [
+            "schedule",
+            ROUTES["380"].id,
+            ROUTES["380"][activeDirection],
+          ],
           exact: true,
         }),
         queryClient.refetchQueries({
-          queryKey: ['schedule', ROUTES['316'].id, ROUTES['316'][activeDirection]],
+          queryKey: [
+            "schedule",
+            ROUTES["316"].id,
+            ROUTES["316"][activeDirection],
+          ],
           exact: true,
         }),
       ]);
@@ -949,38 +1214,50 @@ export default function HomeScreen({ isActive = false }: { isActive?: boolean })
   const statusItems = useMemo<IslandStatusItem[]>(() => {
     const items: IslandStatusItem[] = [];
 
-    if (ttcStatus !== 'healthy') {
-      const isOffline = ttcStatus === 'offline';
-      const isRateLimited = ttcStatus === 'rate-limited';
+    if (ttcStatus !== "healthy") {
+      const isOffline = ttcStatus === "offline";
+      const isRateLimited = ttcStatus === "rate-limited";
       const accent = isOffline || isRateLimited ? colors.error : colors.warning;
       const textColor = isOffline || isRateLimited ? colors.rose : colors.sand;
       const timeAgo = lastSuccessAt
         ? (() => {
             const mins = Math.floor((Date.now() - lastSuccessAt) / 60000);
-            if (mins < 1) return t('ttcJustNow');
-            if (mins === 1) return t('ttcMinuteAgo');
-            if (mins < 60) return t('ttcMinutesAgo', { minutes: mins });
+            if (mins < 1) return t("ttcJustNow");
+            if (mins === 1) return t("ttcMinuteAgo");
+            if (mins < 60) return t("ttcMinutesAgo", { minutes: mins });
             const hours = Math.floor(mins / 60);
-            return hours === 1 ? t('ttcHourAgo') : t('ttcHoursAgo', { hours });
+            return hours === 1 ? t("ttcHourAgo") : t("ttcHoursAgo", { hours });
           })()
         : null;
 
       items.push({
-        key: 'ttc',
+        key: "ttc",
         dismissToken: `ttc:${ttcStatus}`,
-        label: timeAgo ? `${isRateLimited ? t('ttcRateLimited') : isOffline ? t('ttcOffline') : t('ttcUnstable')} · ${timeAgo}` : (isRateLimited ? t('ttcRateLimited') : isOffline ? t('ttcOffline') : t('ttcUnstable')),
+        label: timeAgo
+          ? `${isRateLimited ? t("ttcRateLimited") : isOffline ? t("ttcOffline") : t("ttcUnstable")} · ${timeAgo}`
+          : isRateLimited
+            ? t("ttcRateLimited")
+            : isOffline
+              ? t("ttcOffline")
+              : t("ttcUnstable"),
         detail: isRateLimited
-          ? t('ttcRateDetail')
+          ? t("ttcRateDetail")
           : isOffline
-          ? t('ttcOfflineDetail')
-          : t('ttcUnstableDetail'),
+            ? t("ttcOfflineDetail")
+            : t("ttcUnstableDetail"),
         meta: lastSuccessAt
-          ? t('ttcLastUpdate', { time: new Date(lastSuccessAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) })
-          : t('ttcNoResponse'),
-        actionLabel: t('commonRefresh'),
+          ? t("ttcLastUpdate", {
+              time: new Date(lastSuccessAt).toLocaleTimeString("en-GB", {
+                hour: "2-digit",
+                minute: "2-digit",
+              }),
+            })
+          : t("ttcNoResponse"),
+        actionLabel: t("commonRefresh"),
         onAction: () => {
           queryClient.refetchQueries({
-            predicate: query => query.meta?.source === 'ttc' && query.getObserversCount() > 0,
+            predicate: (query) =>
+              query.meta?.source === "ttc" && query.getObserversCount() > 0,
           });
         },
         accentColor: accent,
@@ -1005,45 +1282,48 @@ export default function HomeScreen({ isActive = false }: { isActive?: boolean })
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <DirectionPill
-            accentColor={accentColor}
-            onPress={() => setDirectionSheetOpen(true)}
-          />
+          <DirectionPill accentColor={accentColor} />
         </View>
         <View style={styles.headerCenter}>
           <StatusIsland items={statusItems} />
         </View>
         <View style={styles.headerRight}>
-          <Text style={[styles.headerClock, { fontFamily: MONO }]}>{formatHeaderTime(now)}</Text>
+          <Text style={[styles.headerClock, { fontFamily: MONO }]}>
+            {formatHeaderTime(now)}
+          </Text>
           <Pressable
             style={styles.refreshButton}
             onPress={handleRefresh}
-            disabled={isRefreshing}>
+            disabled={isRefreshing}
+          >
             {isRefreshing ? (
               <ActivityIndicator size="small" color={colors.textDim} />
             ) : (
-              <MaterialCommunityIcons name="refresh" size={18} color={colors.textDim} />
+              <MaterialCommunityIcons
+                name="refresh"
+                size={18}
+                color={colors.textDim}
+              />
             )}
           </Pressable>
         </View>
       </View>
 
-      <DirectionPickerSheet
-        visible={directionSheetOpen}
-        onClose={() => setDirectionSheetOpen(false)}
-      />
-
       <View style={styles.contentTopSpacer} />
 
       <View style={styles.directionPaneStack}>
         <View
-          pointerEvents={mode === 'kojori' ? 'auto' : 'none'}
-          style={[styles.directionPane, mode !== 'kojori' && styles.directionPaneHidden]}>
+          pointerEvents={mode === "kojori" ? "auto" : "none"}
+          style={[
+            styles.directionPane,
+            mode !== "kojori" && styles.directionPaneHidden,
+          ]}
+        >
           <ToKojoriView
-            isActive={isActive && mode === 'kojori'}
+            isActive={isActive && mode === "kojori"}
             favoriteIds={settings.tbilisiFavorites}
             activeStopId={settings.activeTbilisiStopId}
-            onSelectStop={id => update({ activeTbilisiStopId: id })}
+            onSelectStop={(id) => update({ activeTbilisiStopId: id })}
             onToggleFavorite={toggleTbilisiFavorite}
             bottomInset={insets.bottom}
             isRefreshing={isRefreshing}
@@ -1053,13 +1333,17 @@ export default function HomeScreen({ isActive = false }: { isActive?: boolean })
           />
         </View>
         <View
-          pointerEvents={mode === 'tbilisi' ? 'auto' : 'none'}
-          style={[styles.directionPane, mode !== 'tbilisi' && styles.directionPaneHidden]}>
+          pointerEvents={mode === "tbilisi" ? "auto" : "none"}
+          style={[
+            styles.directionPane,
+            mode !== "tbilisi" && styles.directionPaneHidden,
+          ]}
+        >
           <ToTbilisiView
-            isActive={isActive && mode === 'tbilisi'}
+            isActive={isActive && mode === "tbilisi"}
             favoriteIds={settings.kojoriFavorites}
             activeStopId={settings.activeKojoriStopId}
-            onSelectStop={id => update({ activeKojoriStopId: id })}
+            onSelectStop={(id) => update({ activeKojoriStopId: id })}
             onToggleFavorite={toggleKojoriFavorite}
             bottomInset={insets.bottom}
             isRefreshing={isRefreshing}
@@ -1076,288 +1360,422 @@ export default function HomeScreen({ isActive = false }: { isActive?: boolean })
 // ── Styles ────────────────────────────────────────────────────────────────────
 function createStyles(C: AppColors) {
   return StyleSheet.create({
-  screen: { flex: 1, backgroundColor: C.bg },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: CONTENT_SIDE,
-    paddingTop: 14,
-    paddingBottom: 12,
-  },
-  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 8, minWidth: 128, flexShrink: 0 },
-  headerCenter: { flex: 1, alignItems: 'center', paddingHorizontal: 8 },
-  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 8, minWidth: 92, justifyContent: 'flex-end', flexShrink: 0 },
-  contentTopSpacer: { height: 12 },
-  headerClock: { color: C.textDim, fontSize: 15, letterSpacing: 0.4 },
-  statusIslandWrap: { alignItems: 'center', gap: 8, maxWidth: '100%' },
-  statusIslandRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  },
-  statusPill: {
-    minHeight: 34,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    borderRadius: 999,
-    borderWidth: 1,
-    paddingLeft: 10,
-    paddingRight: 12,
-    paddingVertical: 6,
-    maxWidth: 220,
-  },
-  statusPillDot: { width: 8, height: 8, borderRadius: 4, flexShrink: 0 },
-  statusPillLabel: { fontSize: 11, fontWeight: '800', letterSpacing: 0.3, flexShrink: 1 },
-  statusPanel: {
-    position: 'absolute',
-    top: 44,
-    alignSelf: 'center',
-    width: '100%',
-    minWidth: 252,
-    maxWidth: 340,
-    borderRadius: 18,
-    borderWidth: 1,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    shadowColor: '#000',
-    shadowOpacity: 0.28,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 10,
-    zIndex: 40,
-  },
-  statusPanelHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 10,
-    marginBottom: 8,
-  },
-  statusPanelHeaderMain: { flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 },
-  statusPanelClose: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  statusPanelTitle: { fontSize: 12, fontWeight: '800', letterSpacing: 0.35 },
-  statusPanelText: { color: C.textDim, fontSize: 12, lineHeight: 17 },
-  statusPanelFooter: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    justifyContent: 'space-between',
-    gap: 10,
-    marginTop: 10,
-  },
-  statusPanelFooterLeft: { flex: 1, gap: 8, minWidth: 0 },
-  statusPanelMeta: { color: C.textFaint, fontSize: 10, flex: 1 },
-  statusPanelButton: {
-    minHeight: 32,
-    borderRadius: 999,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 12,
-    backgroundColor: alpha(C.surfaceHigh, 'AA'),
-  },
-  statusPanelDismissButton: {
-    alignSelf: 'flex-start',
-    backgroundColor: alpha(C.surfaceHigh, '66'),
-  },
-  statusPanelButtonText: { fontSize: 11, fontWeight: '700' },
-  refreshButton: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    borderWidth: 1,
-    borderColor: C.border,
-    backgroundColor: C.surface,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+    screen: { flex: 1, backgroundColor: C.bg },
+    header: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      paddingHorizontal: CONTENT_SIDE,
+      paddingTop: 14,
+      paddingBottom: 12,
+    },
+    headerLeft: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      minWidth: 128,
+      flexShrink: 0,
+    },
+    headerCenter: { flex: 1, alignItems: "center", paddingHorizontal: 8 },
+    headerRight: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      minWidth: 92,
+      justifyContent: "flex-end",
+      flexShrink: 0,
+    },
+    contentTopSpacer: { height: 0 },
+    headerClock: { color: C.textDim, fontSize: 15, letterSpacing: 0.4 },
+    statusIslandWrap: { alignItems: "center", gap: 8, maxWidth: "100%" },
+    statusIslandRow: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 8,
+    },
+    statusPill: {
+      minHeight: 34,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      borderRadius: 999,
+      borderWidth: 1,
+      paddingLeft: 10,
+      paddingRight: 12,
+      paddingVertical: 6,
+      maxWidth: 220,
+    },
+    statusPillDot: { width: 8, height: 8, borderRadius: 4, flexShrink: 0 },
+    statusPillLabel: {
+      fontSize: 11,
+      fontWeight: "800",
+      letterSpacing: 0.3,
+      flexShrink: 1,
+    },
+    statusPanel: {
+      position: "absolute",
+      top: 44,
+      alignSelf: "center",
+      width: "100%",
+      minWidth: 252,
+      maxWidth: 340,
+      borderRadius: 18,
+      borderWidth: 1,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      shadowColor: "#000",
+      shadowOpacity: 0.28,
+      shadowRadius: 16,
+      shadowOffset: { width: 0, height: 10 },
+      elevation: 10,
+      zIndex: 40,
+    },
+    statusPanelHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 10,
+      marginBottom: 8,
+    },
+    statusPanelHeaderMain: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      flex: 1,
+      minWidth: 0,
+    },
+    statusPanelClose: {
+      width: 24,
+      height: 24,
+      borderRadius: 12,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    statusPanelTitle: { fontSize: 12, fontWeight: "800", letterSpacing: 0.35 },
+    statusPanelText: { color: C.textDim, fontSize: 12, lineHeight: 17 },
+    statusPanelFooter: {
+      flexDirection: "row",
+      alignItems: "flex-end",
+      justifyContent: "space-between",
+      gap: 10,
+      marginTop: 10,
+    },
+    statusPanelFooterLeft: { flex: 1, gap: 8, minWidth: 0 },
+    statusPanelMeta: { color: C.textFaint, fontSize: 10, flex: 1 },
+    statusPanelButton: {
+      minHeight: 32,
+      borderRadius: 999,
+      borderWidth: 1,
+      alignItems: "center",
+      justifyContent: "center",
+      paddingHorizontal: 12,
+      backgroundColor: alpha(C.surfaceHigh, "AA"),
+    },
+    statusPanelDismissButton: {
+      alignSelf: "flex-start",
+      backgroundColor: alpha(C.surfaceHigh, "66"),
+    },
+    statusPanelButtonText: { fontSize: 11, fontWeight: "700" },
+    refreshButton: {
+      width: 34,
+      height: 34,
+      borderRadius: 17,
+      borderWidth: 1,
+      borderColor: C.border,
+      backgroundColor: C.surface,
+      alignItems: "center",
+      justifyContent: "center",
+    },
 
-  modeContainer: { flex: 1 },
-  directionPaneStack: { flex: 1 },
-  directionPane: { ...StyleSheet.absoluteFillObject },
-  directionPaneHidden: { opacity: 0 },
-  pageScroll: { flex: 1 },
-  pageScrollContent: { flexGrow: 1 },
-  fixedSection: { paddingHorizontal: CONTENT_SIDE, paddingTop: 0 },
-  dividerPadded: { paddingHorizontal: CONTENT_SIDE },
+    modeContainer: { flex: 1 },
+    directionPaneStack: { flex: 1 },
+    directionPane: { ...StyleSheet.absoluteFillObject },
+    directionPaneHidden: { opacity: 0 },
+    pageScroll: { flex: 1 },
+    pageScrollContent: { flexGrow: 1 },
+    fixedSection: { paddingHorizontal: CONTENT_SIDE, paddingTop: 0 },
+    dividerPadded: { paddingHorizontal: CONTENT_SIDE },
 
-  divider: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: SECTION_SPACE },
-  nextDivider: { paddingTop: SECTION_SPACE, paddingBottom: SECTION_SPACE },
-  dividerLine: { flex: 1, height: 1, backgroundColor: C.border },
-  dividerLabel: { color: C.textFaint, fontSize: 10, fontWeight: '700', letterSpacing: 2.5 },
+    plainDivider: { flexDirection: "row", alignItems: "center" },
+    topDivider: {
+      paddingTop: TOP_DIVIDER_TOP_SPACE,
+      paddingBottom: TOP_DIVIDER_BOTTOM_SPACE,
+    },
+    divider: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+      paddingVertical: SECTION_SPACE,
+    },
+    nextDivider: { paddingTop: SECTION_SPACE, paddingBottom: SECTION_SPACE },
+    dividerLine: { flex: 1, height: 1, backgroundColor: C.border },
+    dividerLabel: {
+      color: C.textFaint,
+      fontSize: 10,
+      fontWeight: "700",
+      letterSpacing: 2.5,
+    },
 
-  nextBlock: { gap: 10 },
-  nextCard: {
-    flexDirection: 'row',
-    backgroundColor: C.surface,
-    borderRadius: 18,
-    borderWidth: 1,
-    overflow: 'hidden',
-    minHeight: 96,
-  },
-  centered: { justifyContent: 'center' },
-  nextAccentBar: { width: 4, alignSelf: 'stretch' },
-  nextContent: { flex: 1, paddingHorizontal: 16, paddingVertical: 14, gap: 12 },
-  nextHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
-  nextHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 10, minWidth: 0, flexShrink: 1 },
-  nextEyebrow: { color: alpha(C.text, 'B8'), fontSize: 10, fontWeight: '700', letterSpacing: 1.8 },
-  nextBodyRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 12 },
-  nextMain: { flex: 1, minWidth: 0, justifyContent: 'flex-end', gap: 5 },
-  nextTime: { color: C.text, fontSize: 46, fontWeight: '700', letterSpacing: -1.6, lineHeight: 48, flexShrink: 1 },
-  nextRouteBadge: {
-    minWidth: 54,
-    paddingHorizontal: 9,
-    paddingVertical: 6,
-    borderRadius: 6,
-    borderWidth: 1.5,
-    alignItems: 'center',
-  },
-  nextRouteBadgeText: { fontSize: 14, fontWeight: '800', letterSpacing: 0.8 },
-  nextArrivalPanel: {
-    minWidth: 118,
-    maxWidth: 148,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 16,
-    borderWidth: 1,
-    alignItems: 'flex-end',
-    justifyContent: 'space-between',
-    gap: 5,
-    shadowColor: C.bg,
-    shadowOpacity: 0.14,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 6 },
-  },
-  nextArrivalHeader: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  nextSignalDot: { width: 7, height: 7, borderRadius: 3.5 },
-  nextCountdownLabel: { color: alpha(C.text, 'C4'), fontSize: 9, fontWeight: '700', letterSpacing: 1.4 },
-  nextCountdownValue: { fontSize: 16, fontWeight: '800', marginTop: 1 },
-  nextArrivalMeta: { fontSize: 11, fontWeight: '700', letterSpacing: 0.2, textAlign: 'right' },
-  cancelledSlab: {
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: alpha(C.warning, '30'),
-    backgroundColor: alpha(C.warning, '10'),
-    paddingHorizontal: 14,
-    paddingVertical: 13,
-  },
-  cancelledSlabHeader: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  cancelledSlabCopy: { flex: 1, minWidth: 0, gap: 2 },
-  cancelledEyebrow: { color: alpha(C.warning, 'CC'), fontSize: 10, fontWeight: '800', letterSpacing: 1.5 },
-  cancelledTime: {
-    color: alpha(C.text, 'A8'),
-    fontSize: 20,
-    fontWeight: '700',
-    textDecorationLine: 'line-through',
-    textDecorationColor: alpha(C.warning, 'C0'),
-  },
-  cancelledPill: {
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    backgroundColor: alpha(C.warning, '18'),
-    borderWidth: 1,
-    borderColor: alpha(C.warning, '38'),
-  },
-  cancelledPillText: { color: C.warning, fontSize: 11, fontWeight: '800', letterSpacing: 0.5 },
-  badge: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 8, borderWidth: 1 },
-  badgeText: { fontSize: 13, fontWeight: '600', letterSpacing: 0.2 },
+    nextBlock: { gap: 10 },
+    nextCard: {
+      flexDirection: "row",
+      backgroundColor: C.surface,
+      borderRadius: 18,
+      borderWidth: 1,
+      overflow: "hidden",
+      minHeight: 96,
+    },
+    centered: { justifyContent: "center" },
+    nextAccentBar: { width: 4, alignSelf: "stretch" },
+    nextContent: {
+      flex: 1,
+      paddingHorizontal: 16,
+      paddingVertical: 14,
+      gap: 12,
+    },
+    nextHeaderRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 10,
+    },
+    nextHeaderLeft: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+      minWidth: 0,
+      flexShrink: 1,
+    },
+    nextEyebrow: {
+      color: alpha(C.text, "B8"),
+      fontSize: 10,
+      fontWeight: "700",
+      letterSpacing: 1.8,
+    },
+    nextBodyRow: { flexDirection: "row", alignItems: "flex-end", gap: 12 },
+    nextMain: { flex: 1, minWidth: 0, justifyContent: "flex-end", gap: 5 },
+    nextTime: {
+      color: C.text,
+      fontSize: 46,
+      fontWeight: "700",
+      letterSpacing: -1.6,
+      lineHeight: 48,
+      flexShrink: 1,
+    },
+    nextRouteBadge: {
+      minWidth: 54,
+      paddingHorizontal: 9,
+      paddingVertical: 6,
+      borderRadius: 6,
+      borderWidth: 1.5,
+      alignItems: "center",
+    },
+    nextRouteBadgeText: { fontSize: 14, fontWeight: "800", letterSpacing: 0.8 },
+    nextArrivalPanel: {
+      minWidth: 118,
+      maxWidth: 148,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      borderRadius: 16,
+      borderWidth: 1,
+      alignItems: "flex-end",
+      justifyContent: "space-between",
+      gap: 5,
+      shadowColor: C.bg,
+      shadowOpacity: 0.14,
+      shadowRadius: 12,
+      shadowOffset: { width: 0, height: 6 },
+    },
+    nextArrivalHeader: { flexDirection: "row", alignItems: "center", gap: 6 },
+    nextSignalDot: { width: 7, height: 7, borderRadius: 3.5 },
+    nextCountdownLabel: {
+      color: alpha(C.text, "C4"),
+      fontSize: 9,
+      fontWeight: "700",
+      letterSpacing: 1.4,
+    },
+    nextCountdownValue: { fontSize: 16, fontWeight: "800", marginTop: 1 },
+    nextArrivalMeta: {
+      fontSize: 11,
+      fontWeight: "700",
+      letterSpacing: 0.2,
+      textAlign: "right",
+    },
+    cancelledSlab: {
+      borderRadius: 18,
+      borderWidth: 1,
+      borderColor: alpha(C.warning, "30"),
+      backgroundColor: alpha(C.warning, "10"),
+      paddingHorizontal: 14,
+      paddingVertical: 13,
+    },
+    cancelledSlabHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+    },
+    cancelledSlabCopy: { flex: 1, minWidth: 0, gap: 2 },
+    cancelledEyebrow: {
+      color: alpha(C.warning, "CC"),
+      fontSize: 10,
+      fontWeight: "800",
+      letterSpacing: 1.5,
+    },
+    cancelledTime: {
+      color: alpha(C.text, "A8"),
+      fontSize: 20,
+      fontWeight: "700",
+      textDecorationLine: "line-through",
+      textDecorationColor: alpha(C.warning, "C0"),
+    },
+    cancelledPill: {
+      borderRadius: 999,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      backgroundColor: alpha(C.warning, "18"),
+      borderWidth: 1,
+      borderColor: alpha(C.warning, "38"),
+    },
+    cancelledPillText: {
+      color: C.warning,
+      fontSize: 11,
+      fontWeight: "800",
+      letterSpacing: 0.5,
+    },
+    badge: {
+      paddingHorizontal: 12,
+      paddingVertical: 7,
+      borderRadius: 8,
+      borderWidth: 1,
+    },
+    badgeText: { fontSize: 13, fontWeight: "600", letterSpacing: 0.2 },
 
-  busTag: {
-    borderWidth: 1.5,
-    borderRadius: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    minWidth: 46,
-    alignItems: 'center',
-  },
-  busTagText: { fontSize: 14, fontWeight: '700', letterSpacing: 0.5 },
+    busTag: {
+      borderWidth: 1.5,
+      borderRadius: 6,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      minWidth: 46,
+      alignItems: "center",
+    },
+    busTagText: { fontSize: 14, fontWeight: "700", letterSpacing: 0.5 },
 
-  list: {
-    backgroundColor: C.surface,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: C.border,
-    overflow: 'hidden',
-  },
-  listSection: { marginHorizontal: CONTENT_SIDE },
-  row: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 15, gap: 14 },
-  rowCancelled: { opacity: 0.86 },
-  rowDivider: { borderBottomWidth: 1, borderBottomColor: C.border },
-  rowMain: { flex: 1, minWidth: 0, gap: 3 },
-  rowTime: { color: C.text, fontSize: 22, fontWeight: '600', letterSpacing: -0.3, minWidth: 0 },
-  rowTimeCancelled: {
-    color: alpha(C.text, '8F'),
-    textDecorationLine: 'line-through',
-    textDecorationColor: alpha(C.warning, 'B0'),
-  },
-  rowMeta: { width: 112, flexShrink: 0, alignItems: 'flex-end', justifyContent: 'center', gap: 7 },
-  rowMetaBadge: { alignSelf: 'flex-end', maxWidth: '100%' },
-  rowCountdown: { color: C.textDim, fontSize: 13, fontWeight: '500', textAlign: 'right' },
-  rowCountdownCancelled: { color: C.warning },
+    list: {
+      backgroundColor: C.surface,
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: C.border,
+      overflow: "hidden",
+    },
+    listSection: { marginHorizontal: CONTENT_SIDE },
+    row: {
+      flexDirection: "row",
+      alignItems: "center",
+      paddingHorizontal: 20,
+      paddingVertical: 15,
+      gap: 14,
+    },
+    rowCancelled: { opacity: 0.86 },
+    rowDivider: { borderBottomWidth: 1, borderBottomColor: C.border },
+    rowMain: { flex: 1, minWidth: 0, gap: 3 },
+    rowTime: {
+      color: C.text,
+      fontSize: 22,
+      fontWeight: "600",
+      letterSpacing: -0.3,
+      minWidth: 0,
+    },
+    rowTimeCancelled: {
+      color: alpha(C.text, "8F"),
+      textDecorationLine: "line-through",
+      textDecorationColor: alpha(C.warning, "B0"),
+    },
+    rowMeta: {
+      width: 112,
+      flexShrink: 0,
+      alignItems: "flex-end",
+      justifyContent: "center",
+      gap: 7,
+    },
+    rowMetaBadge: { alignSelf: "flex-end", maxWidth: "100%" },
+    rowCountdown: {
+      color: C.textDim,
+      fontSize: 13,
+      fontWeight: "500",
+      textAlign: "right",
+    },
+    rowCountdownCancelled: { color: C.warning },
 
-  liveBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
-    borderWidth: 1,
-  },
-  liveBadgeText: { fontSize: 11, fontWeight: '800', letterSpacing: 0.6 },
-  liveBadgeSmall: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-    borderRadius: 999,
-    borderWidth: 1,
-  },
-  liveBadgeSmallText: { fontSize: 11, fontWeight: '700', letterSpacing: 0.2 },
-  scheduledHint: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    gap: 5,
-    maxWidth: '100%',
-  },
-  scheduledHintCompact: { gap: 4 },
-  scheduledHintText: { color: C.textDim, fontSize: 12, fontWeight: '700', letterSpacing: 0.2 },
-  scheduledHintTextCompact: { color: C.textFaint, fontSize: 11, fontWeight: '700', letterSpacing: 0.2 },
-  cancelledBadgeSmall: {
-    borderRadius: 999,
-    paddingHorizontal: 9,
-    paddingVertical: 5,
-    backgroundColor: alpha(C.warning, '12'),
-    borderWidth: 1,
-    borderColor: alpha(C.warning, '30'),
-  },
-  cancelledBadgeSmallText: { color: C.warning, fontSize: 11, fontWeight: '700', letterSpacing: 0.2 },
-  liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: C.live },
+    liveBadge: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 5,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderRadius: 8,
+      borderWidth: 1,
+    },
+    liveBadgeText: { fontSize: 11, fontWeight: "800", letterSpacing: 0.6 },
+    liveBadgeSmall: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 4,
+      paddingHorizontal: 8,
+      paddingVertical: 5,
+      borderRadius: 999,
+      borderWidth: 1,
+    },
+    liveBadgeSmallText: { fontSize: 11, fontWeight: "700", letterSpacing: 0.2 },
+    scheduledHint: {
+      flexDirection: "row",
+      alignItems: "center",
+      alignSelf: "flex-start",
+      gap: 5,
+      maxWidth: "100%",
+    },
+    scheduledHintCompact: { gap: 4 },
+    scheduledHintText: {
+      color: C.textDim,
+      fontSize: 12,
+      fontWeight: "700",
+      letterSpacing: 0.2,
+    },
+    scheduledHintTextCompact: {
+      color: C.textFaint,
+      fontSize: 11,
+      fontWeight: "700",
+      letterSpacing: 0.2,
+    },
+    cancelledBadgeSmall: {
+      borderRadius: 999,
+      paddingHorizontal: 9,
+      paddingVertical: 5,
+      backgroundColor: alpha(C.warning, "12"),
+      borderWidth: 1,
+      borderColor: alpha(C.warning, "30"),
+    },
+    cancelledBadgeSmallText: {
+      color: C.warning,
+      fontSize: 11,
+      fontWeight: "700",
+      letterSpacing: 0.2,
+    },
+    liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: C.live },
 
-  emptyState: { paddingVertical: 32, alignItems: 'center' },
-  emptyText: { color: C.textDim, fontSize: 14 },
-  errorBanner: {
-    backgroundColor: C.error + '18',
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: C.error + '40',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    marginBottom: 4,
-  },
-  errorText: { color: C.error, fontSize: 12 },
+    emptyState: { paddingVertical: 32, alignItems: "center" },
+    emptyText: { color: C.textDim, fontSize: 14 },
+    errorBanner: {
+      backgroundColor: C.error + "18",
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: C.error + "40",
+      paddingHorizontal: 14,
+      paddingVertical: 8,
+      marginBottom: 4,
+    },
+    errorText: { color: C.error, fontSize: 12 },
   });
 }
 

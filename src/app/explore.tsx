@@ -5,7 +5,7 @@ import { Animated, Easing, Image, Pressable, StyleSheet, Text, View } from 'reac
 import MapView, { Marker, Polyline, type Region } from 'react-native-maps';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { DirectionPickerSheet, DirectionPill } from '@/components/direction-picker';
+import { DirectionPill } from '@/components/direction-picker';
 import { TtcStatusChip } from '@/components/ttc-status-banner';
 import { BottomTabInset } from '@/constants/theme';
 import { useActiveDirection } from '@/hooks/use-active-direction';
@@ -72,7 +72,6 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
   const mapRef = useRef<MapView>(null);
   const { activeDirection: direction } = useActiveDirection();
   const { settings } = useSettings();
-  const [directionSheetOpen, setDirectionSheetOpen] = useState(false);
   const lastFitKeyRef = useRef<string | null>(null);
 
   const [mapReady, setMapReady] = useState(false);
@@ -373,7 +372,6 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
       <View style={[styles.topPanel, { top: insets.top + 12 }]}>
         <DirectionPill
           accentColor={direction === 'toKojori' ? colors.route380 : colors.route316}
-          onPress={() => setDirectionSheetOpen(true)}
           style={styles.directionPill}
         />
 
@@ -426,11 +424,6 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
           </View>
         </View>
       ) : null}
-
-      <DirectionPickerSheet
-        visible={directionSheetOpen}
-        onClose={() => setDirectionSheetOpen(false)}
-      />
 
       {mapTimedOut ? (
         <View style={styles.configOverlay} pointerEvents="none">

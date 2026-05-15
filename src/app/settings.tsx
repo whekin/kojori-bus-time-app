@@ -1,4 +1,5 @@
 import { Asset } from 'expo-asset';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import Constants from 'expo-constants';
 import { File } from 'expo-file-system';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
@@ -77,6 +78,7 @@ const BUILD_NUMBER = Platform.select({
   default: '1',
 });
 const EASTER_EGG_TAPS = 7;
+const TTC_MANUAL_REFRESH_COOLDOWN_MS = 3 * 60 * 60 * 1000;
 const EASTER_EGG_MESSAGES = [
   'You found it! This app was made with love for Kojori commuters.',
   'Fun fact: Kojori is 1,340m above sea level.',
@@ -98,7 +100,6 @@ const TTC_DATASETS: {
   { value: 'schedules', labelKey: 'settingsDatasetTimetables', captionKey: 'settingsDatasetTimetablesNote', requestsKey: 'settingsDatasetFourSlowRequests', syncTitleKey: 'settingsSyncDatasetSchedules', accent: 'route380' },
   { value: 'routeStops', labelKey: 'settingsDatasetStops', captionKey: 'settingsDatasetStopsNote', requestsKey: 'settingsDatasetFourSlowRequests', syncTitleKey: 'settingsSyncDatasetRouteStops', accent: 'route316' },
   { value: 'polylines', labelKey: 'settingsDatasetPolylines', captionKey: 'settingsDatasetPolylinesNote', requestsKey: 'settingsDatasetFourSlowRequests', syncTitleKey: 'settingsSyncDatasetPolylines', accent: 'primary' },
-  { value: 'stopNames', labelKey: 'settingsDatasetStopNames', captionKey: 'settingsDatasetStopNamesNote', requestsKey: 'settingsDatasetMissingStopRequests', syncTitleKey: 'settingsSyncDatasetStopNames', accent: 'warning' },
 ];
 const PALETTE_TRANSLATION_KEYS: Record<AppPaletteId, { name: TranslationKey; tagline: TranslationKey }> = {
   nightShift: { name: 'paletteNightShiftName', tagline: 'paletteNightShiftTagline' },
@@ -118,6 +119,7 @@ const LEGAL_DOC_MODULES = {
 } as const;
 
 type LegalDocument = keyof typeof LEGAL_DOC_MODULES;
+type TtcRefreshTarget = TtcOfflineDataset | 'weekly' | 'all';
 type NoticeModalState = {
   icon: string;
   title: string;
@@ -233,6 +235,23 @@ function formatBakedAt(timestamp: string, language: 'en' | 'ka' | 'ru') {
 function isWeeklyRefreshDue(timestamp: number | null) {
   if (!timestamp) return true;
   return Date.now() - timestamp >= TTC_OFFLINE_AUTO_REFRESH_INTERVAL;
+}
+
+function manualRefreshCooldownRemaining(timestamp: number | null) {
+  if (!timestamp) return 0;
+  return Math.max(0, TTC_MANUAL_REFRESH_COOLDOWN_MS - (Date.now() - timestamp));
+}
+
+function formatShortDuration(ms: number, t: ReturnType<typeof useI18n>['t']) {
+  const minutes = Math.ceil(ms / 60_000);
+  if (minutes <= 1) return t('durationOneMinute');
+  if (minutes < 60) return t('durationMinutes', { count: minutes });
+
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  if (remainingMinutes === 0) return t(hours === 1 ? 'durationOneHour' : 'durationHours', { count: hours });
+
+  return t('durationHoursMinutes', { hours, minutes: remainingMinutes });
 }
 
 function formatQueryKind(kind: TtcQueryLogEntry['kind'], t: ReturnType<typeof useI18n>['t']) {
@@ -442,10 +461,12 @@ function DataRefreshCard({
   status,
   refreshingDataset,
   onRefreshDataset,
+  onRefreshAll,
 }: {
   status: ReturnType<typeof useTtcOfflineStatus>;
-  refreshingDataset: TtcOfflineDataset | 'weekly' | null;
+  refreshingDataset: TtcRefreshTarget | null;
   onRefreshDataset: (dataset: TtcOfflineDataset) => void;
+  onRefreshAll: () => void;
 }) {
   const { colors, styles } = useStyles();
   const { t, resolvedLanguage } = useI18n();
@@ -465,6 +486,11 @@ function DataRefreshCard({
     ? Math.min(progressTotal, progressCompleted + (progressCompleted < progressTotal ? 1 : 0))
     : 0;
   const isWaiting = refreshBusy && status.nextRequestAt !== null;
+  const allDatasetsCached = Object.values(status.datasetSync).every(sync => sync.source === 'cache');
+  const refreshAllCooldownMs = allDatasetsCached ? manualRefreshCooldownRemaining(status.lastSyncAt) : 0;
+  const refreshAllCoolingDown = refreshAllCooldownMs > 0;
+  const refreshAllDisabled = refreshBusy || refreshAllCoolingDown;
+  const refreshAllCooldownLabel = refreshAllCoolingDown ? formatShortDuration(refreshAllCooldownMs, t) : '';
   const progressTitle = refreshBusy
     ? progressTotal === 0
       ? t('settingsSyncAlreadyFresh')
@@ -488,7 +514,10 @@ function DataRefreshCard({
               label: status.activeRequestLabel,
             })
           : t('settingsSyncFetching', { dataset: activeDatasetLabel })
+    : refreshAllCoolingDown
+      ? t('settingsRefreshAllCooldown', { time: refreshAllCooldownLabel })
     : t('settingsSyncNote');
+  const refreshAllTextColor = refreshAllDisabled ? colors.textFaint : colors.primary;
 
   return (
     <View style={[styles.card, styles.dataRefreshCard]}>
@@ -509,6 +538,23 @@ function DataRefreshCard({
             </Text>
           </View>
         </View>
+        <Pressable
+          accessibilityRole="button"
+          disabled={refreshAllDisabled}
+          onPress={onRefreshAll}
+          style={({ pressed }) => [
+            styles.dataRefreshAllButton,
+            {
+              borderColor: alpha(colors.primary, refreshAllDisabled ? '24' : '42'),
+              backgroundColor: alpha(colors.primary, pressed && !refreshAllDisabled ? '14' : '0D'),
+            },
+            refreshAllDisabled ? styles.dataRefreshAllButtonDisabled : null,
+          ]}>
+          <MaterialCommunityIcons name="refresh" size={16} color={refreshAllTextColor} />
+          <Text style={[styles.dataRefreshAllButtonText, { color: refreshAllTextColor }]}>
+            {refreshAllCoolingDown ? t('settingsRefreshAllFresh') : t('settingsRefreshAll')}
+          </Text>
+        </Pressable>
         {refreshBusy ? (
           <View style={styles.dataRefreshProgressBlock}>
             <View style={styles.dataRefreshProgressTrack}>
@@ -535,9 +581,10 @@ function DataRefreshCard({
       {TTC_DATASETS.map((dataset, index) => {
         const accentColor = colors[dataset.accent];
         const stepNumber = index + 1;
-        const active = refreshingDataset === dataset.value || (refreshingDataset === 'weekly' && status.status === 'warming' && completedSteps + 1 === stepNumber);
-        const done = refreshingDataset === 'weekly' && status.status === 'warming' && completedSteps >= stepNumber;
-        const queued = refreshingDataset === 'weekly' && status.status === 'warming' && completedSteps + 1 < stepNumber;
+        const refreshingAllDatasets = refreshingDataset === 'weekly' || refreshingDataset === 'all';
+        const active = refreshingDataset === dataset.value || (refreshingAllDatasets && status.status === 'warming' && completedSteps + 1 === stepNumber);
+        const done = refreshingAllDatasets && status.status === 'warming' && completedSteps >= stepNumber;
+        const queued = refreshingAllDatasets && status.status === 'warming' && completedSteps + 1 < stepNumber;
         const disabled = refreshBusy && !active;
         const statusLabel = active
           ? progressTotal > 0
@@ -550,19 +597,25 @@ function DataRefreshCard({
               : t('settingsUpdateStatusUpdate');
         const statusColor = active || done ? accentColor : queued ? colors.textFaint : colors.text;
         const datasetSync = status.datasetSync[dataset.value];
+        const datasetCooldownMs = datasetSync.source === 'cache'
+          ? manualRefreshCooldownRemaining(datasetSync.effectiveUpdatedAt)
+          : 0;
+        const datasetCoolingDown = !refreshBusy && datasetCooldownMs > 0;
+        const rowDisabled = refreshBusy || datasetCoolingDown;
         const freshnessLabel = formatDatasetSyncStatus(datasetSync, t, resolvedLanguage);
+        const resolvedStatusLabel = datasetCoolingDown ? t('settingsRefreshAllFresh') : statusLabel;
 
         return (
           <React.Fragment key={dataset.value}>
             {index > 0 ? <View style={styles.itemDivider} /> : null}
             <Pressable
-              disabled={refreshBusy}
+              disabled={rowDisabled}
               onPress={() => onRefreshDataset(dataset.value)}
               style={({ pressed }) => [
                 styles.dataRefreshRow,
                 compactRows ? styles.dataRefreshRowCompact : null,
-                pressed && !disabled ? { backgroundColor: alpha(accentColor, '08') } : null,
-                disabled ? styles.dataRefreshRowDisabled : null,
+                pressed && !rowDisabled ? { backgroundColor: alpha(accentColor, '08') } : null,
+                (disabled || datasetCoolingDown) ? styles.dataRefreshRowDisabled : null,
               ]}>
               <View style={styles.dataRefreshRowMain}>
                 <View style={[styles.dataRefreshPulse, { backgroundColor: alpha(accentColor, active || done ? '24' : '12'), borderColor: alpha(accentColor, '50') }]}>
@@ -578,8 +631,8 @@ function DataRefreshCard({
                   <Text style={[styles.dataRefreshRequests, { color: accentColor }]}>{t(dataset.requestsKey)}</Text>
                   <Text style={styles.dataRefreshFreshness} numberOfLines={1}>{freshnessLabel}</Text>
                 </View>
-                <View style={[styles.dataRefreshStatusPill, { borderColor: alpha(statusColor, '42'), backgroundColor: alpha(statusColor, active ? '16' : '0F') }]}>
-                  <Text style={[styles.dataRefreshStatusText, { color: statusColor }]}>{statusLabel}</Text>
+                <View style={[styles.dataRefreshStatusPill, { borderColor: alpha(statusColor, datasetCoolingDown ? '24' : '42'), backgroundColor: alpha(statusColor, active ? '16' : '0F') }]}>
+                  <Text style={[styles.dataRefreshStatusText, { color: datasetCoolingDown ? colors.textFaint : statusColor }]}>{resolvedStatusLabel}</Text>
                 </View>
               </View>
             </Pressable>
@@ -994,7 +1047,7 @@ export default function SettingsScreen() {
   const [noticeModal, setNoticeModal] = useState<NoticeModalState | null>(null);
   const [activeSection, setActiveSection] = useState<SettingsSection | null>(null);
   const [easterEggTaps, setEasterEggTaps] = useState(0);
-  const [refreshingDataset, setRefreshingDataset] = useState<TtcOfflineDataset | 'weekly' | null>(null);
+  const [refreshingDataset, setRefreshingDataset] = useState<TtcRefreshTarget | null>(null);
   const easterEggTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const weeklyRefreshStartedRef = useRef(false);
   const paletteCarouselRef = useRef<ICarouselInstance>(null);
@@ -1075,10 +1128,26 @@ export default function SettingsScreen() {
 
   function handleRefreshDataset(dataset: TtcOfflineDataset) {
     if (offlineStatus.status === 'warming' || refreshingDataset) return;
+    const datasetSync = offlineStatus.datasetSync[dataset];
+    if (datasetSync.source === 'cache' && manualRefreshCooldownRemaining(datasetSync.effectiveUpdatedAt) > 0) return;
 
     setRefreshingDataset(dataset);
     void refreshTtcOfflineDataset(queryClient, dataset, { force: true }).finally(() => {
       setRefreshingDataset(current => current === dataset ? null : current);
+    });
+  }
+
+  function handleRefreshAll() {
+    if (offlineStatus.status === 'warming' || refreshingDataset) return;
+    const allDatasetsCached = Object.values(offlineStatus.datasetSync).every(sync => sync.source === 'cache');
+    if (allDatasetsCached && manualRefreshCooldownRemaining(offlineStatus.lastSyncAt) > 0) return;
+
+    setRefreshingDataset('all');
+    void warmTtcOfflineData(queryClient, {
+      force: true,
+      skipFreshMs: TTC_MANUAL_REFRESH_COOLDOWN_MS,
+    }).finally(() => {
+      setRefreshingDataset(current => current === 'all' ? null : current);
     });
   }
 
@@ -1668,6 +1737,7 @@ export default function SettingsScreen() {
           status={offlineStatus}
           refreshingDataset={refreshingDataset}
           onRefreshDataset={handleRefreshDataset}
+          onRefreshAll={handleRefreshAll}
         />
 
         <View style={styles.sectionMeta}>
@@ -2176,6 +2246,18 @@ function createStyles(C: AppColors) {
       backgroundColor: alpha(C.surface, '74'),
     },
     dataRefreshBadgeText: { fontSize: 11, fontWeight: '800', letterSpacing: 0.9, textTransform: 'uppercase' },
+    dataRefreshAllButton: {
+      alignSelf: 'flex-start',
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 7,
+      borderWidth: 1,
+      borderRadius: 999,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+    },
+    dataRefreshAllButtonDisabled: { opacity: 0.62 },
+    dataRefreshAllButtonText: { fontSize: 12, fontWeight: '800', letterSpacing: 0.4 },
     dataRefreshMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' },
     dataRefreshMetaText: { color: C.textFaint, fontSize: 11, fontWeight: '600' },
     dataRefreshMetaDot: { color: C.textFaint, fontSize: 11 },

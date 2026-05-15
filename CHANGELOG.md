@@ -16,6 +16,11 @@
 - Hidden service demo now previews both cancelled replacement departures and live demo buses on the Map
 - Live-departure chips now use the live color consistently, with timing differences kept in the label
 - Boarding stop cards now include a subtle street-map texture behind the controls
+- TTC data refreshes now run one request at a time with no artificial delay, and refreshed datasets rest for three hours before their buttons can run again
+- Timetable spacing is tighter between the stop card, bus filters, and time-of-day sections
+- Data refresh no longer calls individual stop-detail endpoints for stop names, reducing TTC rate-limit pressure
+- Direction controls now use a FROM / TO card style and toggle destination directly without opening a sheet
+- Direction toggles now animate Kojori and Tbilisi swapping places, with the accent color easing into the next route before the rest of the screen updates
 
 ### Fixed
 

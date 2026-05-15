@@ -36,6 +36,7 @@ function writeEnvelope(key: string, cachedAt: number, data: unknown = []) {
 
 function installFetchMock(failScheduleOnce = false) {
   let scheduleCalls = 0;
+  let stopDetailCalls = 0;
   let fetchCalls = 0;
 
   globalThis.fetch = mock(async (input: RequestInfo | URL) => {
@@ -62,6 +63,7 @@ function installFetchMock(failScheduleOnce = false) {
     }
 
     if (url.includes('/v2/stops/')) {
+      stopDetailCalls += 1;
       const id = url.match(/\/v2\/stops\/([^?]+)/)?.[1] ?? '1:999';
       return Response.json({ id, name: `Stop ${id}` });
     }
@@ -72,6 +74,7 @@ function installFetchMock(failScheduleOnce = false) {
   return {
     fetchCalls: () => fetchCalls,
     scheduleCalls: () => scheduleCalls,
+    stopDetailCalls: () => stopDetailCalls,
   };
 }
 
@@ -101,7 +104,6 @@ describe('ttc offline sync progress', () => {
     expect(snapshot.oldestEffectiveSyncAt).toBe(bakedAt);
     expect(snapshot.lastSyncAt).toBe(bakedAt);
     expect(Object.values(snapshot.datasetSync).map(sync => sync.source)).toEqual([
-      'bundled',
       'bundled',
       'bundled',
       'bundled',
@@ -135,7 +137,6 @@ describe('ttc offline sync progress', () => {
     expect(snapshot.datasetSync.schedules.source).toBe('cache');
     expect(snapshot.datasetSync.routeStops.source).toBe('bundled');
     expect(snapshot.datasetSync.polylines.source).toBe('bundled');
-    expect(snapshot.datasetSync.stopNames.source).toBe('bundled');
     expect(snapshot.oldestEffectiveSyncAt).toBe(bakedAt);
     expect(snapshot.lastSyncAt).toBe(bakedAt);
   });
@@ -222,6 +223,21 @@ describe('ttc offline sync progress', () => {
     expect(snapshots.some(snapshot => typeof snapshot.nextRequestAt === 'number')).toBe(true);
   });
 
+  it('does not wait between requests by default', async () => {
+    const client = makeQueryClient();
+    const snapshots: TtcOfflineSnapshot[] = [];
+    offline.__resetTtcOfflineStateForTests();
+    const unsubscribe = offline.subscribeTtcOfflineStatus(() => {
+      snapshots.push({ ...offline.getTtcOfflineSnapshot() });
+    });
+
+    await offline.refreshTtcOfflineDataset(client, 'schedules', { force: true });
+    unsubscribe();
+
+    expect(snapshots.some(snapshot => typeof snapshot.nextRequestAt === 'number')).toBe(false);
+    expect(offline.getTtcOfflineSnapshot().completedRequests).toBe(4);
+  });
+
   it('keeps dataset step progress while warming all offline data', async () => {
     const client = makeQueryClient();
     const snapshots: TtcOfflineSnapshot[] = [];
@@ -235,7 +251,50 @@ describe('ttc offline sync progress', () => {
     expect(snapshots.some(snapshot => snapshot.activeDataset === 'schedules' && snapshot.activeDatasetStep === 1)).toBe(true);
     expect(snapshots.some(snapshot => snapshot.activeDataset === 'routeStops' && snapshot.activeDatasetStep === 2)).toBe(true);
     expect(snapshots.some(snapshot => snapshot.activeDataset === 'polylines' && snapshot.activeDatasetStep === 3)).toBe(true);
-    expect(snapshots.some(snapshot => snapshot.activeDataset === 'stopNames' && snapshot.activeDatasetStep === 4)).toBe(true);
     expect(snapshots.some(snapshot => snapshot.totalRequests > 0 && snapshot.completedRequests > 0)).toBe(true);
+  });
+
+  it('forces every dataset when manually refreshing all offline data', async () => {
+    const client = makeQueryClient();
+    const fetchMock = installFetchMock();
+    const { ROUTES } = await import('./ttc');
+    const pairs = [
+      { routeId: ROUTES['380'].id, patternSuffix: ROUTES['380'].toKojori },
+      { routeId: ROUTES['380'].id, patternSuffix: ROUTES['380'].toTbilisi },
+      { routeId: ROUTES['316'].id, patternSuffix: ROUTES['316'].toKojori },
+      { routeId: ROUTES['316'].id, patternSuffix: ROUTES['316'].toTbilisi },
+    ];
+
+    for (const pair of pairs) {
+      await offline.writeScheduleCache(pair.routeId, pair.patternSuffix, []);
+    }
+
+    await offline.warmTtcOfflineData(client, { force: true });
+
+    expect(fetchMock.scheduleCalls()).toBe(4);
+    expect(fetchMock.stopDetailCalls()).toBe(0);
+    expect(offline.getTtcOfflineSnapshot().lastCompletedDataset).toBe('polylines');
+  });
+
+  it('skips recently refreshed datasets during a forced all refresh', async () => {
+    const client = makeQueryClient();
+    const fetchMock = installFetchMock();
+    const { ROUTES } = await import('./ttc');
+    const pairs = [
+      { routeId: ROUTES['380'].id, patternSuffix: ROUTES['380'].toKojori },
+      { routeId: ROUTES['380'].id, patternSuffix: ROUTES['380'].toTbilisi },
+      { routeId: ROUTES['316'].id, patternSuffix: ROUTES['316'].toKojori },
+      { routeId: ROUTES['316'].id, patternSuffix: ROUTES['316'].toTbilisi },
+    ];
+
+    for (const pair of pairs) {
+      await offline.writeScheduleCache(pair.routeId, pair.patternSuffix, []);
+    }
+
+    await offline.warmTtcOfflineData(client, { force: true, skipFreshMs: 3 * 60 * 60 * 1000 });
+
+    expect(fetchMock.scheduleCalls()).toBe(0);
+    expect(fetchMock.stopDetailCalls()).toBe(0);
+    expect(offline.getTtcOfflineSnapshot().lastCompletedDataset).toBe('polylines');
   });
 });
