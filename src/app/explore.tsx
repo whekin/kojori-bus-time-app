@@ -264,11 +264,12 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
   return (
     <View style={styles.screen}>
       <MapView
+        key={`map-${resolvedThemeMode}`}
         ref={mapRef}
         style={StyleSheet.absoluteFill}
-        initialRegion={DEFAULT_REGION}
+        initialRegion={currentRegion}
         userInterfaceStyle={resolvedThemeMode}
-        customMapStyle={resolvedThemeMode === 'dark' ? GOOGLE_DARK_MAP_STYLE : []}
+        customMapStyle={resolvedThemeMode === 'dark' ? GOOGLE_DARK_MAP_STYLE : undefined}
         showsUserLocation={hasUserLocation}
         showsMyLocationButton={false}
         showsPointsOfInterests={false}

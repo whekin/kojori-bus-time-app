@@ -484,10 +484,11 @@ function NextCard({
       : t('timeInHours', { hours: Math.floor(dep.minsUntil / 60), minutes: dep.minsUntil % 60 });
   const realtimeStatus = getRealtimeStatus(dep, colors, t);
   const busColor = routeColor(dep.bus, colors);
+  const highlightColor = busColor;
   return (
     <View style={styles.nextBlock}>
-      <View style={[styles.nextCard, { borderColor: alpha(accentColor, '30') }]}>
-        <View style={[styles.nextAccentBar, { backgroundColor: accentColor }]} />
+      <View style={[styles.nextCard, { borderColor: alpha(highlightColor, '30') }]}>
+        <View style={[styles.nextAccentBar, { backgroundColor: highlightColor }]} />
         <View style={styles.nextContent}>
           <View style={styles.nextHeaderRow}>
             <View style={styles.nextHeaderLeft}>

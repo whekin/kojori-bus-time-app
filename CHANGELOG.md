@@ -16,6 +16,8 @@
 
 ### Fixed
 
+- Departures tab and next-bus highlights now update to the active palette colors after theme changes
+- Map theme now refreshes when switching between light and dark mode instead of keeping the previous Google Maps style
 - Start screen now follows the selected light or dark theme instead of always using a light background
 
 ### Infra

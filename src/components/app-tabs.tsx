@@ -79,7 +79,7 @@ function TabButton({
       opacity: 1 - distance * 0.15,
       transform: [{ scale: 1 - distance * 0.04 }],
     };
-  });
+  }, [C.textDim, index, tab.accent]);
 
   const labelStyle = useAnimatedStyle(() => {
     const distance = Math.min(Math.abs(pagerProgress.value - index), 1);
@@ -89,7 +89,7 @@ function TabButton({
       color,
       opacity: 1 - distance * 0.2,
     };
-  });
+  }, [C.text, C.textDim, index]);
 
   return (
     <Pressable
