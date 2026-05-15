@@ -902,28 +902,6 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
                 style={styles.focusedStopTrayActions}>
                 <Pressable
                   accessibilityRole="button"
-                  accessibilityLabel={t('mapUseStopA11y', { stop: focusedStop.label })}
-                  accessibilityState={{ selected: focusedStopIsActive }}
-                  onPress={applyFocusedStop}
-                  style={[
-                    styles.focusedStopTrayAction,
-                    { borderColor: alpha(focusedStopAccent, '42') },
-                    focusedStopIsActive && {
-                      backgroundColor: alpha(focusedStopAccent, '12'),
-                    },
-                  ]}
-                >
-                  <MaterialCommunityIcons
-                    name={focusedStopIsActive ? 'check-circle' : 'map-marker-check-outline'}
-                    size={15}
-                    color={focusedStopAccent}
-                  />
-                  <Text style={[styles.focusedStopTrayActionText, { color: focusedStopAccent }]}>
-                    {t('mapUseThisStop')}
-                  </Text>
-                </Pressable>
-                <Pressable
-                  accessibilityRole="button"
                   accessibilityLabel={
                     focusedStopIsSaved
                       ? t('mapRemoveSavedStopA11y', { stop: focusedStop.label })
