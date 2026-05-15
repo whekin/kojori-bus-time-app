@@ -125,9 +125,10 @@ export function StartScreen({ onDone }: { onDone: () => void }) {
             const sub = mode === 'kojori' ? t('startKojoriSub') : t('startTbilisiSub');
             const accent = mode === 'kojori' ? kojoriAccent : tbilisiAccent;
             const borderColor = alpha(accent, colors.mode === 'dark' ? '55' : '35');
-            const arrowColor = colors.mode === 'dark' ? '#FFFFFF' : colors.text;
-            const arrowFill = alpha(accent, colors.mode === 'dark' ? '3D' : '2E');
-            const arrowBorder = alpha('#FFFFFF', colors.mode === 'dark' ? '7A' : 'A8');
+            const arrowColor = '#FFFFFF';
+            const arrowFill = colors.mode === 'dark' ? alpha(accent, '3D') : alpha('#05070B', '36');
+            const arrowBorder = colors.mode === 'dark' ? alpha('#FFFFFF', '54') : alpha(accent, '8A');
+            const cardShadow = alpha('#000000', colors.mode === 'dark' ? 'CC' : '9F');
             return (
               <Pressable
                 key={mode}
@@ -150,16 +151,16 @@ export function StartScreen({ onDone }: { onDone: () => void }) {
                 <CardScrim mode={mode} colors={colors} accent={accent} />
                 <View style={styles.cardContent}>
                   <View style={styles.cardCopy}>
-                    <Text style={[styles.cardTo, { color: accent, fontFamily: DISPLAY }]}>{t('directionTo').trim()}</Text>
-                    <Text style={[styles.cardLabel, { fontFamily: DISPLAY }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.78}>{label}</Text>
-                    <Text style={styles.cardSub}>{sub}</Text>
+                    <Text style={[styles.cardTo, { color: accent, fontFamily: DISPLAY, textShadowColor: cardShadow }]}>{t('directionTo').trim()}</Text>
+                    <Text style={[styles.cardLabel, { fontFamily: DISPLAY, textShadowColor: cardShadow }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.78}>{label}</Text>
+                    <Text style={[styles.cardSub, { textShadowColor: cardShadow }]}>{sub}</Text>
                     {mode === 'kojori' ? (
                       <View style={styles.elevationRow}>
                         <View style={styles.mountainIcon}>
                           <View style={[styles.mountainPeak, styles.mountainPeakLeft]} />
                           <View style={[styles.mountainPeak, styles.mountainPeakRight]} />
                         </View>
-                        <Text style={styles.elevationText}>1340 m</Text>
+                        <Text style={[styles.elevationText, { textShadowColor: cardShadow }]}>1340 m</Text>
                       </View>
                     ) : null}
                   </View>
@@ -222,28 +223,34 @@ export function StartScreen({ onDone }: { onDone: () => void }) {
 }
 
 function CardScrim({ mode, colors, accent }: { mode: Mode; colors: AppColors; accent: string }) {
-  const baseOpacity = colors.mode === 'dark' ? 0.36 : 0.24;
-  const leftOpacity = colors.mode === 'dark' ? 0.9 : 0.78;
-  const bottomOpacity = colors.mode === 'dark' ? 0.68 : 0.5;
+  const isDark = colors.mode === 'dark';
+  const scrimColor = isDark ? colors.bg : '#070B12';
+  const baseOpacity = isDark ? 0.36 : 0;
+  const leftOpacity = isDark ? 0.9 : 0.54;
+  const midOpacity = isDark ? '0.42' : '0.24';
+  const fadeOpacity = isDark ? '0.1' : '0.04';
+  const rightOpacity = isDark ? '0.1' : '0';
+  const bottomOpacity = isDark ? 0.68 : 0.22;
   const rightGlowOpacity = mode === 'kojori' ? 0.12 : 0.16;
   return (
     <Svg pointerEvents="none" style={stylesStatic.cardScrim} width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">
       <Defs>
         <LinearGradient id={`${mode}-card-left`} x1="0" y1="0" x2="1" y2="0">
-          <Stop offset="0" stopColor={colors.bg} stopOpacity={leftOpacity} />
-          <Stop offset="0.58" stopColor={colors.bg} stopOpacity={colors.mode === 'dark' ? '0.42' : '0.34'} />
-          <Stop offset="1" stopColor={colors.bg} stopOpacity="0.1" />
+          <Stop offset="0" stopColor={scrimColor} stopOpacity={leftOpacity} />
+          <Stop offset="0.48" stopColor={scrimColor} stopOpacity={midOpacity} />
+          <Stop offset="0.72" stopColor={scrimColor} stopOpacity={fadeOpacity} />
+          <Stop offset="1" stopColor={scrimColor} stopOpacity={rightOpacity} />
         </LinearGradient>
         <LinearGradient id={`${mode}-card-bottom`} x1="0" y1="0" x2="0" y2="1">
-          <Stop offset="0" stopColor={colors.bg} stopOpacity="0.03" />
-          <Stop offset="1" stopColor={colors.bg} stopOpacity={bottomOpacity} />
+          <Stop offset="0" stopColor={scrimColor} stopOpacity="0.03" />
+          <Stop offset="1" stopColor={scrimColor} stopOpacity={bottomOpacity} />
         </LinearGradient>
         <LinearGradient id={`${mode}-card-glow`} x1="0" y1="0" x2="1" y2="0">
           <Stop offset="0" stopColor={accent} stopOpacity="0" />
           <Stop offset="1" stopColor={accent} stopOpacity={rightGlowOpacity} />
         </LinearGradient>
       </Defs>
-      <Rect x="0" y="0" width="100" height="100" fill={colors.bg} opacity={baseOpacity} />
+      <Rect x="0" y="0" width="100" height="100" fill={scrimColor} opacity={baseOpacity} />
       <Rect x="0" y="0" width="100" height="100" fill={`url(#${mode}-card-left)`} />
       <Rect x="0" y="0" width="100" height="100" fill={`url(#${mode}-card-bottom)`} />
       <Rect x="0" y="0" width="100" height="100" fill={`url(#${mode}-card-glow)`} />
@@ -403,18 +410,18 @@ function createStyles(C: AppColors) {
       textShadowOffset: { width: 0, height: 1 },
     },
     arrowButton: {
-      width: 54,
-      height: 54,
-      borderRadius: 27,
+      width: 50,
+      height: 50,
+      borderRadius: 25,
       borderWidth: 1,
       alignSelf: 'center',
       flexShrink: 0,
       alignItems: 'center',
       justifyContent: 'center',
       shadowColor: C.mode === 'dark' ? '#000000' : C.route380,
-      shadowOpacity: 0.22,
-      shadowRadius: 14,
-      shadowOffset: { width: 0, height: 8 },
+      shadowOpacity: C.mode === 'dark' ? 0.22 : 0.18,
+      shadowRadius: 12,
+      shadowOffset: { width: 0, height: 6 },
       elevation: 4,
     },
     locationFixedArea: {
