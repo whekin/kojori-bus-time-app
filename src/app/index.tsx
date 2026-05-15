@@ -34,9 +34,12 @@ import {
   computeUpcomingDepartures,
   Departure,
   findStop,
+  getDepartureServiceBoundary,
   injectCancelledDemo,
   mergeArrivalsIntoSchedule,
   ROUTES,
+  type DepartureServiceBoundary,
+  type ServiceDeparture,
   type StopInfo,
 } from "@/services/ttc";
 
@@ -129,6 +132,28 @@ function getDisplayedDepartures(departures: Departure[]) {
       (dep) => !hiddenKeys.has(`${dep.key}:${dep.status}`),
     ),
   };
+}
+
+function languageDateLocale(language: "en" | "ka" | "ru") {
+  if (language === "ka") return "ka-GE";
+  if (language === "ru") return "ru-RU";
+  return "en-GB";
+}
+
+function formatNextServiceWhen(
+  departure: ServiceDeparture,
+  t: ReturnType<typeof useI18n>["t"],
+  language: "en" | "ka" | "ru",
+) {
+  if (departure.daysUntil === 1) return t("homeNextServiceTomorrow", { time: departure.time });
+
+  const date = new Date(`${departure.date}T12:00:00`);
+  const label = date.toLocaleDateString(languageDateLocale(language), {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  });
+  return t("homeNextServiceDate", { date: label, time: departure.time });
 }
 
 function buildStopSelectorStops({
@@ -610,14 +635,16 @@ function NextCard({
   dep,
   accentColor,
   isLoading,
+  serviceBoundary,
 }: {
   dep: Departure | undefined;
   accentColor: string;
   isLoading: boolean;
+  serviceBoundary: DepartureServiceBoundary;
 }) {
   const colors = useAppColors();
   const styles = useHomeStyles();
-  const { t, formatDuration, formatRelativeDuration } = useI18n();
+  const { t, formatDuration, formatRelativeDuration, resolvedLanguage } = useI18n();
   if (isLoading && !dep) {
     return (
       <View style={[styles.nextCard, styles.centered]}>
@@ -626,6 +653,31 @@ function NextCard({
     );
   }
   if (!dep) {
+    if (serviceBoundary.nextServiceDeparture) {
+      const when = formatNextServiceWhen(serviceBoundary.nextServiceDeparture, t, resolvedLanguage);
+      return (
+        <View style={[styles.nextCard, { borderColor: alpha(accentColor, "30") }]}>
+          <View style={[styles.nextAccentBar, { backgroundColor: accentColor }]} />
+          <View style={styles.nextContent}>
+            <Text style={styles.nextEyebrow}>{t("homeNextService")}</Text>
+            <Text style={styles.serviceTitle}>
+              {serviceBoundary.serviceEndedToday
+                ? t("homeServiceEndedTitle")
+                : t("homeNoServiceTodayTitle")}
+            </Text>
+            <Text style={styles.serviceDetail}>
+              {t("homeNextServiceDetail", { when })}
+            </Text>
+            <View style={[styles.servicePill, { borderColor: alpha(accentColor, "38"), backgroundColor: alpha(accentColor, "12") }]}>
+              <BusTag bus={serviceBoundary.nextServiceDeparture.bus} />
+              <Text style={[styles.servicePillText, { color: accentColor, fontFamily: MONO }]}>
+                {serviceBoundary.nextServiceDeparture.time}
+              </Text>
+            </View>
+          </View>
+        </View>
+      );
+    }
     return <EmptyState message={t("homeNoDepartures")} />;
   }
   const minsLabel = (() => {
@@ -675,7 +727,9 @@ function NextCard({
                   {dep.bus}
                 </Text>
               </View>
-              <Text style={styles.nextEyebrow}>{t("homeNextDeparture")}</Text>
+              <Text style={styles.nextEyebrow}>
+                {serviceBoundary.nextDepartureIsFinal ? t("homeLastDeparture") : t("homeNextDeparture")}
+              </Text>
             </View>
           </View>
 
@@ -736,7 +790,9 @@ function NextCard({
               >
                 {realtimeStatus
                   ? realtimeStatus.label
-                  : t("homeScheduledEstimate")}
+                  : serviceBoundary.nextDepartureIsFinal
+                    ? t("homeLastDepartureNote")
+                    : t("homeScheduledEstimate")}
               </Text>
             </View>
           </View>
@@ -848,6 +904,12 @@ function ToKojoriView({
     () => getDisplayedDepartures(departures),
     [departures],
   );
+  const serviceBoundary = useMemo(
+    () => getDepartureServiceBoundary(s380, s316, activeStopId, next, now),
+    [s380, s316, activeStopId, next, now],
+  );
+  const hasNextServiceCard = !next && Boolean(serviceBoundary.nextServiceDeparture);
+  const showUpcomingEmpty = !isLoading && upcoming.length === 0 && !serviceBoundary.nextDepartureIsFinal && !hasNextServiceCard;
 
   return (
     <View style={styles.modeContainer}>
@@ -893,6 +955,7 @@ function ToKojoriView({
             dep={next}
             accentColor={colors.route380}
             isLoading={isLoading}
+            serviceBoundary={serviceBoundary}
           />
         </View>
 
@@ -911,7 +974,7 @@ function ToKojoriView({
               />
             ))}
           </View>
-        ) : !isLoading ? (
+        ) : showUpcomingEmpty ? (
           <EmptyState message={t("homeNoDepartures")} />
         ) : null}
       </ScrollView>
@@ -1018,6 +1081,12 @@ function ToTbilisiView({
     () => getDisplayedDepartures(departures),
     [departures],
   );
+  const serviceBoundary = useMemo(
+    () => getDepartureServiceBoundary(s380, s316, activeStopId, next, now),
+    [s380, s316, activeStopId, next, now],
+  );
+  const hasNextServiceCard = !next && Boolean(serviceBoundary.nextServiceDeparture);
+  const showUpcomingEmpty = !isLoading && upcoming.length === 0 && !serviceBoundary.nextDepartureIsFinal && !hasNextServiceCard;
 
   return (
     <View style={styles.modeContainer}>
@@ -1063,6 +1132,7 @@ function ToTbilisiView({
             dep={next}
             accentColor={colors.route316}
             isLoading={isLoading}
+            serviceBoundary={serviceBoundary}
           />
         </View>
 
@@ -1081,7 +1151,7 @@ function ToTbilisiView({
               />
             ))}
           </View>
-        ) : !isLoading ? (
+        ) : showUpcomingEmpty ? (
           <EmptyState message={t("homeNoDepartures")} />
         ) : null}
       </ScrollView>
@@ -1608,6 +1678,34 @@ function createStyles(C: AppColors) {
       fontWeight: "700",
       letterSpacing: 0.2,
       textAlign: "right",
+    },
+    serviceTitle: {
+      color: C.text,
+      fontSize: 23,
+      lineHeight: 28,
+      fontWeight: "800",
+      letterSpacing: -0.4,
+    },
+    serviceDetail: {
+      color: C.textDim,
+      fontSize: 14,
+      lineHeight: 20,
+      fontWeight: "600",
+    },
+    servicePill: {
+      alignSelf: "flex-start",
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+      borderRadius: 999,
+      borderWidth: 1,
+      paddingHorizontal: 10,
+      paddingVertical: 8,
+    },
+    servicePillText: {
+      fontSize: 18,
+      fontWeight: "800",
+      letterSpacing: -0.2,
     },
     cancelledSlab: {
       borderRadius: 18,

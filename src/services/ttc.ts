@@ -356,10 +356,33 @@ export async function fetchVehiclePositions(
 
 // ── Schedule helpers ──────────────────────────────────────────────────────────
 
+function serviceDateString(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function addServiceDays(date: Date, days: number): Date {
+  const next = new Date(date);
+  next.setHours(12, 0, 0, 0);
+  next.setDate(next.getDate() + days);
+  return next;
+}
+
+function getSchedulePeriodForDate(
+  periods: SchedulePeriod[] | undefined,
+  date: Date,
+): SchedulePeriod | undefined {
+  if (!periods?.length) return undefined;
+  const serviceDate = serviceDateString(date);
+  return periods.find(p => p.serviceDates.includes(serviceDate));
+}
+
 /** Returns the schedule period valid for today, falling back to first period. */
-export function getTodayPeriod(periods: SchedulePeriod[]): SchedulePeriod | undefined {
+export function getTodayPeriod(periods: SchedulePeriod[], now = new Date()): SchedulePeriod | undefined {
   if (!periods.length) return undefined;
-  const today = new Date().toISOString().split('T')[0];
+  const today = serviceDateString(now);
   return periods.find(p => p.serviceDates.includes(today)) ?? periods[0];
 }
 
@@ -404,6 +427,144 @@ export interface Departure {
   replacedCancelledDeparture?: DepartureSummary;
 }
 
+export interface ServiceDeparture extends DepartureSummary {
+  date: string;
+  daysUntil: number;
+  minsFromMidnight: number;
+}
+
+export interface DepartureServiceBoundary {
+  finalDepartureToday?: ServiceDeparture;
+  nextServiceDeparture?: ServiceDeparture;
+  nextDepartureIsFinal: boolean;
+  hasServiceToday: boolean;
+  serviceEndedToday: boolean;
+}
+
+function scheduledDeparturesForDate(
+  schedule380: SchedulePeriod[] | undefined,
+  schedule316: SchedulePeriod[] | undefined,
+  stopId: string,
+  date: Date,
+  daysUntil: number,
+): ServiceDeparture[] {
+  const lookupStopId = SCHEDULE_STOP_PROXY[stopId] ?? stopId;
+  const result: ServiceDeparture[] = [];
+  const entries: [BusLine, SchedulePeriod[] | undefined][] = [
+    ['380', schedule380],
+    ['316', schedule316],
+  ];
+
+  for (const [bus, schedule] of entries) {
+    const period = getSchedulePeriodForDate(schedule, date);
+    if (!period) continue;
+    const times = extractStopTimes(period, lookupStopId);
+
+    for (const time of times) {
+      const minsFromMidnight = parseTimeToMins(time);
+      result.push({
+        key: `${bus}-${serviceDateString(date)}-${minsFromMidnight}`,
+        bus,
+        time: formatTime(minsFromMidnight),
+        minsUntil: daysUntil * 24 * 60 + minsFromMidnight,
+        scheduledTime: formatTime(minsFromMidnight),
+        scheduledMinsUntil: daysUntil * 24 * 60 + minsFromMidnight,
+        date: serviceDateString(date),
+        daysUntil,
+        minsFromMidnight,
+      });
+    }
+  }
+
+  return result.sort((a, b) => a.daysUntil - b.daysUntil || a.minsFromMidnight - b.minsFromMidnight);
+}
+
+export function getLastDepartureToday(
+  schedule380: SchedulePeriod[] | undefined,
+  schedule316: SchedulePeriod[] | undefined,
+  stopId: string,
+  now = new Date(),
+): ServiceDeparture | undefined {
+  const nowMins = now.getHours() * 60 + now.getMinutes();
+  const departures = scheduledDeparturesForDate(schedule380, schedule316, stopId, now, 0);
+  const finalDeparture = departures.at(-1);
+  return finalDeparture
+    ? {
+        ...finalDeparture,
+        minsUntil: finalDeparture.minsFromMidnight - nowMins,
+        scheduledMinsUntil: finalDeparture.minsFromMidnight - nowMins,
+      }
+    : undefined;
+}
+
+export function isFinalDepartureToday(
+  departure: Pick<Departure, 'bus' | 'time' | 'scheduledTime'> | undefined,
+  schedule380: SchedulePeriod[] | undefined,
+  schedule316: SchedulePeriod[] | undefined,
+  stopId: string,
+  now = new Date(),
+): boolean {
+  if (!departure) return false;
+  const finalDeparture = getLastDepartureToday(schedule380, schedule316, stopId, now);
+  if (!finalDeparture) return false;
+  return departure.bus === finalDeparture.bus && (departure.scheduledTime ?? departure.time) === finalDeparture.time;
+}
+
+export function getNextServiceDeparture(
+  schedule380: SchedulePeriod[] | undefined,
+  schedule316: SchedulePeriod[] | undefined,
+  stopId: string,
+  now = new Date(),
+  lookaheadDays = 14,
+): ServiceDeparture | undefined {
+  const nowMins = now.getHours() * 60 + now.getMinutes();
+
+  for (let daysUntil = 0; daysUntil <= lookaheadDays; daysUntil += 1) {
+    const date = addServiceDays(now, daysUntil);
+    const departures = scheduledDeparturesForDate(schedule380, schedule316, stopId, date, daysUntil)
+      .filter(dep => daysUntil > 0 || dep.minsFromMidnight >= nowMins);
+    if (departures.length > 0) {
+      const first = departures[0];
+      return {
+        ...first,
+        minsUntil: daysUntil * 24 * 60 + first.minsFromMidnight - nowMins,
+        scheduledMinsUntil: daysUntil * 24 * 60 + first.minsFromMidnight - nowMins,
+      };
+    }
+  }
+
+  return undefined;
+}
+
+export function getDepartureServiceBoundary(
+  schedule380: SchedulePeriod[] | undefined,
+  schedule316: SchedulePeriod[] | undefined,
+  stopId: string,
+  nextDeparture: Pick<Departure, 'bus' | 'time' | 'scheduledTime'> | undefined,
+  now = new Date(),
+): DepartureServiceBoundary {
+  const nowMins = now.getHours() * 60 + now.getMinutes();
+  const todaysDepartures = scheduledDeparturesForDate(schedule380, schedule316, stopId, now, 0);
+  const rawFinalDepartureToday = todaysDepartures.at(-1);
+  const finalDepartureToday = rawFinalDepartureToday
+    ? {
+        ...rawFinalDepartureToday,
+        minsUntil: rawFinalDepartureToday.minsFromMidnight - nowMins,
+        scheduledMinsUntil: rawFinalDepartureToday.minsFromMidnight - nowMins,
+      }
+    : undefined;
+  const serviceEndedToday = Boolean(finalDepartureToday && finalDepartureToday.minsFromMidnight < nowMins);
+  const nextServiceDeparture = getNextServiceDeparture(schedule380, schedule316, stopId, now);
+
+  return {
+    finalDepartureToday,
+    nextServiceDeparture,
+    nextDepartureIsFinal: isFinalDepartureToday(nextDeparture, schedule380, schedule316, stopId, now),
+    hasServiceToday: todaysDepartures.length > 0,
+    serviceEndedToday,
+  };
+}
+
 /**
  * Merges and sorts upcoming departures for both bus lines from a given stop.
  * Returns departures within the next 3 hours.
@@ -427,7 +588,7 @@ export function computeUpcomingDepartures(
 
   for (const [bus, schedule] of entries) {
     if (!schedule) continue;
-    const period = getTodayPeriod(schedule);
+    const period = getTodayPeriod(schedule, now);
     if (!period) continue;
     const times = extractStopTimes(period, lookupStopId);
 
