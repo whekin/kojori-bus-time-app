@@ -165,9 +165,9 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
   const insets = useSafeAreaInsets();
   const mapRef = useRef<MapView>(null);
   const focusedStopMarkerRef = useRef<MapMarker | null>(null);
-  const { activeDirection } = useActiveDirection();
-  const { settings } = useSettings();
-  const { focusedStop, requestStopSheetReturn } = useMapFocus();
+  const { activeDirection, selectDirection } = useActiveDirection();
+  const { settings, update, toggleKojoriFavorite, toggleTbilisiFavorite } = useSettings();
+  const { focusedStop, requestStopFocus, requestStopSheetReturn } = useMapFocus();
   const navigateToTab = useTabNav();
   const lastFitKeyRef = useRef<string | null>(null);
 
@@ -271,6 +271,20 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
   const focusedRouteData = focusedStop?.direction === 'toKojori' ? toKojoriRouteData : toTbilisiRouteData;
   const routePolylines = routeData?.polylines;
   const focusedStopAccent = focusedStop?.direction === 'toKojori' ? colors.route380 : colors.route316;
+  const focusedStopIsSaved = focusedStop
+    ? focusedStop.direction === 'toKojori'
+      ? settings.tbilisiFavorites.includes(focusedStop.id)
+      : settings.kojoriFavorites.includes(focusedStop.id)
+    : false;
+  const focusedStopFavoriteCount = focusedStop?.direction === 'toKojori'
+    ? settings.tbilisiFavorites.length
+    : settings.kojoriFavorites.length;
+  const focusedStopSaveDisabled = focusedStopIsSaved && focusedStopFavoriteCount <= 1;
+  const focusedStopIsActive = focusedStop
+    ? focusedStop.direction === 'toKojori'
+      ? settings.activeTbilisiStopId === focusedStop.id
+      : settings.activeKojoriStopId === focusedStop.id
+    : false;
   const focusedStopCoordinate =
     typeof focusedStop?.lat === 'number' && typeof focusedStop.lon === 'number'
       ? { latitude: focusedStop.lat, longitude: focusedStop.lon }
@@ -394,10 +408,11 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
     if (!isActive || !mapReady || !focusedStop) return;
 
     const timeoutId = setTimeout(() => {
-      if (focusedStopCoordinate) {
+      if (typeof focusedStop.lat === 'number' && typeof focusedStop.lon === 'number') {
         mapRef.current?.animateToRegion(
           {
-            ...focusedStopCoordinate,
+            latitude: focusedStop.lat,
+            longitude: focusedStop.lon,
             latitudeDelta: 0.018,
             longitudeDelta: 0.018,
           },
@@ -416,7 +431,7 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
     }, 180);
 
     return () => clearTimeout(timeoutId);
-  }, [focusedRouteData?.polylines, focusedStop, focusedStopCoordinate, isActive, mapReady]);
+  }, [focusedRouteData?.polylines, focusedStop, isActive, mapReady]);
 
   useEffect(() => {
     if (!isActive || !mapReady || typeof focusedStop?.lat !== 'number' || typeof focusedStop.lon !== 'number') {
@@ -482,6 +497,35 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
     }
     
     setCurrentRegion(clampedRegion);
+  }
+
+  function applyFocusedStop() {
+    if (!focusedStop) return;
+
+    selectDirection(focusedStop.direction, { persist: 'deferred' });
+
+    if (focusedStop.direction === 'toKojori') {
+      update({ activeTbilisiStopId: focusedStop.id });
+      return;
+    }
+
+    update({ activeKojoriStopId: focusedStop.id });
+  }
+
+  function handleShowFocusedStopDepartures() {
+    applyFocusedStop();
+    navigateToTab?.('index');
+  }
+
+  function handleToggleFocusedStopSaved() {
+    if (!focusedStop) return;
+
+    if (focusedStop.direction === 'toKojori') {
+      toggleTbilisiFavorite(focusedStop.id);
+      return;
+    }
+
+    toggleKojoriFavorite(focusedStop.id);
   }
 
   return (
@@ -562,6 +606,9 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
               coordinate={{ latitude: stop.lat!, longitude: stop.lon! }}
               anchor={STOP_MARKER_ANCHOR}
               tracksViewChanges={false}
+              title={stop.label}
+              description={t('commonStopNumber', { id: stop.id.split(':')[1] ?? stop.id })}
+              onPress={() => requestStopFocus(stop, direction)}
               zIndex={isPromoted ? 6 : 4}>
               <View
                 collapsable={false}
@@ -616,7 +663,10 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
                       {stop.label}
                     </Text>
                     <Text style={styles.stopCalloutCode}>
-                      Stop [{stop.id.split(':')[1] ?? stop.id}]
+                      {t('commonStopNumber', { id: stop.id.split(':')[1] ?? stop.id })}
+                    </Text>
+                    <Text style={styles.stopCalloutHint} numberOfLines={1}>
+                      {t('mapStopTapActions')}
                     </Text>
                   </View>
                 </View>
@@ -724,7 +774,7 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
                     {focusedStop.label}
                   </Text>
                   <Text style={styles.focusedStopCalloutCode}>
-                    Stop [{focusedStop.id.split(':')[1] ?? focusedStop.id}]
+                    {t('commonStopNumber', { id: focusedStop.id.split(':')[1] ?? focusedStop.id })}
                   </Text>
                 </View>
               </View>
@@ -785,7 +835,7 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
           styles.locateButton,
           {
             bottom: focusedStop
-              ? insets.bottom + BottomTabInset + 108
+              ? insets.bottom + BottomTabInset + 158
               : insets.bottom + BottomTabInset + 24,
           },
           isLocating && styles.locateButtonActive,
@@ -819,33 +869,120 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
             ]}
           >
             <View style={[styles.focusedStopTrayRail, { backgroundColor: focusedStopAccent }]} />
-            <View style={styles.focusedStopTrayCopy}>
-              <Text style={styles.focusedStopTrayEyebrow}>
-                {focusedStop.direction === 'toKojori' ? t('cityKojori') : t('cityTbilisi')}
-              </Text>
-              <Text style={styles.focusedStopTrayTitle} numberOfLines={1}>
-                {focusedStop.label}
-              </Text>
-              <Text style={[styles.focusedStopTrayCode, { color: focusedStopAccent }]}>
-                #{focusedStop.id.split(':')[1] ?? focusedStop.id}
-              </Text>
+            <View style={styles.focusedStopTrayContent}>
+              <View style={styles.focusedStopTrayHeader}>
+                <View style={styles.focusedStopTrayCopy}>
+                  <Text style={styles.focusedStopTrayEyebrow}>
+                    {focusedStop.direction === 'toKojori' ? t('cityKojori') : t('cityTbilisi')}
+                  </Text>
+                  <Text style={styles.focusedStopTrayTitle} numberOfLines={1}>
+                    {focusedStop.label}
+                  </Text>
+                  <Text style={[styles.focusedStopTrayCode, { color: focusedStopAccent }]}>
+                    #{focusedStop.id.split(':')[1] ?? focusedStop.id}
+                  </Text>
+                </View>
+                {focusedStopIsActive ? (
+                  <View
+                    style={[
+                      styles.focusedStopTrayBadge,
+                      {
+                        borderColor: alpha(focusedStopAccent, '36'),
+                        backgroundColor: alpha(focusedStopAccent, '16'),
+                      },
+                    ]}>
+                    <Text style={[styles.focusedStopTrayBadgeText, { color: focusedStopAccent }]}>
+                      {t('commonSelected')}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+              <View
+                accessibilityLabel={t('mapStopActionsFor', { stop: focusedStop.label })}
+                style={styles.focusedStopTrayActions}>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={t('mapUseStopA11y', { stop: focusedStop.label })}
+                  accessibilityState={{ selected: focusedStopIsActive }}
+                  onPress={applyFocusedStop}
+                  style={[
+                    styles.focusedStopTrayAction,
+                    { borderColor: alpha(focusedStopAccent, '42') },
+                    focusedStopIsActive && {
+                      backgroundColor: alpha(focusedStopAccent, '12'),
+                    },
+                  ]}
+                >
+                  <MaterialCommunityIcons
+                    name={focusedStopIsActive ? 'check-circle' : 'map-marker-check-outline'}
+                    size={15}
+                    color={focusedStopAccent}
+                  />
+                  <Text style={[styles.focusedStopTrayActionText, { color: focusedStopAccent }]}>
+                    {t('mapUseThisStop')}
+                  </Text>
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    focusedStopIsSaved
+                      ? t('mapRemoveSavedStopA11y', { stop: focusedStop.label })
+                      : t('mapSaveStopA11y', { stop: focusedStop.label })
+                  }
+                  accessibilityState={{ selected: focusedStopIsSaved, disabled: focusedStopSaveDisabled }}
+                  onPress={handleToggleFocusedStopSaved}
+                  disabled={focusedStopSaveDisabled}
+                  style={[
+                    styles.focusedStopTrayAction,
+                    { borderColor: alpha(focusedStopAccent, '42') },
+                    focusedStopIsSaved && {
+                      backgroundColor: alpha(focusedStopAccent, '12'),
+                    },
+                    focusedStopSaveDisabled && styles.focusedStopTrayActionDisabled,
+                  ]}
+                >
+                  <MaterialCommunityIcons
+                    name={focusedStopIsSaved ? 'star' : 'star-outline'}
+                    size={15}
+                    color={focusedStopAccent}
+                  />
+                  <Text style={[styles.focusedStopTrayActionText, { color: focusedStopAccent }]}>
+                    {focusedStopIsSaved ? t('mapRemoveSavedStop') : t('mapSaveStop')}
+                  </Text>
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={t('mapShowNextBusesA11y', { stop: focusedStop.label })}
+                  onPress={handleShowFocusedStopDepartures}
+                  style={[
+                    styles.focusedStopTrayAction,
+                    styles.focusedStopTrayPrimaryAction,
+                    { backgroundColor: focusedStopAccent, borderColor: focusedStopAccent },
+                  ]}
+                >
+                  <MaterialCommunityIcons name="clock-fast" size={15} color="#FFFFFF" />
+                  <Text style={[styles.focusedStopTrayActionText, styles.focusedStopTrayPrimaryActionText]}>
+                    {t('mapShowNextBuses')}
+                  </Text>
+                </Pressable>
+                {focusedStop.returnRoute ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={t('mapBackToPicker')}
+                    onPress={() => {
+                      requestStopSheetReturn();
+                      navigateToTab?.(focusedStop.returnRoute ?? 'index');
+                    }}
+                    style={[styles.focusedStopTrayAction, { borderColor: alpha(focusedStopAccent, '42') }]}
+                  >
+                    <MaterialCommunityIcons name="chevron-up" size={15} color={focusedStopAccent} />
+                    <Text style={[styles.focusedStopTrayActionText, { color: focusedStopAccent }]}>
+                      {t('mapBackToPicker')}
+                    </Text>
+                  </Pressable>
+                ) : null}
+              </View>
             </View>
-            {focusedStop.returnRoute ? (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={t('stopSheetTitle')}
-                onPress={() => {
-                  requestStopSheetReturn();
-                  navigateToTab?.(focusedStop.returnRoute ?? 'index');
-                }}
-                style={[styles.focusedStopTrayAction, { borderColor: alpha(focusedStopAccent, '42') }]}
-              >
-                <MaterialCommunityIcons name="chevron-up" size={15} color={focusedStopAccent} />
-                <Text style={[styles.focusedStopTrayActionText, { color: focusedStopAccent }]}>
-                  {t('commonChange')}
-                </Text>
-              </Pressable>
-            ) : null}
           </View>
         </View>
       ) : null}
@@ -960,10 +1097,34 @@ function createStyles(C: ReturnType<typeof useAppColors>) {
     alignSelf: 'stretch',
     borderRadius: 999,
   },
+  focusedStopTrayContent: {
+    flex: 1,
+    minWidth: 0,
+    gap: 10,
+  },
+  focusedStopTrayHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+  },
   focusedStopTrayCopy: {
     flex: 1,
     minWidth: 0,
     gap: 3,
+  },
+  focusedStopTrayBadge: {
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    flexShrink: 0,
+  },
+  focusedStopTrayBadgeText: {
+    fontSize: 10,
+    lineHeight: 12,
+    fontWeight: '800',
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
   },
   focusedStopTrayEyebrow: {
     color: C.textFaint,
@@ -984,19 +1145,38 @@ function createStyles(C: ReturnType<typeof useAppColors>) {
     lineHeight: 16,
     fontWeight: '700',
   },
+  focusedStopTrayActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 7,
+  },
   focusedStopTrayAction: {
-    height: 36,
+    minHeight: 34,
     borderRadius: 18,
     borderWidth: 1,
     paddingHorizontal: 10,
+    paddingVertical: 7,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 3,
     flexShrink: 0,
   },
+  focusedStopTrayPrimaryAction: {
+    shadowColor: '#000',
+    shadowOpacity: 0.16,
+    shadowRadius: 7,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 3,
+  },
+  focusedStopTrayActionDisabled: {
+    opacity: 0.55,
+  },
   focusedStopTrayActionText: {
     fontSize: 12,
     fontWeight: '700',
+  },
+  focusedStopTrayPrimaryActionText: {
+    color: '#FFFFFF',
   },
   stopMarkerOuter: {
     alignItems: 'center',
@@ -1065,6 +1245,12 @@ function createStyles(C: ReturnType<typeof useAppColors>) {
     color: '#6F737C',
     fontSize: 13,
     lineHeight: 16,
+    fontWeight: '600',
+  },
+  stopCalloutHint: {
+    color: '#6F737C',
+    fontSize: 12,
+    lineHeight: 15,
     fontWeight: '600',
   },
   vehiclePin: {

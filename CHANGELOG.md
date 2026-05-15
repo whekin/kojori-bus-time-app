@@ -4,6 +4,7 @@
 
 ### Improved
 
+- Map stops are now actionable: tap a stop to use it, save or remove it, or jump straight to the next buses.
 - Accessibility labels and selected states are clearer across tabs, route filters, map controls, TTC status, and Settings, with reduced-motion support for decorative animations.
 - Departures now calls out the last bus of the day and shows the next scheduled service instead of dead-ending after service ends.
 - App status and empty-state copy is warmer in English, Georgian, and Russian, with plural-aware counts for stops, departures, durations, and saved TTC datasets.
