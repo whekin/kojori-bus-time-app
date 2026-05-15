@@ -1,8 +1,8 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import * as Location from 'expo-location';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-native';
-import MapView, { Callout, Marker, Polyline, type MapMarker, type Region } from 'react-native-maps';
+import { Animated, BackHandler, Easing, Pressable, StyleSheet, Text, View } from 'react-native';
+import MapView, { Callout, Marker, Polyline, type MapMarker, type MapPressEvent, type Region } from 'react-native-maps';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { DirectionPill } from '@/components/direction-picker';
@@ -167,7 +167,7 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
   const focusedStopMarkerRef = useRef<MapMarker | null>(null);
   const { activeDirection, selectDirection } = useActiveDirection();
   const { settings, update, toggleKojoriFavorite, toggleTbilisiFavorite } = useSettings();
-  const { focusedStop, requestStopFocus, requestStopSheetReturn } = useMapFocus();
+  const { focusedStop, clearStopFocus, requestStopFocus, requestStopSheetReturn } = useMapFocus();
   const navigateToTab = useTabNav();
   const lastFitKeyRef = useRef<string | null>(null);
 
@@ -446,6 +446,17 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
   }, [focusedStop?.lat, focusedStop?.lon, focusedStop?.requestedAt, isActive, mapReady]);
 
   useEffect(() => {
+    if (!isActive || !focusedStop) return;
+
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      clearStopFocus();
+      return true;
+    });
+
+    return () => subscription.remove();
+  }, [clearStopFocus, focusedStop, isActive]);
+
+  useEffect(() => {
     lastFitKeyRef.current = null;
   }, [direction]);
 
@@ -499,6 +510,11 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
     setCurrentRegion(clampedRegion);
   }
 
+  function handleMapPress(event: MapPressEvent) {
+    if (event.nativeEvent.action === 'marker-press') return;
+    clearStopFocus();
+  }
+
   function applyFocusedStop() {
     if (!focusedStop) return;
 
@@ -550,7 +566,8 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
           setMapReady(true);
           setMapTimedOut(false);
         }}
-        onRegionChangeComplete={handleRegionChange}>
+        onRegionChangeComplete={handleRegionChange}
+        onPress={handleMapPress}>
         {splitPolylines
           ? (
             <>

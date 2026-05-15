@@ -20,6 +20,7 @@ export type StopSheetReturnRequest = {
 type MapFocusContextValue = {
   focusedStop: FocusedMapStop | null;
   stopSheetReturnRequest: StopSheetReturnRequest | null;
+  clearStopFocus: () => void;
   requestStopFocus: (
     stop: StopInfo,
     direction: StopDirection,
@@ -31,6 +32,7 @@ type MapFocusContextValue = {
 const MapFocusContext = createContext<MapFocusContextValue>({
   focusedStop: null,
   stopSheetReturnRequest: null,
+  clearStopFocus: () => {},
   requestStopFocus: () => {},
   requestStopSheetReturn: () => {},
 });
@@ -53,6 +55,10 @@ export function MapFocusProvider({ children }: { children: React.ReactNode }) {
     });
   }
 
+  function clearStopFocus() {
+    setFocusedStop(null);
+  }
+
   function requestStopSheetReturn() {
     if (!focusedStop?.returnRoute) return;
 
@@ -70,6 +76,7 @@ export function MapFocusProvider({ children }: { children: React.ReactNode }) {
       value: {
         focusedStop,
         stopSheetReturnRequest,
+        clearStopFocus,
         requestStopFocus,
         requestStopSheetReturn,
       },
