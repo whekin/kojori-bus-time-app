@@ -1,7 +1,6 @@
 # Changelog
 
-## [UNRELEASED]
-
+## v2026.5.15
 ### Improved
 
 - Map zoom now stays around the Tbilisi-Kojori route area, uses smaller live bus pins, and makes ordinary stop markers clearer at route zooms while keeping saved stops visible.
