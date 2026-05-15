@@ -12,7 +12,8 @@ import { useActiveDirection } from '@/hooks/use-active-direction';
 import { useAppColors, useResolvedAppThemeMode } from '@/hooks/use-app-colors';
 import { useI18n } from '@/hooks/use-i18n';
 import { useRoutePolylines } from '@/hooks/use-route-polylines';
-import { useVehiclePositions } from '@/hooks/use-vehicle-positions';
+import { getDemoVehiclePositions, useVehiclePositions } from '@/hooks/use-vehicle-positions';
+import { useSettings } from '@/hooks/use-settings';
 import { splitPolylinesByOverlap } from '@/utils/polyline-offset';
 
 const DEFAULT_REGION: Region = {
@@ -70,6 +71,7 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
   const insets = useSafeAreaInsets();
   const mapRef = useRef<MapView>(null);
   const { activeDirection: direction } = useActiveDirection();
+  const { settings } = useSettings();
   const [directionSheetOpen, setDirectionSheetOpen] = useState(false);
   const lastFitKeyRef = useRef<string | null>(null);
 
@@ -79,6 +81,7 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
   const [isLocating, setIsLocating] = useState(false);
   const [locationMessage, setLocationMessage] = useState<string | null>(null);
   const [currentRegion, setCurrentRegion] = useState<Region>(DEFAULT_REGION);
+  const [demoNow, setDemoNow] = useState(() => Date.now());
 
   useEffect(() => {
     if (mapReady) return;
@@ -89,6 +92,14 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
   const { data: toKojoriRouteData } = useRoutePolylines('toKojori');
   const { data: toTbilisiRouteData } = useRoutePolylines('toTbilisi');
   const { data: livePositions = [], refetch, isFetching } = useVehiclePositions(direction, isActive);
+
+  useEffect(() => {
+    if (!settings.cancelledBusDemo || !isActive) return;
+
+    setDemoNow(Date.now());
+    const intervalId = setInterval(() => setDemoNow(Date.now()), 10_000);
+    return () => clearInterval(intervalId);
+  }, [isActive, settings.cancelledBusDemo]);
 
   const spinAnim = useRef(new Animated.Value(0)).current;
 
@@ -113,7 +124,15 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
     outputRange: ['0deg', '360deg'],
   });
 
-  const positions = livePositions;
+  const positions = useMemo(() => {
+    if (!settings.cancelledBusDemo) return livePositions;
+
+    const liveWithoutDemo = livePositions.filter(position => !position.vehicleId.startsWith('demo-'));
+    return [
+      ...getDemoVehiclePositions(direction, demoNow),
+      ...liveWithoutDemo,
+    ];
+  }, [demoNow, direction, livePositions, settings.cancelledBusDemo]);
   const routeData = direction === 'toKojori' ? toKojoriRouteData : toTbilisiRouteData;
   const routePolylines = routeData?.polylines;
 

@@ -62,18 +62,18 @@ function getRealtimeStatus(dep: Departure, colors: AppColors, t: ReturnType<type
   if (drift > 0) {
     return {
       label: t('liveLate', { minutes: drift }),
-      textColor: colors.error,
-      backgroundColor: alpha(colors.error, '14'),
-      borderColor: alpha(colors.error, '38'),
+      textColor: colors.live,
+      backgroundColor: alpha(colors.live, '14'),
+      borderColor: alpha(colors.live, '38'),
     };
   }
 
   if (drift < 0) {
     return {
       label: t('liveEarly', { minutes: Math.abs(drift) }),
-      textColor: colors.warning,
-      backgroundColor: alpha(colors.warning, '14'),
-      borderColor: alpha(colors.warning, '38'),
+      textColor: colors.live,
+      backgroundColor: alpha(colors.live, '14'),
+      borderColor: alpha(colors.live, '38'),
     };
   }
 
@@ -485,6 +485,16 @@ function NextCard({
   const realtimeStatus = getRealtimeStatus(dep, colors, t);
   const busColor = routeColor(dep.bus, colors);
   const highlightColor = busColor;
+  const arrivalStatusColor = realtimeStatus?.textColor ?? colors.textDim;
+  const arrivalPanelStyle = realtimeStatus
+    ? {
+        backgroundColor: realtimeStatus.backgroundColor,
+        borderColor: realtimeStatus.borderColor,
+      }
+    : {
+        backgroundColor: alpha(colors.surfaceHigh, '55'),
+        borderColor: alpha(colors.borderStrong, '55'),
+      };
   return (
     <View style={styles.nextBlock}>
       <View style={[styles.nextCard, { borderColor: alpha(highlightColor, '30') }]}>
@@ -519,10 +529,12 @@ function NextCard({
             <View
               style={[
                 styles.nextArrivalPanel,
-                { backgroundColor: alpha(busColor, '16'), borderColor: alpha(busColor, '45') },
+                arrivalPanelStyle,
               ]}>
               <View style={styles.nextArrivalHeader}>
-                <Text style={styles.nextCountdownLabel}>{t('homeArrivalSignal')}</Text>
+                <Text style={[styles.nextCountdownLabel, { color: arrivalStatusColor }]}>
+                  {realtimeStatus ? t('homeArrivalSignal') : t('homeScheduleSignal')}
+                </Text>
                 {realtimeStatus ? (
                   <View
                     style={[
@@ -533,7 +545,7 @@ function NextCard({
                 ) : null}
               </View>
               <Text
-                style={[styles.nextCountdownValue, { color: busColor, fontFamily: MONO }]}
+                style={[styles.nextCountdownValue, { color: arrivalStatusColor, fontFamily: MONO }]}
                 numberOfLines={1}
                 adjustsFontSizeToFit
                 minimumFontScale={0.8}>

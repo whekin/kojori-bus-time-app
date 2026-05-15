@@ -13,6 +13,8 @@
 - Direction changes now update visible app state before persisting the remembered direction, making picker switches feel immediate
 - Direction and stop-selection bottom sheets now use native Android swipe-down dismissal
 - Settings now opens to a compact hub with Commute, Appearance, Widget, Data, and About sections instead of one long flat page
+- Hidden service demo now previews both cancelled replacement departures and live demo buses on the Map
+- Live-departure chips now use the live color consistently, with timing differences kept in the label
 
 ### Fixed
 

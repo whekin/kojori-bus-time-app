@@ -47,7 +47,7 @@ export interface Settings {
   themeMode: AppThemeMode;
   /** Reveal hidden debug controls in Settings */
   debugOptionsUnlocked: boolean;
-  /** Force one inferred cancelled-bus case on Home for UI testing */
+  /** Show deterministic demo states on Departures and Map for UI testing */
   cancelledBusDemo: boolean;
   /** What to do on launch: ask, use location, or restore last direction */
   launchBehavior: LaunchBehavior;
