@@ -78,16 +78,21 @@ function getCurrentMinsFromMidnight(date = new Date()) {
 function formatRelativeTimeHint(
   minsUntil: number,
   t: ReturnType<typeof useI18n>["t"],
+  formatDuration: ReturnType<typeof useI18n>["formatDuration"],
+  formatRelativeDuration: ReturnType<typeof useI18n>["formatRelativeDuration"],
 ) {
   if (minsUntil < -1) return null;
   if (minsUntil < 1) return t("commonNow");
-  if (minsUntil < 60) return t("timeInMinutes", { minutes: minsUntil });
+  if (minsUntil < 60) return formatRelativeDuration("future", "minute", minsUntil);
 
   const hours = Math.floor(minsUntil / 60);
   const minutes = minsUntil % 60;
   return minutes > 0
-    ? t("timeInHours", { hours, minutes })
-    : t("timeInHour", { hours });
+    ? t("timeInHours", {
+        hours: formatDuration("hour", hours),
+        minutes: formatDuration("minute", minutes),
+      })
+    : formatRelativeDuration("future", "hour", hours);
 }
 
 function buildStopSelectorStops({
@@ -131,7 +136,7 @@ function BusTag({ bus }: { bus: BusLine }) {
 export default function TimetableScreen() {
   const colors = useAppColors();
   const styles = useTimetableStyles();
-  const { t } = useI18n();
+  const { t, formatCount, formatDuration, formatRelativeDuration } = useI18n();
   const insets = useSafeAreaInsets();
   const { settings, update, toggleKojoriFavorite, toggleTbilisiFavorite } =
     useSettings();
@@ -269,7 +274,7 @@ export default function TimetableScreen() {
             <ActivityIndicator color={colors.textDim} size="small" />
           ) : (
             <Text style={styles.headerCount}>
-              {t("timetableCount", { count: totalCount })}
+              {t("timetableCount", { count: formatCount("departures", totalCount) })}
             </Text>
           )}
         </View>
@@ -371,7 +376,7 @@ export default function TimetableScreen() {
         )}
         renderItem={({ item, index, section }) => {
           const minsUntil = item.minsFromMidnight - nowMins;
-          const relativeHint = formatRelativeTimeHint(minsUntil, t);
+          const relativeHint = formatRelativeTimeHint(minsUntil, t, formatDuration, formatRelativeDuration);
           const isPast = minsUntil < -1;
           const isSoon = minsUntil >= -1 && minsUntil <= 30;
 

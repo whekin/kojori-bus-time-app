@@ -2,7 +2,16 @@ import { useMemo } from 'react';
 
 import { LANGUAGE_OPTIONS, resolveLanguage, ttcLocaleForLanguage, type AppLanguage, type ResolvedLanguage } from '@/i18n/languages';
 import { localizedStopName, localizedStopNames } from '@/i18n/stop-names';
-import { translate, type TranslationKey } from '@/i18n/translations';
+import {
+  translate,
+  translateCount,
+  translateDuration,
+  translateRelativeDuration,
+  type CountKind,
+  type DurationUnit,
+  type RelativeDirection,
+  type TranslationKey,
+} from '@/i18n/translations';
 import { useSettings } from '@/hooks/use-settings';
 import type { StopInfo } from '@/services/ttc';
 
@@ -15,6 +24,18 @@ export function useI18n() {
   return useMemo(() => {
     function t(key: TranslationKey, params?: Params) {
       return translate(resolvedLanguage, key, params);
+    }
+
+    function formatCount(kind: CountKind, count: number, params?: Params) {
+      return translateCount(resolvedLanguage, kind, count, params);
+    }
+
+    function formatDuration(unit: DurationUnit, count: number) {
+      return translateDuration(resolvedLanguage, unit, count);
+    }
+
+    function formatRelativeDuration(direction: RelativeDirection, unit: DurationUnit, count: number) {
+      return translateRelativeDuration(resolvedLanguage, direction, unit, count);
     }
 
     function setLanguage(language: AppLanguage) {
@@ -30,6 +51,9 @@ export function useI18n() {
       resolvedLanguage,
       languageOptions: LANGUAGE_OPTIONS,
       t,
+      formatCount,
+      formatDuration,
+      formatRelativeDuration,
       setLanguage,
       localizedStopName: getStopName,
       localizedStopNames: (source?: Record<string, string>) => localizedStopNames(resolvedLanguage, source),

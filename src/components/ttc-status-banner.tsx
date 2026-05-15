@@ -37,7 +37,7 @@ function TtcStatusBannerBase({
   headerInline?: boolean;
 }) {
   const { colors, styles } = useStyles();
-  const { t } = useI18n();
+  const { t, formatRelativeDuration } = useI18n();
   const queryClient = useQueryClient();
   const { status, lastSuccessAt } = useTtcHealth();
   const [expanded, setExpanded] = useState(false);
@@ -53,10 +53,9 @@ function TtcStatusBannerBase({
     ? (() => {
         const mins = Math.floor((Date.now() - lastSuccessAt) / 60000);
         if (mins < 1) return t('ttcJustNow');
-        if (mins === 1) return t('ttcMinuteAgo');
-        if (mins < 60) return t('ttcMinutesAgo', { minutes: mins });
+        if (mins < 60) return formatRelativeDuration('past', 'minute', mins);
         const hours = Math.floor(mins / 60);
-        return hours === 1 ? t('ttcHourAgo') : t('ttcHoursAgo', { hours });
+        return formatRelativeDuration('past', 'hour', hours);
       })()
     : null;
   

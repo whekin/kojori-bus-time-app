@@ -1,5 +1,15 @@
 # Changelog
 
+## [UNRELEASED]
+
+### Improved
+
+- App status and empty-state copy is warmer in English, Georgian, and Russian, with plural-aware counts for stops, departures, durations, and saved TTC datasets.
+
+### Infra
+
+- Added an i18n parity check so English, Georgian, and Russian translation keys and placeholders stay aligned.
+
 ## v2026.5.15
 ### Improved
 

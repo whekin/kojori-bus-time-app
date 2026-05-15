@@ -617,7 +617,7 @@ function NextCard({
 }) {
   const colors = useAppColors();
   const styles = useHomeStyles();
-  const { t } = useI18n();
+  const { t, formatDuration, formatRelativeDuration } = useI18n();
   if (isLoading && !dep) {
     return (
       <View style={[styles.nextCard, styles.centered]}>
@@ -628,15 +628,19 @@ function NextCard({
   if (!dep) {
     return <EmptyState message={t("homeNoDepartures")} />;
   }
-  const minsLabel =
-    dep.minsUntil < 1
-      ? t("commonNow")
-      : dep.minsUntil < 60
-        ? t("timeInMinutes", { minutes: dep.minsUntil })
-        : t("timeInHours", {
-            hours: Math.floor(dep.minsUntil / 60),
-            minutes: dep.minsUntil % 60,
-          });
+  const minsLabel = (() => {
+    if (dep.minsUntil < 1) return t("commonNow");
+    if (dep.minsUntil < 60) return formatRelativeDuration("future", "minute", dep.minsUntil);
+
+    const hours = Math.floor(dep.minsUntil / 60);
+    const minutes = dep.minsUntil % 60;
+    if (minutes === 0) return formatRelativeDuration("future", "hour", hours);
+
+    return t("timeInHours", {
+      hours: formatDuration("hour", hours),
+      minutes: formatDuration("minute", minutes),
+    });
+  })();
   const realtimeStatus = getRealtimeStatus(dep, colors, t);
   const busColor = routeColor(dep.bus, colors);
   const highlightColor = busColor;
@@ -1093,7 +1097,7 @@ export default function HomeScreen({
 }) {
   const colors = useAppColors();
   const styles = useHomeStyles();
-  const { t } = useI18n();
+  const { t, formatRelativeDuration } = useI18n();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const { settings, update, toggleKojoriFavorite, toggleTbilisiFavorite } =
@@ -1225,10 +1229,9 @@ export default function HomeScreen({
         ? (() => {
             const mins = Math.floor((Date.now() - lastSuccessAt) / 60000);
             if (mins < 1) return t("ttcJustNow");
-            if (mins === 1) return t("ttcMinuteAgo");
-            if (mins < 60) return t("ttcMinutesAgo", { minutes: mins });
+            if (mins < 60) return formatRelativeDuration("past", "minute", mins);
             const hours = Math.floor(mins / 60);
-            return hours === 1 ? t("ttcHourAgo") : t("ttcHoursAgo", { hours });
+            return formatRelativeDuration("past", "hour", hours);
           })()
         : null;
 
@@ -1274,6 +1277,7 @@ export default function HomeScreen({
     colors.sand,
     colors.warning,
     lastSuccessAt,
+    formatRelativeDuration,
     queryClient,
     t,
     ttcStatus,

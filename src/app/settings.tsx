@@ -244,16 +244,16 @@ function manualRefreshCooldownRemaining(timestamp: number | null) {
   return Math.max(0, TTC_MANUAL_REFRESH_COOLDOWN_MS - (Date.now() - timestamp));
 }
 
-function formatShortDuration(ms: number, t: ReturnType<typeof useI18n>['t']) {
+function formatShortDuration(ms: number, formatDuration: ReturnType<typeof useI18n>['formatDuration']) {
   const minutes = Math.ceil(ms / 60_000);
-  if (minutes <= 1) return t('durationOneMinute');
-  if (minutes < 60) return t('durationMinutes', { count: minutes });
+  if (minutes <= 1) return formatDuration('minute', 1);
+  if (minutes < 60) return formatDuration('minute', minutes);
 
   const hours = Math.floor(minutes / 60);
   const remainingMinutes = minutes % 60;
-  if (remainingMinutes === 0) return t(hours === 1 ? 'durationOneHour' : 'durationHours', { count: hours });
+  if (remainingMinutes === 0) return formatDuration('hour', hours);
 
-  return t('durationHoursMinutes', { hours, minutes: remainingMinutes });
+  return `${formatDuration('hour', hours)} ${formatDuration('minute', remainingMinutes)}`;
 }
 
 function formatQueryKind(kind: TtcQueryLogEntry['kind'], t: ReturnType<typeof useI18n>['t']) {
@@ -473,7 +473,7 @@ function DataRefreshCard({
   onRefreshAll: () => void;
 }) {
   const { colors, styles } = useStyles();
-  const { t, resolvedLanguage } = useI18n();
+  const { t, formatDuration, resolvedLanguage } = useI18n();
   const { width } = useWindowDimensions();
   const refreshBusy = status.status === 'warming' || refreshingDataset !== null;
   const weeklyDue = isWeeklyRefreshDue(status.lastSyncAt);
@@ -494,7 +494,7 @@ function DataRefreshCard({
   const refreshAllCooldownMs = allDatasetsCached ? manualRefreshCooldownRemaining(status.lastSyncAt) : 0;
   const refreshAllCoolingDown = refreshAllCooldownMs > 0;
   const refreshAllDisabled = refreshBusy || refreshAllCoolingDown;
-  const refreshAllCooldownLabel = refreshAllCoolingDown ? formatShortDuration(refreshAllCooldownMs, t) : '';
+  const refreshAllCooldownLabel = refreshAllCoolingDown ? formatShortDuration(refreshAllCooldownMs, formatDuration) : '';
   const progressTitle = refreshBusy
     ? progressTotal === 0
       ? t('settingsSyncAlreadyFresh')
@@ -1043,7 +1043,7 @@ export default function SettingsScreen() {
   const { colors, styles } = useStyles();
   const resolvedThemeMode = useResolvedAppThemeMode();
   const { settings, toggleKojoriFavorite, toggleTbilisiFavorite, update, hasManualDirectionOverride } = useSettings();
-  const { t, languageOptions, resolvedLanguage, setLanguage } = useI18n();
+  const { t, formatCount, languageOptions, resolvedLanguage, setLanguage } = useI18n();
   const stopNames = useStopNames();
   const offlineStatus = useTtcOfflineStatus();
   const queryLog = useTtcQueryLog();
@@ -1308,7 +1308,7 @@ export default function SettingsScreen() {
       ? t('settingsThemeLightShort')
       : t('settingsThemeDarkShort');
   const totalFavoriteStops = settings.kojoriFavorites.length + settings.tbilisiFavorites.length;
-  const savedDatasetLabel = t('settingsSavedDatasetCount', {
+  const savedDatasetLabel = formatCount('datasets', offlineStatus.totalDatasets, {
     available: offlineStatus.availableDatasets,
     total: offlineStatus.totalDatasets,
   });
@@ -1399,7 +1399,7 @@ export default function SettingsScreen() {
                 note: t('settingsSectionCommuteNote'),
                 summary: t('settingsSectionCommuteSummary', {
                   launch: launchBehaviorStatus.title,
-                  count: totalFavoriteStops,
+                  count: formatCount('stops', totalFavoriteStops),
                 }),
                 accentColor: colors.route380,
               })}
