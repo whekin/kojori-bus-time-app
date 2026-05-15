@@ -221,6 +221,8 @@ export interface StopInfo {
 export const ALL_TBILISI_STOPS: StopInfo[] = [
   { id: '1:2994', label: 'Elene Akhvlediani Street', lat: 41.697618, lon: 44.809107 }, // actual first stop — TTC API omits it from schedule
   { id: '1:3932', label: 'Nikoloz Baratashvili Street', lat: 41.696601, lon: 44.803955 },
+  { id: '1:853', label: 'Sulkhan-Saba Street', lat: 41.692531, lon: 44.799247 },
+  { id: '1:857', label: 'Gergeti Street', lat: 41.689945, lon: 44.794908 },
   { id: '1:4673', label: 'Mikheil Lermontov Street', lat: 41.691163, lon: 44.798781 },
 ];
 
@@ -235,13 +237,14 @@ export const SCHEDULE_STOP_PROXY: Record<string, string> = {
 export const ALL_KOJORI_STOPS: StopInfo[] = [
   { id: '1:3078', label: 'Kojori Center', lat: 41.663244, lon: 44.707207 },
   { id: '1:2856', label: 'Kojori, Vazha-Pshavela St #56', lat: 41.649232, lon: 44.728292 },
+  { id: '1:2139', label: 'Kojori Zakaria Bakradze Street', lat: 41.662317, lon: 44.699778 },
   { id: '1:3782', label: 'Kojori, Alexandre Chkheidze Street', lat: 41.661244, lon: 44.714077 },
   { id: '1:3537', label: 'Kojori, Nikoloz Baratashvili Street', lat: 41.659625, lon: 44.719993 },
 ];
 
 /** Default favourite stop IDs shown as chips on home screen */
-export const DEFAULT_TBILISI_FAVORITES = ['1:2994'];
-export const DEFAULT_KOJORI_FAVORITES = ['1:3078'];
+export const DEFAULT_TBILISI_FAVORITES = ['1:2994', '1:3932', '1:853', '1:857'];
+export const DEFAULT_KOJORI_FAVORITES = ['1:3078', '1:2856', '1:2139', '1:3782', '1:3537'];
 
 // Convenience: look up a StopInfo by ID from the full known set
 export function findStop(id: string): StopInfo | undefined {

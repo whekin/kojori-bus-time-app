@@ -11,6 +11,7 @@ import { BottomTabInset } from '@/constants/theme';
 import { useActiveDirection } from '@/hooks/use-active-direction';
 import { useAppColors, useResolvedAppThemeMode } from '@/hooks/use-app-colors';
 import { useI18n } from '@/hooks/use-i18n';
+import { useMapFocus } from '@/hooks/use-map-focus';
 import { useRoutePolylines } from '@/hooks/use-route-polylines';
 import { getDemoVehiclePositions, useVehiclePositions } from '@/hooks/use-vehicle-positions';
 import { useSettings } from '@/hooks/use-settings';
@@ -72,6 +73,7 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
   const mapRef = useRef<MapView>(null);
   const { activeDirection } = useActiveDirection();
   const { settings } = useSettings();
+  const { focusedStop } = useMapFocus();
   const lastFitKeyRef = useRef<string | null>(null);
 
   const [mapReady, setMapReady] = useState(false);
@@ -141,7 +143,13 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
     ];
   }, [demoNow, direction, livePositions, settings.cancelledBusDemo]);
   const routeData = direction === 'toKojori' ? toKojoriRouteData : toTbilisiRouteData;
+  const focusedRouteData = focusedStop?.direction === 'toKojori' ? toKojoriRouteData : toTbilisiRouteData;
   const routePolylines = routeData?.polylines;
+  const focusedStopAccent = focusedStop?.direction === 'toKojori' ? colors.route380 : colors.route316;
+  const focusedStopCoordinate =
+    typeof focusedStop?.lat === 'number' && typeof focusedStop.lon === 'number'
+      ? { latitude: focusedStop.lat, longitude: focusedStop.lon }
+      : null;
 
   const splitPolylines = useMemo(() => {
     if (!routePolylines) return null;
@@ -206,7 +214,7 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
   }
 
   useEffect(() => {
-    if (!isActive || positions.length === 0) return;
+    if (!isActive || positions.length === 0 || focusedStop) return;
 
     const fitKey = `${direction}-${positions.map(position => `${position.bus}-${position.vehicleId}`).sort().join('|')}`;
     if (fitKey === lastFitKeyRef.current) return;
@@ -231,7 +239,35 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
     }, 250);
 
     return () => clearTimeout(timeoutId);
-  }, [direction, isActive, positions]);
+  }, [direction, focusedStop, isActive, positions]);
+
+  useEffect(() => {
+    if (!isActive || !mapReady || !focusedStop) return;
+
+    const timeoutId = setTimeout(() => {
+      if (focusedStopCoordinate) {
+        mapRef.current?.animateToRegion(
+          {
+            ...focusedStopCoordinate,
+            latitudeDelta: 0.018,
+            longitudeDelta: 0.018,
+          },
+          450,
+        );
+        return;
+      }
+
+      const fallbackCoordinates = Object.values(focusedRouteData?.polylines ?? {}).flat();
+      if (fallbackCoordinates.length >= 2) {
+        mapRef.current?.fitToCoordinates(fallbackCoordinates, {
+          edgePadding: { top: 100, right: 60, bottom: 160, left: 60 },
+          animated: true,
+        });
+      }
+    }, 180);
+
+    return () => clearTimeout(timeoutId);
+  }, [focusedRouteData?.polylines, focusedStop, focusedStopCoordinate, isActive, mapReady]);
 
   useEffect(() => {
     lastFitKeyRef.current = null;
@@ -374,6 +410,16 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
             </React.Fragment>
           );
         })}
+        {focusedStop && focusedStopCoordinate ? (
+          <Marker
+            key={`focused-stop-${focusedStop.id}-${focusedStop.requestedAt}`}
+            coordinate={focusedStopCoordinate}
+            pinColor={focusedStopAccent}
+            title={focusedStop.label}
+            description={`#${focusedStop.id.split(':')[1] ?? focusedStop.id}`}
+            zIndex={10}
+          />
+        ) : null}
       </MapView>
 
       {/* Top controls */}

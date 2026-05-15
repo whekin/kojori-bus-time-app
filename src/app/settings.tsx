@@ -31,7 +31,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BAKED_AT } from '@/assets/ttc-baked';
 import { NativeBottomSheet } from '@/components/native-bottom-sheet';
 import { SettingsSwitch } from '@/components/settings-switch';
+import { StopChoiceRow } from '@/components/stop-choice-row';
 import { StopPickerModal } from '@/components/stop-picker-modal';
+import { getCuratedStopIds, type StopDirection } from '@/constants/curated-stops';
 import {
   alpha,
   APP_PALETTES,
@@ -49,7 +51,7 @@ import { useSettings, type LaunchBehavior } from '@/hooks/use-settings';
 import { useStopNames } from '@/hooks/use-stop-names';
 import { useTtcQueryLog } from '@/hooks/use-ttc-query-log';
 import { useTtcOfflineStatus } from '@/hooks/use-ttc-offline';
-import { StopInfo } from '@/services/ttc';
+import { findStop, StopInfo } from '@/services/ttc';
 import {
     clearAllTtcCache,
     refreshTtcOfflineDataset,
@@ -410,6 +412,7 @@ function TtcQueryLogCard({
 
 function FavoritesCard({
   favoriteIds,
+  direction,
   accentColor,
   stopNames,
   canRemove,
@@ -417,6 +420,7 @@ function FavoritesCard({
   onManage,
 }: {
   favoriteIds: string[];
+  direction: StopDirection;
   accentColor: string;
   stopNames: Record<string, string>;
   canRemove: boolean;
@@ -431,19 +435,19 @@ function FavoritesCard({
       {favoriteIds.map((id, i) => {
         const shortId = id.split(':')[1] ?? id;
         const label = stopNames[id] ?? `Stop #${shortId}`;
+        const stop = findStop(id) ?? { id, label };
 
         return (
           <View key={id}>
-            <View style={[styles.favRow, { backgroundColor: alpha(accentColor, '08') }]}>
-              <View style={[styles.favDot, { backgroundColor: accentColor }]} />
-              <Text style={styles.favLabel} numberOfLines={1}>{label}</Text>
-              <Pressable
-                onPress={() => onRemove(id)}
-                disabled={!canRemove}
-                hitSlop={10}
-                style={[styles.removeBtn, !canRemove && styles.removeBtnDisabled]}>
-                <Text style={[styles.removeText, { color: accentColor }]}>✕</Text>
-              </Pressable>
+            <View style={styles.stopRowInset}>
+              <StopChoiceRow
+                stop={{ ...stop, label }}
+                direction={direction}
+                accentColor={accentColor}
+                selected
+                onRemove={() => onRemove(id)}
+                removeDisabled={!canRemove}
+              />
             </View>
             {i < favoriteIds.length - 1 ? <View style={styles.itemDivider} /> : null}
           </View>
@@ -654,12 +658,14 @@ function DataRefreshCard({
 function WidgetStopCard({
   title,
   stopId,
+  direction,
   accentColor,
   stopNames,
   onManage,
 }: {
   title: string;
   stopId: string;
+  direction: StopDirection;
   accentColor: string;
   stopNames: Record<string, string>;
   onManage: () => void;
@@ -668,16 +674,18 @@ function WidgetStopCard({
   const { t } = useI18n();
   const shortId = stopId.split(':')[1] ?? stopId;
   const label = stopNames[stopId] ?? `Stop #${shortId}`;
+  const stop = findStop(stopId) ?? { id: stopId, label };
 
   return (
     <View style={styles.card}>
-      <View style={[styles.favRow, { backgroundColor: alpha(accentColor, '08') }]}>
-        <View style={[styles.favDot, { backgroundColor: accentColor }]} />
-        <View style={styles.widgetCopy}>
-          <Text style={styles.widgetTitle}>{title}</Text>
-          <Text style={styles.widgetValue} numberOfLines={1}>{label}</Text>
-        </View>
-        <Text style={[styles.stopCodeInline, { fontFamily: MONO }]}>#{shortId}</Text>
+      <View style={styles.stopRowInset}>
+        <StopChoiceRow
+          stop={{ ...stop, label }}
+          direction={direction}
+          accentColor={accentColor}
+          selected
+          eyebrow={title}
+        />
       </View>
       <View style={styles.itemDivider} />
       <Pressable style={styles.manageBtn} onPress={onManage}>
@@ -722,9 +730,19 @@ function SingleStopPickerModal({
   );
 
   const filtered = useMemo(() => {
-    if (!query) return enriched;
-    return enriched.filter(s => s.label.toLowerCase().includes(query) || s.id.includes(query));
-  }, [enriched, query]);
+    const routeStopMap = new Map(enriched.map(stop => [stop.id, stop]));
+    const curatedStops = getCuratedStopIds(direction)
+      .map(id => routeStopMap.get(id) ?? findStop(id))
+      .filter((stop): stop is StopInfo => Boolean(stop))
+      .map(stop => ({ ...stop, label: stopNames[stop.id] ?? stop.label }));
+    const curatedSet = new Set(curatedStops.map(stop => stop.id));
+    const all = [
+      ...curatedStops,
+      ...enriched.filter(stop => !curatedSet.has(stop.id)),
+    ];
+    if (!query) return all;
+    return all.filter(s => s.label.toLowerCase().includes(query) || s.id.includes(query));
+  }, [direction, enriched, query, stopNames]);
 
   return (
     <NativeBottomSheet
@@ -768,28 +786,23 @@ function SingleStopPickerModal({
             {isLoading ? t('stopLoading') : t('stopNoneFound')}
           </Text>
         ) : null}
-        {filtered.map((item, index) => {
+        {filtered.map((item) => {
           const isSelected = item.id === selectedId;
-          const shortId = item.id.split(':')[1] ?? item.id;
 
           return (
-            <React.Fragment key={item.id}>
-              {index > 0 ? <View style={modalStyles.separator} /> : null}
-              <Pressable
-                style={[modalStyles.stopRow, isSelected && { backgroundColor: alpha(accentColor, '0C') }]}
-                onPress={() => {
-                  onSelect(item.id);
-                  onClose();
-                }}>
-                <View style={[modalStyles.checkbox, isSelected && { borderColor: accentColor, backgroundColor: alpha(accentColor, '22') }]}>
-                  {isSelected ? <View style={[modalStyles.checkmark, { backgroundColor: accentColor }]} /> : null}
-                </View>
-                <Text style={[modalStyles.stopLabel, isSelected && { color: colors.text }]} numberOfLines={1}>
-                  {item.label}
-                </Text>
-                <Text style={[modalStyles.stopCode, { fontFamily: MONO }]}>#{shortId}</Text>
-              </Pressable>
-            </React.Fragment>
+            <StopChoiceRow
+              key={item.id}
+              stop={item}
+              direction={direction}
+              accentColor={accentColor}
+              selected={isSelected}
+              showCheck
+              onPress={() => {
+                onSelect(item.id);
+                onClose();
+              }}
+              onMapPress={onClose}
+            />
           );
         })}
       </ScrollView>
@@ -1659,6 +1672,7 @@ export default function SettingsScreen() {
         </View>
         <FavoritesCard
           favoriteIds={settings.kojoriFavorites}
+          direction="toTbilisi"
           accentColor={colors.route316}
           stopNames={stopNames}
           canRemove={settings.kojoriFavorites.length > 1}
@@ -1671,6 +1685,7 @@ export default function SettingsScreen() {
         </View>
         <FavoritesCard
           favoriteIds={settings.tbilisiFavorites}
+          direction="toKojori"
           accentColor={colors.route380}
           stopNames={stopNames}
           canRemove={settings.tbilisiFavorites.length > 1}
@@ -1712,6 +1727,7 @@ export default function SettingsScreen() {
             <WidgetStopCard
               title={t('settingsWidgetKojoriStop')}
               stopId={settings.widgetTbilisiStopId}
+              direction="toKojori"
               accentColor={colors.route380}
               stopNames={stopNames}
               onManage={() => setModal('widget-tbilisi')}
@@ -1720,6 +1736,7 @@ export default function SettingsScreen() {
             <WidgetStopCard
               title={t('settingsWidgetTbilisiStop')}
               stopId={settings.widgetKojoriStopId}
+              direction="toTbilisi"
               accentColor={colors.route316}
               stopNames={stopNames}
               onManage={() => setModal('widget-kojori')}
@@ -2188,6 +2205,7 @@ function createStyles(C: AppColors) {
     adminCardTitle: { color: C.text, fontSize: 13, fontWeight: '800', letterSpacing: 1.1 },
     adminCardNote: { color: C.textDim, fontSize: 12, lineHeight: 17 },
     favRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 13, gap: 10 },
+    stopRowInset: { paddingHorizontal: 10, paddingVertical: 10 },
     favDot: { width: 7, height: 7, borderRadius: 3.5, flexShrink: 0 },
     favLabel: { flex: 1, color: C.text, fontSize: 15, fontWeight: '500' },
     widgetCopy: { flex: 1, gap: 2 },
@@ -2669,7 +2687,7 @@ function createModalStyles(C: AppColors) {
     searchInput: { flex: 1, color: C.text, fontSize: 15, paddingVertical: 12 },
     spinner: { marginLeft: 8 },
     list: { borderRadius: 14 },
-    listContent: { paddingBottom: 8 },
+    listContent: { paddingBottom: 8, gap: 10 },
     separator: { height: 1, backgroundColor: C.border, marginLeft: 48 },
     stopRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, gap: 12 },
     disabled: { opacity: 0.3 },

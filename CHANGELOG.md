@@ -4,6 +4,7 @@
 
 ### Improved
 
+- Stop pickers now start with curated Kojori and Tbilisi stops, local hints, and in-app map focus buttons.
 - Start screen destination cards now use generated full-card landmark imagery for Kojori's Azeula Fortress and Tbilisi's Liberty Square.
 - Android back now behaves more naturally: it returns through visited tabs and reopens the destination picker from Departures instead of immediately closing the app
 - Header refresh button now uses the same centered vector icon treatment as the rest of the app chrome
@@ -28,6 +29,7 @@
 - Live departure status text now avoids repeating "live" and uses shorter drift labels in compact chips
 - Direction pills now adapt their width for localized city names while keeping the swap animation consistent
 - Georgian start-screen destination cards now avoid clipping display text
+- First-install defaults now explicitly start Tbilisi departures at Elene Akhvlediani Street and Kojori departures at Kojori Center
 
 ### Fixed
 

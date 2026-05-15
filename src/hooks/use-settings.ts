@@ -17,6 +17,8 @@ import {
 import type { AppLanguage } from '@/i18n/languages';
 
 const STORAGE_KEY = '@kojori_settings_v2';
+const DEFAULT_TBILISI_STOP_ID = '1:2994';
+const DEFAULT_KOJORI_STOP_ID = '1:3078';
 export type SharedDirection = 'toKojori' | 'toTbilisi';
 /**
  * Governs what happens when the user opens the app:
@@ -58,10 +60,10 @@ export interface Settings {
 const DEFAULTS: Settings = {
   kojoriFavorites: DEFAULT_KOJORI_FAVORITES,
   tbilisiFavorites: DEFAULT_TBILISI_FAVORITES,
-  activeKojoriStopId: DEFAULT_KOJORI_FAVORITES[0],
-  activeTbilisiStopId: DEFAULT_TBILISI_FAVORITES[0],
-  widgetKojoriStopId: DEFAULT_KOJORI_FAVORITES[0],
-  widgetTbilisiStopId: DEFAULT_TBILISI_FAVORITES[0],
+  activeKojoriStopId: DEFAULT_KOJORI_STOP_ID,
+  activeTbilisiStopId: DEFAULT_TBILISI_STOP_ID,
+  widgetKojoriStopId: DEFAULT_KOJORI_STOP_ID,
+  widgetTbilisiStopId: DEFAULT_TBILISI_STOP_ID,
   sharedDirection: 'toKojori',
   paletteId: DEFAULT_APP_PALETTE,
   themeMode: DEFAULT_APP_THEME_MODE,

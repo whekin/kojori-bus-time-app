@@ -1,14 +1,26 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import React, { useMemo, useState } from 'react';
-import { Linking, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  type GestureResponderEvent,
+  useWindowDimensions,
+  View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Defs, G, LinearGradient, Path, Rect, Stop } from 'react-native-svg';
 
 import { NativeBottomSheet } from '@/components/native-bottom-sheet';
+import { StopChoiceRow } from '@/components/stop-choice-row';
 import { StopPickerModal } from '@/components/stop-picker-modal';
 import { alpha } from '@/constants/theme';
 import { useAppColors } from '@/hooks/use-app-colors';
 import { useI18n } from '@/hooks/use-i18n';
+import { useMapFocus } from '@/hooks/use-map-focus';
+import { useTabNav } from '@/hooks/use-tab-nav';
 
 const MONO = Platform.select({ android: 'monospace', ios: 'Menlo', default: 'monospace' });
 const DISPLAY = Platform.select({ android: 'serif', ios: 'Georgia', default: 'serif' });
@@ -52,83 +64,8 @@ function formatDistance(distanceMeters: number, t: ReturnType<typeof useI18n>['t
   return t('stopDistanceKm', { distance: (distanceMeters / 1000).toFixed(distanceMeters < 10_000 ? 1 : 0) });
 }
 
-function StopOption({
-  stop,
-  index,
-  total,
-  isActive,
-  accentColor,
-  onPress,
-}: {
-  stop: StopSelectorItem;
-  index: number;
-  total: number;
-  isActive: boolean;
-  accentColor: string;
-  onPress: () => void;
-}) {
-  const colors = useAppColors();
-  const styles = useStopSelectorStyles();
-  const { t } = useI18n();
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityState={{ selected: isActive }}
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.option,
-        {
-          borderColor: isActive ? accentColor + '55' : colors.border,
-          backgroundColor: isActive ? accentColor + '10' : colors.surfaceRaised,
-          opacity: pressed ? 0.95 : 1,
-        },
-      ]}>
-      <View style={styles.optionRail}>
-        <View
-          style={[
-            styles.optionDot,
-            {
-              backgroundColor: isActive ? accentColor : colors.borderStrong,
-              borderColor: isActive ? accentColor + 'aa' : colors.borderStrong,
-            },
-          ]}
-        />
-        {index < total - 1 ? (
-          <View
-            style={[
-              styles.optionLine,
-              { backgroundColor: isActive ? accentColor + '40' : colors.border },
-            ]}
-          />
-        ) : null}
-      </View>
-
-      <View style={styles.optionCopy}>
-        <View style={styles.optionMeta}>
-          <Text style={styles.optionEyebrow}>{t('stopOption', { index: formatIndex(index) })}</Text>
-          <Text style={[styles.optionState, { color: isActive ? accentColor : colors.textDim, fontFamily: MONO }]}>
-            {isActive ? t('stopCurrent') : t('stopSwitch')}
-          </Text>
-        </View>
-        <Text style={[styles.optionTitle, { fontFamily: DISPLAY }]} numberOfLines={2}>
-          {stop.label}
-        </Text>
-        <Text style={[styles.optionCode, { fontFamily: MONO }]}>#{stop.id.split(':')[1] ?? stop.id}</Text>
-      </View>
-    </Pressable>
-  );
-}
-
 function stopCode(id: string) {
   return '#' + (id.split(':')[1] ?? id);
-}
-
-function stopDestination(stop: StopSelectorItem) {
-  if (typeof stop.lat === 'number' && typeof stop.lon === 'number') {
-    return `${stop.lat},${stop.lon}`;
-  }
-
-  return `${stop.label}, Tbilisi, Georgia`;
 }
 
 function BoardingStopMapBackdrop({ accentColor }: { accentColor: string }) {
@@ -184,7 +121,7 @@ function BoardingStopMapBackdrop({ accentColor }: { accentColor: string }) {
         <Rect width="280" height="132" fill="url(#mapFade)" />
       </Svg>
       <View style={[styles.triggerMapIconWrap, { opacity: iconOpacity, borderColor: alpha(accentColor, '30'), backgroundColor: alpha(colors.surfaceHigh, colors.mode === 'dark' ? '80' : 'B8') }]}>
-        <MaterialCommunityIcons name="bus-stop" size={25} color={colors.textDim} />
+        <MaterialCommunityIcons name="bus" size={20} color={colors.textDim} />
         <View style={[styles.triggerMapIconDot, { backgroundColor: accentColor }]} />
       </View>
     </View>
@@ -204,7 +141,10 @@ export function StopSelector({
   const colors = useAppColors();
   const styles = useStopSelectorStyles();
   const insets = useSafeAreaInsets();
+  const { height } = useWindowDimensions();
   const { t } = useI18n();
+  const { requestStopFocus } = useMapFocus();
+  const navigateToTab = useTabNav();
   const [open, setOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const resolvedLabel = label ?? t('stopBoarding');
@@ -212,44 +152,39 @@ export function StopSelector({
   const activeIndex = Math.max(0, stops.findIndex(stop => stop.id === activeStopId));
   const activeStop = stops[activeIndex] ?? stops[0];
   const totalStops = stops.length;
+  const sheetMaxHeight = Math.round(height * 0.88);
+  const optionsHeight = Math.max(260, sheetMaxHeight - 214 - Math.max(insets.bottom, 16));
 
   const optionList = useMemo(
     () =>
-      stops.map((stop, index) => {
+      stops.map((stop) => {
         const isActive = stop.id === activeStop?.id;
 
         return (
-          <StopOption
+          <StopChoiceRow
             key={stop.id}
             stop={stop}
-            index={index}
-            total={totalStops}
-            isActive={isActive}
+            direction={addStopModal?.direction ?? 'toKojori'}
             accentColor={accentColor}
+            selected={isActive}
+            showCheck
             onPress={() => {
               if (!isActive) onSelectStop(stop.id);
               setOpen(false);
             }}
+            onMapPress={() => setOpen(false)}
           />
         );
       }),
-    [accentColor, activeStop?.id, onSelectStop, stops, totalStops],
+    [accentColor, activeStop?.id, addStopModal?.direction, onSelectStop, stops],
   );
 
   if (!activeStop) return null;
 
-  async function handleOpenRoute() {
-    const destination = stopDestination(activeStop);
-    const encodedDestination = encodeURIComponent(destination);
-    const appUrl = `comgooglemaps://?daddr=${encodedDestination}&directionsmode=walking`;
-    const webUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodedDestination}&travelmode=walking`;
-
-    try {
-      const canUseGoogleMaps = await Linking.canOpenURL(appUrl);
-      await Linking.openURL(canUseGoogleMaps ? appUrl : webUrl);
-    } catch {
-      await Linking.openURL(webUrl);
-    }
+  function handleShowActiveStopOnMap(event?: GestureResponderEvent) {
+    event?.stopPropagation();
+    requestStopFocus(activeStop, addStopModal?.direction ?? 'toKojori');
+    navigateToTab?.('explore');
   }
 
   return (
@@ -289,7 +224,8 @@ export function StopSelector({
             <Text style={[styles.triggerCode, { fontFamily: MONO }]}>{stopCode(activeStop.id)}</Text>
             <Pressable
               accessibilityRole="button"
-              onPress={handleOpenRoute}
+              accessibilityLabel={t('stopShowOnMap', { stop: activeStop.label })}
+              onPress={handleShowActiveStopOnMap}
               hitSlop={8}
               style={[
                 styles.routeButton,
@@ -298,8 +234,8 @@ export function StopSelector({
                   backgroundColor: accentColor + '10',
                 },
               ]}>
-              <MaterialCommunityIcons name="walk" size={14} color={accentColor} />
-              <Text style={[styles.routeButtonText, { color: accentColor }]}>{t('commonRoute')}</Text>
+              <MaterialCommunityIcons name="map-marker-radius" size={14} color={accentColor} />
+              <Text style={[styles.routeButtonText, { color: accentColor }]}>{t('tabsMap')}</Text>
             </Pressable>
           </View>
         </View>
@@ -332,10 +268,11 @@ export function StopSelector({
       <NativeBottomSheet
         visible={open}
         onClose={() => setOpen(false)}
-        fallbackSheetStyle={styles.sheetFrame}
+        fallbackSheetStyle={[styles.sheetFrame, { maxHeight: sheetMaxHeight }]}
         contentStyle={[
           styles.sheetContent,
           {
+            maxHeight: sheetMaxHeight,
             paddingBottom: Math.max(insets.bottom, 16),
           },
         ]}>
@@ -383,6 +320,7 @@ export function StopSelector({
 
         <ScrollView
           nestedScrollEnabled
+          style={{ height: optionsHeight }}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.optionsContent}>
           {locationSuggestion ? (
@@ -478,11 +416,11 @@ function createStyles(C: ReturnType<typeof useAppColors>) {
   },
   triggerMapIconWrap: {
     position: 'absolute',
-    top: 23,
-    right: 58,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    top: 28,
+    right: 98,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',

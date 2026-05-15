@@ -1,26 +1,25 @@
 import React, { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  Platform,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   useWindowDimensions,
   View,
+  Pressable,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { NativeBottomSheet } from '@/components/native-bottom-sheet';
-import { alpha, type AppColors } from '@/constants/theme';
+import { StopChoiceRow } from '@/components/stop-choice-row';
+import { getCuratedStopIds } from '@/constants/curated-stops';
+import { type AppColors } from '@/constants/theme';
 import { useAppColors } from '@/hooks/use-app-colors';
 import { useI18n } from '@/hooks/use-i18n';
 import { useRouteStops } from '@/hooks/use-route-stops';
 import { useStopNames } from '@/hooks/use-stop-names';
-import { StopInfo } from '@/services/ttc';
-
-const MONO = Platform.select({ android: 'monospace', ios: 'Menlo', default: 'monospace' });
+import { findStop, StopInfo } from '@/services/ttc';
 
 export function StopPickerModal({
   visible,
@@ -59,13 +58,19 @@ export function StopPickerModal({
   const query = search.trim().toLowerCase();
 
   const filtered = useMemo(() => {
+    const routeStopMap = new Map(enriched.map(stop => [stop.id, stop]));
+    const curatedStops = getCuratedStopIds(direction)
+      .map(id => routeStopMap.get(id) ?? findStop(id))
+      .filter((stop): stop is StopInfo => Boolean(stop))
+      .map(stop => ({ ...stop, label: stopNames[stop.id] ?? stop.label }));
+    const curatedSet = new Set(curatedStops.map(stop => stop.id));
     const all = [
-      ...enriched.filter(s => favoriteSet.has(s.id)),
-      ...enriched.filter(s => !favoriteSet.has(s.id)),
+      ...curatedStops,
+      ...enriched.filter(stop => !curatedSet.has(stop.id)),
     ];
     if (!query) return all;
     return all.filter(s => s.label.toLowerCase().includes(query) || s.id.includes(query));
-  }, [enriched, favoriteSet, query]);
+  }, [direction, enriched, query, stopNames]);
 
   return (
     <NativeBottomSheet
@@ -109,27 +114,22 @@ export function StopPickerModal({
             {isLoading ? t('stopLoading') : t('stopNoneFound')}
           </Text>
         ) : null}
-        {filtered.map((item, index) => {
+        {filtered.map((item) => {
           const isFav = favoriteSet.has(item.id);
           const disabled = isFav && favoriteIds.length === 1;
-          const shortId = item.id.split(':')[1] ?? item.id;
 
           return (
-            <React.Fragment key={item.id}>
-              {index > 0 ? <View style={modalStyles.separator} /> : null}
-              <Pressable
-                style={[modalStyles.stopRow, isFav && { backgroundColor: alpha(accentColor, '0C') }, disabled && modalStyles.disabled]}
-                onPress={() => onToggle(item.id)}
-                disabled={disabled}>
-                <View style={[modalStyles.checkbox, isFav && { borderColor: accentColor, backgroundColor: alpha(accentColor, '22') }]}>
-                  {isFav ? <View style={[modalStyles.checkmark, { backgroundColor: accentColor }]} /> : null}
-                </View>
-                <Text style={[modalStyles.stopLabel, isFav && { color: colors.text }]} numberOfLines={1}>
-                  {item.label}
-                </Text>
-                <Text style={[modalStyles.stopCode, { fontFamily: MONO }]}>#{shortId}</Text>
-              </Pressable>
-            </React.Fragment>
+            <StopChoiceRow
+              key={item.id}
+              stop={item}
+              direction={direction}
+              accentColor={accentColor}
+              selected={isFav}
+              disabled={disabled}
+              showCheck
+              onPress={() => onToggle(item.id)}
+              onMapPress={onClose}
+            />
           );
         })}
       </ScrollView>
@@ -168,14 +168,7 @@ function createModalStyles(C: AppColors) {
     searchInput: { flex: 1, color: C.text, fontSize: 15, paddingVertical: 12 },
     spinner: { marginLeft: 8 },
     list: { borderRadius: 14 },
-    listContent: { paddingBottom: 8 },
-    separator: { height: 1, backgroundColor: C.border, marginLeft: 48 },
-    stopRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, gap: 12 },
-    disabled: { opacity: 0.3 },
-    checkbox: { width: 20, height: 20, borderRadius: 6, borderWidth: 1.5, borderColor: C.borderStrong, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-    checkmark: { width: 10, height: 10, borderRadius: 2 },
-    stopLabel: { flex: 1, color: C.textDim, fontSize: 15, fontWeight: '500' },
-    stopCode: { color: C.textFaint, fontSize: 12, flexShrink: 0 },
+    listContent: { paddingBottom: 8, gap: 10 },
     emptyText: { color: C.textFaint, textAlign: 'center', paddingVertical: 40, fontSize: 14 },
   });
 }
