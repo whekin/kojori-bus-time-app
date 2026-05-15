@@ -4,6 +4,7 @@
 
 ### Improved
 
+- Start screen destination cards now use generated full-card landmark imagery for Kojori's Azeula Fortress and Tbilisi's Liberty Square.
 - Android back now behaves more naturally: it returns through visited tabs and reopens the destination picker from Departures instead of immediately closing the app
 - Header refresh button now uses the same centered vector icon treatment as the rest of the app chrome
 - Start screen now uses a lighter destination-picker layout with landmark cards, direct arrows, and clearer location preference copy

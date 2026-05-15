@@ -2,6 +2,7 @@ import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import React, { useRef } from 'react';
 import {
   ActivityIndicator,
+  ImageBackground,
   Platform,
   Pressable,
   ScrollView,
@@ -13,7 +14,6 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Defs, G, LinearGradient, Path, Polygon, Rect, Stop } from 'react-native-svg';
 
-import { KojoriIllustration, TbilisiIllustration } from '@/components/onboarding-illustrations';
 import { SettingsSwitch } from '@/components/settings-switch';
 import { alpha, type AppColors } from '@/constants/theme';
 import { useActiveDirection } from '@/hooks/use-active-direction';
@@ -25,6 +25,10 @@ import { useRouteStops } from '@/hooks/use-route-stops';
 import { useSettings, type SharedDirection } from '@/hooks/use-settings';
 
 const DISPLAY = Platform.select({ android: 'serif', ios: 'Georgia', default: 'serif' });
+const CARD_BACKGROUNDS = {
+  kojori: require('@/assets/images/start-kojori-card.png'),
+  tbilisi: require('@/assets/images/start-tbilisi-card.png'),
+} as const;
 
 type Mode = 'kojori' | 'tbilisi';
 
@@ -91,13 +95,9 @@ export function StartScreen({ onDone }: { onDone: () => void }) {
     update({ launchBehavior: 'ask' });
   }
 
-  const artSize = Math.min(96, Math.max(78, width * 0.22));
   const smartIssue = Boolean(locationError);
   const kojoriAccent = colors.route380;
   const tbilisiAccent = colors.route316;
-  const artworkBgOpacity = colors.mode === 'dark' ? '20' : '14';
-  const artworkOutline = colors.mode === 'dark' ? colors.textDim : colors.text;
-  const artworkDim = colors.textFaint;
 
   return (
     <View style={[styles.root, { paddingTop: insets.top + 10 }]}>
@@ -125,7 +125,9 @@ export function StartScreen({ onDone }: { onDone: () => void }) {
             const sub = mode === 'kojori' ? t('startKojoriSub') : t('startTbilisiSub');
             const accent = mode === 'kojori' ? kojoriAccent : tbilisiAccent;
             const borderColor = alpha(accent, colors.mode === 'dark' ? '55' : '35');
-            const arrowColor = colors.mode === 'dark' ? colors.bg : colors.text;
+            const arrowColor = colors.mode === 'dark' ? '#FFFFFF' : colors.text;
+            const arrowFill = alpha(accent, colors.mode === 'dark' ? '3D' : '2E');
+            const arrowBorder = alpha('#FFFFFF', colors.mode === 'dark' ? '7A' : 'A8');
             return (
               <Pressable
                 key={mode}
@@ -139,43 +141,31 @@ export function StartScreen({ onDone }: { onDone: () => void }) {
                     transform: [{ scale: pressed ? 0.985 : 1 }],
                   },
                 ]}>
-                <View style={[styles.cardArt, { width: artSize, height: artSize, backgroundColor: alpha(accent, artworkBgOpacity) }]}>
-                  {mode === 'kojori' ? (
-                    <KojoriIllustration
-                      width={artSize}
-                      height={artSize}
-                      accent={accent}
-                      bg={colors.surfaceHigh}
-                      outline={artworkOutline}
-                      dim={artworkDim}
-                    />
-                  ) : (
-                    <TbilisiIllustration
-                      width={artSize}
-                      height={artSize}
-                      accent={accent}
-                      bg={colors.surfaceHigh}
-                      outline={artworkOutline}
-                      dim={artworkDim}
-                    />
-                  )}
-                </View>
-                <View style={styles.cardCopy}>
-                  <Text style={[styles.cardTo, { color: accent, fontFamily: DISPLAY }]}>{t('directionTo').trim()}</Text>
-                  <Text style={[styles.cardLabel, { fontFamily: DISPLAY }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.78}>{label}</Text>
-                  <Text style={styles.cardSub}>{sub}</Text>
-                  {mode === 'kojori' ? (
-                    <View style={styles.elevationRow}>
-                      <View style={styles.mountainIcon}>
-                        <View style={[styles.mountainPeak, styles.mountainPeakLeft]} />
-                        <View style={[styles.mountainPeak, styles.mountainPeakRight]} />
+                <ImageBackground
+                  source={CARD_BACKGROUNDS[mode]}
+                  resizeMode="cover"
+                  style={styles.cardImageBackground}
+                  imageStyle={styles.cardImage}
+                />
+                <CardScrim mode={mode} colors={colors} accent={accent} />
+                <View style={styles.cardContent}>
+                  <View style={styles.cardCopy}>
+                    <Text style={[styles.cardTo, { color: accent, fontFamily: DISPLAY }]}>{t('directionTo').trim()}</Text>
+                    <Text style={[styles.cardLabel, { fontFamily: DISPLAY }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.78}>{label}</Text>
+                    <Text style={styles.cardSub}>{sub}</Text>
+                    {mode === 'kojori' ? (
+                      <View style={styles.elevationRow}>
+                        <View style={styles.mountainIcon}>
+                          <View style={[styles.mountainPeak, styles.mountainPeakLeft]} />
+                          <View style={[styles.mountainPeak, styles.mountainPeakRight]} />
+                        </View>
+                        <Text style={styles.elevationText}>1340 m</Text>
                       </View>
-                      <Text style={styles.elevationText}>1340 m</Text>
-                    </View>
-                  ) : null}
-                </View>
-                <View style={[styles.arrowButton, { backgroundColor: accent }]}>
-                  <MaterialCommunityIcons name="arrow-right" size={29} color={arrowColor} />
+                    ) : null}
+                  </View>
+                  <View style={[styles.arrowButton, { backgroundColor: arrowFill, borderColor: arrowBorder }]}>
+                    <MaterialCommunityIcons name="arrow-right" size={29} color={arrowColor} />
+                  </View>
                 </View>
               </Pressable>
             );
@@ -228,6 +218,36 @@ export function StartScreen({ onDone }: { onDone: () => void }) {
         </View>
       </View>
     </View>
+  );
+}
+
+function CardScrim({ mode, colors, accent }: { mode: Mode; colors: AppColors; accent: string }) {
+  const baseOpacity = colors.mode === 'dark' ? 0.36 : 0.24;
+  const leftOpacity = colors.mode === 'dark' ? 0.9 : 0.78;
+  const bottomOpacity = colors.mode === 'dark' ? 0.68 : 0.5;
+  const rightGlowOpacity = mode === 'kojori' ? 0.12 : 0.16;
+  return (
+    <Svg pointerEvents="none" style={stylesStatic.cardScrim} width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">
+      <Defs>
+        <LinearGradient id={`${mode}-card-left`} x1="0" y1="0" x2="1" y2="0">
+          <Stop offset="0" stopColor={colors.bg} stopOpacity={leftOpacity} />
+          <Stop offset="0.58" stopColor={colors.bg} stopOpacity={colors.mode === 'dark' ? '0.42' : '0.34'} />
+          <Stop offset="1" stopColor={colors.bg} stopOpacity="0.1" />
+        </LinearGradient>
+        <LinearGradient id={`${mode}-card-bottom`} x1="0" y1="0" x2="0" y2="1">
+          <Stop offset="0" stopColor={colors.bg} stopOpacity="0.03" />
+          <Stop offset="1" stopColor={colors.bg} stopOpacity={bottomOpacity} />
+        </LinearGradient>
+        <LinearGradient id={`${mode}-card-glow`} x1="0" y1="0" x2="1" y2="0">
+          <Stop offset="0" stopColor={accent} stopOpacity="0" />
+          <Stop offset="1" stopColor={accent} stopOpacity={rightGlowOpacity} />
+        </LinearGradient>
+      </Defs>
+      <Rect x="0" y="0" width="100" height="100" fill={colors.bg} opacity={baseOpacity} />
+      <Rect x="0" y="0" width="100" height="100" fill={`url(#${mode}-card-left)`} />
+      <Rect x="0" y="0" width="100" height="100" fill={`url(#${mode}-card-bottom)`} />
+      <Rect x="0" y="0" width="100" height="100" fill={`url(#${mode}-card-glow)`} />
+    </Svg>
   );
 }
 
@@ -300,24 +320,31 @@ function createStyles(C: AppColors) {
     subtitle: { color: C.textDim, fontSize: 18, lineHeight: 24 },
     cards: { gap: 14 },
     card: {
-      minHeight: 128,
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 15,
-      padding: 15,
+      minHeight: 176,
       borderWidth: 1,
-      borderRadius: 22,
+      borderRadius: 24,
       backgroundColor: C.surface,
       shadowColor: C.mode === 'dark' ? '#000000' : C.borderStrong,
       shadowOpacity: C.mode === 'dark' ? 0.28 : 0.18,
       shadowRadius: 22,
       shadowOffset: { width: 0, height: 10 },
       elevation: 3,
+      overflow: 'hidden',
     },
-    cardArt: {
-      alignItems: 'center',
-      justifyContent: 'center',
-      borderRadius: 18,
+    cardImageBackground: {
+      ...StyleSheet.absoluteFillObject,
+    },
+    cardImage: {
+      borderRadius: 23,
+    },
+    cardContent: {
+      minHeight: 176,
+      flexDirection: 'row',
+      alignItems: 'flex-end',
+      gap: 14,
+      paddingHorizontal: 19,
+      paddingTop: 18,
+      paddingBottom: 18,
       overflow: 'hidden',
     },
     cardCopy: {
@@ -325,9 +352,32 @@ function createStyles(C: AppColors) {
       minWidth: 0,
       gap: 2,
     },
-    cardTo: { fontSize: 22, fontWeight: '400', fontStyle: 'italic', lineHeight: 25 },
-    cardLabel: { color: C.text, fontSize: 32, fontWeight: '700', lineHeight: 37 },
-    cardSub: { color: C.textDim, fontSize: 15, lineHeight: 20 },
+    cardTo: {
+      fontSize: 25,
+      fontWeight: '400',
+      fontStyle: 'italic',
+      lineHeight: 29,
+      textShadowColor: alpha('#000000', '99'),
+      textShadowRadius: 10,
+      textShadowOffset: { width: 0, height: 2 },
+    },
+    cardLabel: {
+      color: '#FFFFFF',
+      fontSize: 39,
+      fontWeight: '700',
+      lineHeight: 44,
+      textShadowColor: alpha('#000000', 'CC'),
+      textShadowRadius: 12,
+      textShadowOffset: { width: 0, height: 2 },
+    },
+    cardSub: {
+      color: alpha('#FFFFFF', 'E6'),
+      fontSize: 16,
+      lineHeight: 21,
+      textShadowColor: alpha('#000000', 'AA'),
+      textShadowRadius: 8,
+      textShadowOffset: { width: 0, height: 1 },
+    },
     elevationRow: { flexDirection: 'row', alignItems: 'center', gap: 7, marginTop: 5 },
     mountainIcon: { width: 28, height: 15, position: 'relative' },
     mountainPeak: {
@@ -344,11 +394,21 @@ function createStyles(C: AppColors) {
     },
     mountainPeakLeft: { left: 0 },
     mountainPeakRight: { left: 11, borderBottomColor: alpha(C.route380, C.mode === 'dark' ? '99' : '85') },
-    elevationText: { color: C.textDim, fontSize: 14, lineHeight: 18 },
+    elevationText: {
+      color: alpha('#FFFFFF', 'D6'),
+      fontSize: 14,
+      lineHeight: 18,
+      textShadowColor: alpha('#000000', '99'),
+      textShadowRadius: 6,
+      textShadowOffset: { width: 0, height: 1 },
+    },
     arrowButton: {
       width: 54,
       height: 54,
       borderRadius: 27,
+      borderWidth: 1,
+      alignSelf: 'center',
+      flexShrink: 0,
       alignItems: 'center',
       justifyContent: 'center',
       shadowColor: C.mode === 'dark' ? '#000000' : C.route380,
@@ -417,5 +477,8 @@ const stylesStatic = StyleSheet.create({
     right: -20,
     top: 88,
     opacity: 1,
+  },
+  cardScrim: {
+    ...StyleSheet.absoluteFillObject,
   },
 });
