@@ -22,6 +22,8 @@
 - Direction controls now use a FROM / TO card style and toggle destination directly without opening a sheet
 - Direction toggles now animate Kojori and Tbilisi swapping places, with the accent color easing into the next route before the rest of the screen updates
 - Map route overlays now wait until the Map tab is active before catching up to direction changes made elsewhere
+- Timetable bus filter chips now have more breathing room below the stop card
+- Timetable entries now use rounded grouped rows with subtle upcoming-time hints
 
 ### Fixed
 
