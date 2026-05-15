@@ -4,6 +4,7 @@
 
 ### Improved
 
+- Web now shows Kojori app tabs instead of Expo starter navigation.
 - Map stops are now actionable: tap a stop to save or remove it, or jump straight to the next buses.
 - Focused map stops can now be dismissed by tapping empty map space or using Android back.
 - Map stop and vehicle popups now use the same themed panel treatment as the rest of the map controls.
