@@ -306,7 +306,13 @@ type IslandStatusItem = {
   onDismiss?: () => void;
 };
 
-function StatusIsland({ items }: { items: IslandStatusItem[] }) {
+function StatusIsland({
+  items,
+  compact = false,
+}: {
+  items: IslandStatusItem[];
+  compact?: boolean;
+}) {
   const colors = useAppColors();
   const styles = useHomeStyles();
   const { t } = useI18n();
@@ -337,6 +343,143 @@ function StatusIsland({ items }: { items: IslandStatusItem[] }) {
       [item.key]: item.dismissToken,
     }));
     setExpandedKey((current) => (current === item.key ? null : current));
+  }
+
+  function renderStatusPanel(item: IslandStatusItem, compactPanel = false) {
+    return (
+      <View
+        style={[
+          styles.statusPanel,
+          compactPanel && styles.statusPanelCompact,
+          {
+            borderColor: alpha(item.accentColor, "42"),
+            backgroundColor: colors.surface,
+          },
+        ]}
+      >
+        <View style={styles.statusPanelHeader}>
+          <View style={styles.statusPanelHeaderMain}>
+            <View
+              style={[
+                styles.statusPillDot,
+                { backgroundColor: item.accentColor },
+              ]}
+            />
+            <Text
+              style={[
+                styles.statusPanelTitle,
+                { color: item.textColor },
+              ]}
+              numberOfLines={compactPanel ? 1 : undefined}
+            >
+              {item.label}
+            </Text>
+          </View>
+          <Pressable
+            hitSlop={8}
+            onPress={() => setExpandedKey(null)}
+            style={styles.statusPanelClose}
+          >
+            <MaterialCommunityIcons
+              name="close"
+              size={15}
+              color={item.textColor}
+            />
+          </Pressable>
+        </View>
+        <Text style={styles.statusPanelText}>{item.detail}</Text>
+        <View style={styles.statusPanelFooter}>
+          <View style={styles.statusPanelFooterLeft}>
+            {item.meta ? (
+              <Text style={styles.statusPanelMeta}>{item.meta}</Text>
+            ) : null}
+            <Pressable
+              style={[
+                styles.statusPanelButton,
+                styles.statusPanelDismissButton,
+                { borderColor: alpha(item.accentColor, "36") },
+              ]}
+              onPress={() => handleDismiss(item)}
+            >
+              <Text
+                style={[
+                  styles.statusPanelButtonText,
+                  { color: colors.textDim },
+                ]}
+              >
+                {t("commonDismiss")}
+              </Text>
+            </Pressable>
+          </View>
+          {item.actionLabel && item.onAction ? (
+            <Pressable
+              style={[
+                styles.statusPanelButton,
+                { borderColor: alpha(item.accentColor, "55") },
+              ]}
+              onPress={item.onAction}
+            >
+              <Text
+                style={[
+                  styles.statusPanelButtonText,
+                  { color: item.textColor },
+                ]}
+              >
+                {item.actionLabel}
+              </Text>
+            </Pressable>
+          ) : null}
+        </View>
+      </View>
+    );
+  }
+
+  if (compact) {
+    const primaryItem = expandedItem ?? visibleItems[0];
+
+    return (
+      <View style={[styles.statusIslandWrap, styles.statusIslandWrapCompact]}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`${primaryItem.label}. ${
+            expandedItem ? t("ttcStatusCollapse") : t("ttcStatusExpand")
+          }`}
+          accessibilityState={{ expanded: Boolean(expandedItem) }}
+          onPress={() =>
+            setExpandedKey((current) =>
+              current === primaryItem.key ? null : primaryItem.key,
+            )
+          }
+          style={[
+            styles.statusIconButton,
+            {
+              backgroundColor: alpha(
+                primaryItem.accentColor,
+                expandedItem ? "20" : "12",
+              ),
+              borderColor: alpha(
+                primaryItem.accentColor,
+                expandedItem ? "66" : "40",
+              ),
+            },
+          ]}
+        >
+          <MaterialCommunityIcons
+            name="cloud-alert"
+            size={17}
+            color={primaryItem.textColor}
+          />
+          <View
+            style={[
+              styles.statusIconDot,
+              { backgroundColor: primaryItem.accentColor },
+            ]}
+          />
+        </Pressable>
+
+        {expandedItem ? renderStatusPanel(expandedItem, true) : null}
+      </View>
+    );
   }
 
   return (
@@ -388,90 +531,7 @@ function StatusIsland({ items }: { items: IslandStatusItem[] }) {
         })}
       </View>
 
-      {expandedItem ? (
-        <View
-          style={[
-            styles.statusPanel,
-            {
-              borderColor: alpha(expandedItem.accentColor, "42"),
-              backgroundColor: colors.surface,
-            },
-          ]}
-        >
-          <View style={styles.statusPanelHeader}>
-            <View style={styles.statusPanelHeaderMain}>
-              <View
-                style={[
-                  styles.statusPillDot,
-                  { backgroundColor: expandedItem.accentColor },
-                ]}
-              />
-              <Text
-                style={[
-                  styles.statusPanelTitle,
-                  { color: expandedItem.textColor },
-                ]}
-              >
-                {expandedItem.label}
-              </Text>
-            </View>
-            <Pressable
-              hitSlop={8}
-              onPress={() => setExpandedKey(null)}
-              style={styles.statusPanelClose}
-            >
-              <MaterialCommunityIcons
-                name="close"
-                size={15}
-                color={expandedItem.textColor}
-              />
-            </Pressable>
-          </View>
-          <Text style={styles.statusPanelText}>{expandedItem.detail}</Text>
-          <View style={styles.statusPanelFooter}>
-            <View style={styles.statusPanelFooterLeft}>
-              {expandedItem.meta ? (
-                <Text style={styles.statusPanelMeta}>{expandedItem.meta}</Text>
-              ) : null}
-              <Pressable
-                style={[
-                  styles.statusPanelButton,
-                  styles.statusPanelDismissButton,
-                  { borderColor: alpha(expandedItem.accentColor, "36") },
-                ]}
-                onPress={() => handleDismiss(expandedItem)}
-              >
-                <Text
-                  style={[
-                    styles.statusPanelButtonText,
-                    { color: colors.textDim },
-                  ]}
-                >
-                  {t("commonDismiss")}
-                </Text>
-              </Pressable>
-            </View>
-            {expandedItem.actionLabel && expandedItem.onAction ? (
-              <Pressable
-                style={[
-                  styles.statusPanelButton,
-                  { borderColor: alpha(expandedItem.accentColor, "55") },
-                ]}
-                onPress={expandedItem.onAction}
-              >
-                <Text
-                  style={[
-                    styles.statusPanelButtonText,
-                    { color: expandedItem.textColor },
-                  ]}
-                >
-                  {expandedItem.actionLabel}
-                </Text>
-              </Pressable>
-            ) : null}
-          </View>
-        </View>
-      ) : null}
+      {expandedItem ? renderStatusPanel(expandedItem) : null}
     </View>
   );
 }
@@ -1352,6 +1412,7 @@ export default function HomeScreen({
     t,
     ttcStatus,
   ]);
+  const hasStatusItems = statusItems.length > 0;
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
@@ -1360,28 +1421,37 @@ export default function HomeScreen({
         <View style={styles.headerLeft}>
           <DirectionPill accentColor={accentColor} />
         </View>
-        <View style={styles.headerCenter}>
-          <StatusIsland items={statusItems} />
-        </View>
-        <View style={styles.headerRight}>
-          <Text style={[styles.headerClock, { fontFamily: MONO }]}>
-            {formatHeaderTime(now)}
-          </Text>
-          <Pressable
-            style={styles.refreshButton}
-            onPress={handleRefresh}
-            disabled={isRefreshing}
-          >
-            {isRefreshing ? (
-              <ActivityIndicator size="small" color={colors.textDim} />
-            ) : (
-              <MaterialCommunityIcons
-                name="refresh"
-                size={18}
-                color={colors.textDim}
-              />
-            )}
-          </Pressable>
+        <View style={styles.headerCenter} />
+        <View
+          style={[
+            styles.headerRight,
+            hasStatusItems && styles.headerRightCompact,
+          ]}
+        >
+          {hasStatusItems ? (
+            <StatusIsland items={statusItems} compact />
+          ) : (
+            <>
+              <Text style={[styles.headerClock, { fontFamily: MONO }]}>
+                {formatHeaderTime(now)}
+              </Text>
+              <Pressable
+                style={styles.refreshButton}
+                onPress={handleRefresh}
+                disabled={isRefreshing}
+              >
+                {isRefreshing ? (
+                  <ActivityIndicator size="small" color={colors.textDim} />
+                ) : (
+                  <MaterialCommunityIcons
+                    name="refresh"
+                    size={18}
+                    color={colors.textDim}
+                  />
+                )}
+              </Pressable>
+            </>
+          )}
         </View>
       </View>
 
@@ -1444,6 +1514,7 @@ function createStyles(C: AppColors) {
       paddingHorizontal: CONTENT_SIDE,
       paddingTop: 14,
       paddingBottom: 12,
+      zIndex: 50,
     },
     headerLeft: {
       flexDirection: "row",
@@ -1461,9 +1532,16 @@ function createStyles(C: AppColors) {
       justifyContent: "flex-end",
       flexShrink: 0,
     },
+    headerRightCompact: { minWidth: 34 },
     contentTopSpacer: { height: 0 },
     headerClock: { color: C.textDim, fontSize: 15, letterSpacing: 0.4 },
     statusIslandWrap: { alignItems: "center", gap: 8, maxWidth: "100%" },
+    statusIslandWrapCompact: {
+      position: "relative",
+      alignItems: "flex-end",
+      maxWidth: 34,
+      zIndex: 60,
+    },
     statusIslandRow: {
       flexDirection: "row",
       flexWrap: "wrap",
@@ -1490,6 +1568,24 @@ function createStyles(C: AppColors) {
       letterSpacing: 0.3,
       flexShrink: 1,
     },
+    statusIconButton: {
+      width: 34,
+      height: 34,
+      borderRadius: 17,
+      borderWidth: 1,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    statusIconDot: {
+      position: "absolute",
+      top: 7,
+      right: 7,
+      width: 6,
+      height: 6,
+      borderRadius: 3,
+      borderWidth: 1,
+      borderColor: C.surface,
+    },
     statusPanel: {
       position: "absolute",
       top: 44,
@@ -1507,6 +1603,13 @@ function createStyles(C: AppColors) {
       shadowOffset: { width: 0, height: 10 },
       elevation: 10,
       zIndex: 40,
+    },
+    statusPanelCompact: {
+      right: 0,
+      alignSelf: "auto",
+      width: 292,
+      minWidth: 0,
+      maxWidth: 292,
     },
     statusPanelHeader: {
       flexDirection: "row",

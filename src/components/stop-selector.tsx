@@ -219,8 +219,8 @@ export function StopSelector({
         style={({ pressed }) => [
           styles.trigger,
           {
-            borderColor: accentColor + '34',
-            backgroundColor: pressed ? colors.surfaceHigh : colors.surface,
+            borderColor: pressed ? accentColor + '55' : accentColor + '34',
+            backgroundColor: colors.surface,
           },
         ]}>
         <BoardingStopMapBackdrop accentColor={accentColor} />

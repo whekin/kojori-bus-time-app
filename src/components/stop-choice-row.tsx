@@ -212,7 +212,8 @@ function createStyles(C: AppColors) {
       minWidth: 0,
     },
     title: {
-      flex: 1,
+      flexGrow: 0,
+      flexShrink: 1,
       minWidth: 0,
       color: C.text,
       fontSize: 16,

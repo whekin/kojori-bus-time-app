@@ -11,6 +11,12 @@
 - Accessibility labels and selected states are clearer across tabs, route filters, map controls, TTC status, and Settings, with reduced-motion support for decorative animations.
 - Departures now calls out the last bus of the day and shows the next scheduled service instead of dead-ending after service ends.
 - App status and empty-state copy is warmer in English, Georgian, and Russian, with plural-aware counts for stops, departures, durations, and saved TTC datasets.
+- Stop picker badges now sit next to the stop name instead of floating at the row edge, with clearer Russian copy for the timetable start stop.
+- TTC status on Departures now uses a compact header icon with expandable details, leaving more room for the stop and departure cards.
+
+### Fixed
+
+- Stop cards no longer flash an uneven map-texture background during pointer interaction.
 
 ### Infra
 

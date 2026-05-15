@@ -25,7 +25,7 @@ const CURATED_STOP_COPY: Record<StopDirection, Record<string, StopCuration>> = {
       },
     },
     '1:3932': {
-      badge: { en: 'Official start', ka: 'ოფიციალური', ru: 'Официальная' },
+      badge: { en: 'Official start', ka: 'ოფიციალური', ru: 'По расписанию' },
       hint: {
         en: 'By the flower market, last stop in the row toward Liberty Square.',
         ka: 'ყვავილების ბაზართან, თავისუფლების მოედნისკენ რიგში ბოლო გაჩერება.',
