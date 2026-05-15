@@ -1693,7 +1693,7 @@ function createStyles(C: AppColors) {
       textDecorationColor: alpha(C.warning, "B0"),
     },
     rowMeta: {
-      width: 112,
+      width: 142,
       flexShrink: 0,
       alignItems: "flex-end",
       justifyContent: "center",
@@ -1721,8 +1721,8 @@ function createStyles(C: AppColors) {
     liveBadgeSmall: {
       flexDirection: "row",
       alignItems: "center",
-      gap: 4,
-      paddingHorizontal: 8,
+      gap: 5,
+      paddingHorizontal: 10,
       paddingVertical: 5,
       borderRadius: 999,
       borderWidth: 1,

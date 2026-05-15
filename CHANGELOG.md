@@ -25,6 +25,9 @@
 - Map route overlays now wait until the Map tab is active before catching up to direction changes made elsewhere
 - Timetable bus filter chips now have more breathing room below the stop card
 - Timetable entries now use rounded grouped rows with subtle upcoming-time hints
+- Live departure status text now avoids repeating "live" and uses shorter drift labels in compact chips
+- Direction pills now adapt their width for localized city names while keeping the swap animation consistent
+- Georgian start-screen destination cards now avoid clipping display text
 
 ### Fixed
 

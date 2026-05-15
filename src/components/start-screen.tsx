@@ -43,7 +43,7 @@ export function StartScreen({ onDone }: { onDone: () => void }) {
   const { width } = useWindowDimensions();
   const { selectDirection } = useActiveDirection();
   const { settings, update } = useSettings();
-  const { t } = useI18n();
+  const { t, resolvedLanguage } = useI18n();
   const pickedRef = useRef(false);
   const smartEnabled = settings.launchBehavior === 'smart';
   const {
@@ -151,8 +151,8 @@ export function StartScreen({ onDone }: { onDone: () => void }) {
                 <CardScrim mode={mode} colors={colors} accent={accent} />
                 <View style={styles.cardContent}>
                   <View style={styles.cardCopy}>
-                    <Text style={[styles.cardTo, { color: accent, fontFamily: DISPLAY, textShadowColor: cardShadow }]}>{t('directionTo').trim()}</Text>
-                    <Text style={[styles.cardLabel, { fontFamily: DISPLAY, textShadowColor: cardShadow }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.78}>{label}</Text>
+                    <Text style={[styles.cardTo, resolvedLanguage === 'ka' && styles.cardToGeorgian, { color: accent, fontFamily: DISPLAY, textShadowColor: cardShadow }]}>{t('directionTo').trim()}</Text>
+                    <Text style={[styles.cardLabel, resolvedLanguage === 'ka' && styles.cardLabelGeorgian, { fontFamily: DISPLAY, textShadowColor: cardShadow }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.78}>{label}</Text>
                     <Text style={[styles.cardSub, { textShadowColor: cardShadow }]}>{sub}</Text>
                     {mode === 'kojori' ? (
                       <View style={styles.elevationRow}>
@@ -368,6 +368,11 @@ function createStyles(C: AppColors) {
       textShadowRadius: 10,
       textShadowOffset: { width: 0, height: 2 },
     },
+    cardToGeorgian: {
+      lineHeight: 38,
+      paddingTop: 4,
+      marginBottom: -5,
+    },
     cardLabel: {
       color: '#FFFFFF',
       fontSize: 39,
@@ -376,6 +381,11 @@ function createStyles(C: AppColors) {
       textShadowColor: alpha('#000000', 'CC'),
       textShadowRadius: 12,
       textShadowOffset: { width: 0, height: 2 },
+    },
+    cardLabelGeorgian: {
+      lineHeight: 54,
+      paddingTop: 4,
+      marginBottom: -5,
     },
     cardSub: {
       color: alpha('#FFFFFF', 'E6'),
