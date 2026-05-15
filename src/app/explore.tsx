@@ -540,14 +540,15 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
           const isOverviewZoom = stopMarkerZoomTier === 'overview';
           const isMidZoom = stopMarkerZoomTier === 'mid';
           const isSimpleOrdinaryStop = !isPromoted && isMidZoom;
+          const isCompactPromotedStop = isPromoted && (isOverviewZoom || isMidZoom);
           const markerSize = isPromoted
-            ? isOverviewZoom ? 24 : isMidZoom ? 28 : 30
+            ? isOverviewZoom ? 18 : isMidZoom ? 22 : 30
             : isSimpleOrdinaryStop ? 16 : 24;
           const hitSize = isPromoted
-            ? markerSize + (isOverviewZoom ? 6 : 10)
+            ? markerSize + (isOverviewZoom ? 10 : isMidZoom ? 8 : 10)
             : isSimpleOrdinaryStop ? 32 : markerSize + 6;
           const iconSize = isPromoted
-            ? isOverviewZoom ? 16 : 20
+            ? isOverviewZoom ? 13 : isMidZoom ? 16 : 20
             : isSimpleOrdinaryStop ? 0 : 17;
           const stopAccent = direction === 'toKojori' ? colors.route380 : colors.route316;
           const markerColor = isPromoted || isSimpleOrdinaryStop ? stopAccent : colors.map;
@@ -574,12 +575,12 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
                 <View
                   style={[
                     styles.stopMarker,
-                    isPromoted && !isOverviewZoom && styles.favoriteStopMarker,
+                    isPromoted && !isCompactPromotedStop && styles.favoriteStopMarker,
                     isSimpleOrdinaryStop && styles.simpleStopMarker,
                     {
                       width: markerSize,
                       height: markerSize,
-                      borderRadius: isSimpleOrdinaryStop ? markerSize / 2 : isPromoted ? 10 : 8,
+                      borderRadius: isSimpleOrdinaryStop || isCompactPromotedStop ? markerSize / 2 : isPromoted ? 10 : 8,
                       borderColor: isSimpleOrdinaryStop
                         ? alpha(colors.panel, 'D9')
                         : isPromoted ? alpha(markerColor, 'D9') : alpha(colors.panel, 'E6'),
