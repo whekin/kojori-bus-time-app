@@ -27,6 +27,7 @@
   },
   "dependencies": {
     "@expo/ui": "~55.0.16",
+    "@gorhom/bottom-sheet": "^5",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-navigation/bottom-tabs": "^7.15.5",
     "@react-navigation/elements": "^2.9.18",

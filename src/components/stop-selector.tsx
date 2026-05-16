@@ -3,7 +3,6 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   type GestureResponderEvent,
@@ -13,7 +12,10 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Defs, G, LinearGradient, Path, Rect, Stop } from 'react-native-svg';
 
-import { NativeBottomSheet } from '@/components/native-bottom-sheet';
+import {
+  ScrollableBottomSheet,
+  ScrollableBottomSheetScrollView,
+} from '@/components/scrollable-bottom-sheet';
 import { StopChoiceRow } from '@/components/stop-choice-row';
 import { StopPickerModal } from '@/components/stop-picker-modal';
 import { alpha } from '@/constants/theme';
@@ -276,10 +278,10 @@ export function StopSelector({
         </View>
       </Pressable>
 
-      <NativeBottomSheet
+      <ScrollableBottomSheet
         visible={open}
         onClose={() => setOpen(false)}
-        fallbackSheetStyle={[styles.sheetFrame, { maxHeight: sheetMaxHeight }]}
+        snapPoint="88%"
         contentStyle={[
           styles.sheetContent,
           {
@@ -295,15 +297,6 @@ export function StopSelector({
                   {t('stopSheetNote')}
                 </Text>
               </View>
-
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={t('stopPickerClose')}
-                hitSlop={10}
-                onPress={() => setOpen(false)}
-                style={styles.closeButton}>
-                <Text style={styles.closeGlyph}>×</Text>
-              </Pressable>
             </View>
 
             <View
@@ -329,8 +322,7 @@ export function StopSelector({
               )}
             </View>
 
-            <ScrollView
-              nestedScrollEnabled
+            <ScrollableBottomSheetScrollView
               style={{ height: optionsHeight }}
               showsVerticalScrollIndicator={false}
               contentContainerStyle={styles.optionsContent}>
@@ -386,8 +378,8 @@ export function StopSelector({
                   </Text>
                 </Pressable>
               ) : null}
-            </ScrollView>
-      </NativeBottomSheet>
+            </ScrollableBottomSheetScrollView>
+      </ScrollableBottomSheet>
 
       {addStopModal ? (
         <StopPickerModal

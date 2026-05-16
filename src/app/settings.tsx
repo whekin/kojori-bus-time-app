@@ -29,7 +29,10 @@ import Carousel, { ICarouselInstance } from 'react-native-reanimated-carousel';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { BAKED_AT } from '@/assets/ttc-baked';
-import { NativeBottomSheet } from '@/components/native-bottom-sheet';
+import {
+  ScrollableBottomSheet,
+  ScrollableBottomSheetScrollView,
+} from '@/components/scrollable-bottom-sheet';
 import { SettingsSwitch } from '@/components/settings-switch';
 import { StopChoiceRow } from '@/components/stop-choice-row';
 import { StopPickerModal } from '@/components/stop-picker-modal';
@@ -751,21 +754,13 @@ function SingleStopPickerModal({
   }, [direction, enriched, query, stopNames]);
 
   return (
-    <NativeBottomSheet
+    <ScrollableBottomSheet
       visible={visible}
       onClose={onClose}
-      fallbackSheetStyle={{ maxHeight: sheetMaxHeight }}
+      snapPoint="82%"
       contentStyle={[modalStyles.sheetContent, { paddingBottom: Math.max(insets.bottom, 16) }]}>
       <View style={modalStyles.sheetHeader}>
         <Text style={modalStyles.sheetTitle}>{title}</Text>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={t('stopPickerClose')}
-          onPress={onClose}
-          style={modalStyles.closeButton}
-          hitSlop={10}>
-          <Text style={modalStyles.closeText}>×</Text>
-        </Pressable>
       </View>
 
       <View style={modalStyles.searchWrap}>
@@ -782,8 +777,7 @@ function SingleStopPickerModal({
         {isLoading ? <ActivityIndicator color={colors.textDim} size="small" style={modalStyles.spinner} /> : null}
       </View>
 
-      <ScrollView
-        nestedScrollEnabled
+      <ScrollableBottomSheetScrollView
         style={[modalStyles.list, { height: listHeight }]}
         contentContainerStyle={modalStyles.listContent}
         keyboardShouldPersistTaps="handled">
@@ -811,8 +805,8 @@ function SingleStopPickerModal({
             />
           );
         })}
-      </ScrollView>
-    </NativeBottomSheet>
+      </ScrollableBottomSheetScrollView>
+    </ScrollableBottomSheet>
   );
 }
 
@@ -2589,9 +2583,10 @@ function PermissionModal({
   const { t } = useI18n();
 
   return (
-    <NativeBottomSheet
+    <ScrollableBottomSheet
       visible={visible}
       onClose={onClose}
+      snapPoint="48%"
       contentStyle={[styles.permissionSheetContent, { paddingBottom: Math.max(insets.bottom, 16) }]}>
       <View style={styles.permissionSheet}>
         <View style={[styles.permissionIconWrap, { backgroundColor: alpha(colors.primary, '18') }]}>
@@ -2620,7 +2615,7 @@ function PermissionModal({
           </Pressable>
         </View>
       </View>
-    </NativeBottomSheet>
+    </ScrollableBottomSheet>
   );
 }
 
@@ -2643,9 +2638,10 @@ function NoticeModal({
   const { t } = useI18n();
 
   return (
-    <NativeBottomSheet
+    <ScrollableBottomSheet
       visible={visible}
       onClose={onClose}
+      snapPoint="44%"
       contentStyle={[styles.permissionSheetContent, { paddingBottom: Math.max(insets.bottom, 16) }]}>
       <View style={styles.permissionSheet}>
         <View style={[styles.permissionIconWrap, { backgroundColor: alpha(colors.primary, '18') }]}>
@@ -2667,7 +2663,7 @@ function NoticeModal({
           </Pressable>
         </View>
       </View>
-    </NativeBottomSheet>
+    </ScrollableBottomSheet>
   );
 }
 

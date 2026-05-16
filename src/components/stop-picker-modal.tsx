@@ -1,7 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -11,7 +10,10 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { NativeBottomSheet } from '@/components/native-bottom-sheet';
+import {
+  ScrollableBottomSheet,
+  ScrollableBottomSheetScrollView,
+} from '@/components/scrollable-bottom-sheet';
 import { StopChoiceRow } from '@/components/stop-choice-row';
 import { getCuratedStopIds } from '@/constants/curated-stops';
 import { type AppColors } from '@/constants/theme';
@@ -73,21 +75,13 @@ export function StopPickerModal({
   }, [direction, enriched, query, stopNames]);
 
   return (
-    <NativeBottomSheet
+    <ScrollableBottomSheet
       visible={visible}
       onClose={onClose}
-      fallbackSheetStyle={{ maxHeight: sheetMaxHeight }}
+      snapPoint="82%"
       contentStyle={[modalStyles.sheetContent, { paddingBottom: Math.max(insets.bottom, 16) }]}>
       <View style={modalStyles.header}>
         <Text style={modalStyles.headerTitle}>{title}</Text>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={t('stopPickerClose')}
-          onPress={onClose}
-          style={modalStyles.closeButton}
-          hitSlop={10}>
-          <Text style={modalStyles.closeText}>×</Text>
-        </Pressable>
       </View>
 
       <View style={modalStyles.searchWrap}>
@@ -104,8 +98,7 @@ export function StopPickerModal({
         {isLoading ? <ActivityIndicator color={colors.textDim} size="small" style={modalStyles.spinner} /> : null}
       </View>
 
-      <ScrollView
-        nestedScrollEnabled
+      <ScrollableBottomSheetScrollView
         style={[modalStyles.list, { height: listHeight }]}
         contentContainerStyle={modalStyles.listContent}
         keyboardShouldPersistTaps="handled">
@@ -132,8 +125,8 @@ export function StopPickerModal({
             />
           );
         })}
-      </ScrollView>
-    </NativeBottomSheet>
+      </ScrollableBottomSheetScrollView>
+    </ScrollableBottomSheet>
   );
 }
 

@@ -1,5 +1,10 @@
 # Changelog
 
+## [UNRELEASED]
+### Fixed
+
+- Bottom sheets now use a single scroll-aware implementation, so long stop lists remain scrollable while preserving drag-to-close.
+
 ## v2026.5.16
 ### Improved
 

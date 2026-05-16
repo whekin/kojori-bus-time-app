@@ -11,7 +11,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { NativeBottomSheet } from "@/components/native-bottom-sheet";
+import { ScrollableBottomSheet } from "@/components/scrollable-bottom-sheet";
 import { alpha, type AppColors } from "@/constants/theme";
 import { useActiveDirection } from "@/hooks/use-active-direction";
 import { useAppColors } from "@/hooks/use-app-colors";
@@ -312,9 +312,10 @@ function DirectionPickerSheetInner({
   }
 
   return (
-    <NativeBottomSheet
+    <ScrollableBottomSheet
       visible={visible}
       onClose={onClose}
+      snapPoint="44%"
       contentStyle={[
         styles.sheetContent,
         { paddingBottom: Math.max(insets.bottom, 16) },
@@ -387,7 +388,7 @@ function DirectionPickerSheetInner({
           );
         })}
       </View>
-    </NativeBottomSheet>
+    </ScrollableBottomSheet>
   );
 }
 
