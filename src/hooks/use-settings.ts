@@ -27,6 +27,7 @@ export type SharedDirection = 'toKojori' | 'toTbilisi';
  * - 'remember': bypass the start screen and resume the last chosen direction.
  */
 export type LaunchBehavior = 'ask' | 'smart' | 'remember';
+export type TtcHealthDemo = 'off' | 'degraded' | 'offline' | 'rate-limited' | 'device-offline';
 
 export interface Settings {
   /** Stop IDs shown as chips on home screen (→ Tbilisi direction) */
@@ -51,6 +52,8 @@ export interface Settings {
   debugOptionsUnlocked: boolean;
   /** Show deterministic demo states on Departures and Map for UI testing */
   cancelledBusDemo: boolean;
+  /** Force TTC health UI states for testing */
+  ttcHealthDemo: TtcHealthDemo;
   /** What to do on launch: ask, use location, or restore last direction */
   launchBehavior: LaunchBehavior;
   /** App language override, or follow device language */
@@ -69,6 +72,7 @@ const DEFAULTS: Settings = {
   themeMode: DEFAULT_APP_THEME_MODE,
   debugOptionsUnlocked: false,
   cancelledBusDemo: false,
+  ttcHealthDemo: 'off',
   launchBehavior: 'ask',
   language: 'system',
 };

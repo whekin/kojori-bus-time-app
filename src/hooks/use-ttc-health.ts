@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react';
 
-export type TtcHealthStatus = 'healthy' | 'degraded' | 'offline' | 'rate-limited';
+export type TtcHealthStatus = 'healthy' | 'degraded' | 'offline' | 'rate-limited' | 'device-offline';
 
 interface TtcHealthState {
   lastSuccessAt: number | null;
@@ -9,7 +9,7 @@ interface TtcHealthState {
   isRateLimited: boolean;
 }
 
-interface TtcHealthSnapshot extends TtcHealthState {
+export interface TtcHealthSnapshot extends TtcHealthState {
   status: TtcHealthStatus;
 }
 

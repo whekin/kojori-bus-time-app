@@ -12,7 +12,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { DirectionPill } from "@/components/direction-picker";
 import { StopSelector } from "@/components/stop-selector";
-import { TtcStatusHeaderBadge } from "@/components/ttc-status-banner";
+import { TtcStatusTopBar } from "@/components/ttc-status-top-bar";
 import { alpha, BottomTabInset, type AppColors } from "@/constants/theme";
 import { useActiveDirection } from "@/hooks/use-active-direction";
 import { useAppColors } from "@/hooks/use-app-colors";
@@ -265,10 +265,11 @@ export default function TimetableScreen() {
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
+      <TtcStatusTopBar />
+
       {/* Header */}
       <View style={styles.header}>
         <DirectionPill accentColor={accentColor} />
-        <TtcStatusHeaderBadge />
         <View style={styles.headerRight}>
           {isLoading ? (
             <ActivityIndicator color={colors.textDim} size="small" />

@@ -12,11 +12,14 @@
 - Departures now calls out the last bus of the day and shows the next scheduled service instead of dead-ending after service ends.
 - App status and empty-state copy is warmer in English, Georgian, and Russian, with plural-aware counts for stops, departures, durations, and saved TTC datasets.
 - Stop picker badges now sit next to the stop name instead of floating at the row edge, with clearer Russian copy for the timetable start stop.
-- TTC status on Departures now uses a compact header icon with expandable details, leaving more room for the stop and departure cards.
+- TTC offline states now appear in a thin expandable top bar on Departures and Timetable, explaining the current fallback mode without covering route controls.
+- Hidden demo controls can now force unstable, offline, rate-limited, and device-offline TTC states for UI testing.
+- Russian TTC rate-limit copy now says “request limit” instead of calling TTC “busy”.
 
 ### Fixed
 
 - Stop cards no longer flash an uneven map-texture background during pointer interaction.
+- Map refresh stays reachable when a TTC warning chip is visible.
 
 ### Infra
 

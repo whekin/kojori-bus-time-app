@@ -48,7 +48,7 @@ import { useI18n, type TranslationKey } from '@/hooks/use-i18n';
 import { useLocation } from '@/hooks/use-location';
 import { useReducedMotion } from '@/hooks/use-reduced-motion';
 import { useRouteStops } from '@/hooks/use-route-stops';
-import { useSettings, type LaunchBehavior } from '@/hooks/use-settings';
+import { useSettings, type LaunchBehavior, type TtcHealthDemo } from '@/hooks/use-settings';
 import { useStopNames } from '@/hooks/use-stop-names';
 import { useTtcQueryLog } from '@/hooks/use-ttc-query-log';
 import { useTtcOfflineStatus } from '@/hooks/use-ttc-offline';
@@ -1318,6 +1318,13 @@ export default function SettingsScreen() {
     { value: 'smart' as const, label: t('locationUseMine'), caption: t('settingsLocationLaunchNote') },
     { value: 'remember' as const, label: t('settingsRestoreDirection'), caption: t('settingsRestoreNote') },
   ];
+  const ttcHealthDemoOptions: { value: TtcHealthDemo; label: string; caption: string }[] = [
+    { value: 'off', label: t('settingsTtcDemoOff'), caption: t('settingsTtcDemoOffNote') },
+    { value: 'degraded', label: t('ttcUnstable'), caption: t('settingsTtcDemoUnstableNote') },
+    { value: 'offline', label: t('ttcOffline'), caption: t('settingsTtcDemoOfflineNote') },
+    { value: 'rate-limited', label: t('ttcRateLimited'), caption: t('settingsTtcDemoRateNote') },
+    { value: 'device-offline', label: t('ttcDeviceOffline'), caption: t('settingsTtcDemoDeviceNote') },
+  ];
   const activeLanguageLabel = languageOptions.find(option => option.value === resolvedLanguage)?.label ?? t('commonEnglish');
   const activePaletteLabel = t(PALETTE_TRANSLATION_KEYS[settings.paletteId].name);
   const activeThemeLabel = settings.themeMode === 'system'
@@ -1847,6 +1854,60 @@ export default function SettingsScreen() {
                     accentColor={colors.primary}
                   />
                 </View>
+                <View style={styles.itemDivider} />
+                <View style={styles.adminCardHeader}>
+                  <Text style={styles.adminCardTitle}>{t('settingsTtcDemo')}</Text>
+                  <Text style={styles.adminCardNote}>{t('settingsTtcDemoNote')}</Text>
+                </View>
+                <View style={styles.itemDivider} />
+                {ttcHealthDemoOptions.map((option, index) => {
+                  const selected = settings.ttcHealthDemo === option.value;
+
+                  return (
+                    <React.Fragment key={option.value}>
+                      {index > 0 ? <View style={styles.itemDivider} /> : null}
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={`${option.label}. ${option.caption}`}
+                        accessibilityState={{ selected }}
+                        onPress={() => update({ ttcHealthDemo: option.value })}
+                        style={({ pressed }) => [
+                          styles.launchBehaviorRow,
+                          {
+                            backgroundColor: selected
+                              ? alpha(colors.primary, '12')
+                              : pressed
+                                ? colors.panel
+                                : colors.surface,
+                          },
+                        ]}>
+                        <View style={styles.launchBehaviorCopy}>
+                          <Text style={styles.launchBehaviorLabel}>{option.label}</Text>
+                          <Text style={styles.launchBehaviorNote}>{option.caption}</Text>
+                        </View>
+                        <View style={styles.launchBehaviorControl}>
+                          <View
+                            style={[
+                              styles.launchBehaviorRadio,
+                              selected && {
+                                borderColor: colors.primary,
+                                backgroundColor: alpha(colors.primary, '18'),
+                              },
+                            ]}>
+                            {selected ? (
+                              <View
+                                style={[
+                                  styles.launchBehaviorRadioDot,
+                                  { backgroundColor: colors.primary },
+                                ]}
+                              />
+                            ) : null}
+                          </View>
+                        </View>
+                      </Pressable>
+                    </React.Fragment>
+                  );
+                })}
               </View>
 
               <View style={styles.adminSubsection}>

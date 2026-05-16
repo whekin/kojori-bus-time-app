@@ -828,7 +828,7 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
               </Pressable>
             );
           })}
-          <TtcStatusChip />
+          <TtcStatusChip constrained />
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={isFetching ? t('mapRefreshingLive') : t('mapRefreshLive')}
@@ -1009,6 +1009,7 @@ function createStyles(C: ReturnType<typeof useAppColors>) {
   },
   legendRow: {
     flexDirection: 'row',
+    alignItems: 'center',
     gap: 6,
   },
   legendChip: {
@@ -1022,6 +1023,7 @@ function createStyles(C: ReturnType<typeof useAppColors>) {
     borderWidth: 1,
     borderColor: C.border,
     opacity: 0.5,
+    flexShrink: 0,
   },
   legendChipClickable: {
     opacity: 1,
@@ -1038,6 +1040,7 @@ function createStyles(C: ReturnType<typeof useAppColors>) {
     borderColor: C.border,
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 0,
   },
   locateButton: {
     position: 'absolute',

@@ -5,8 +5,8 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { alpha, type AppColors } from '@/constants/theme';
 import { useAppColors } from '@/hooks/use-app-colors';
+import { useEffectiveTtcHealth } from '@/hooks/use-effective-ttc-health';
 import { useI18n } from '@/hooks/use-i18n';
-import { useTtcHealth } from '@/hooks/use-ttc-health';
 
 function useStyles() {
   const colors = useAppColors();
@@ -19,8 +19,8 @@ export function TtcStatusBanner() {
   return <TtcStatusBannerBase compact={false} centered />;
 }
 
-export function TtcStatusChip() {
-  return <TtcStatusBannerBase compact centered />;
+export function TtcStatusChip({ constrained = false }: { constrained?: boolean }) {
+  return <TtcStatusBannerBase compact centered constrained={constrained} />;
 }
 
 export function TtcStatusHeaderBadge() {
@@ -31,24 +31,28 @@ function TtcStatusBannerBase({
   compact,
   centered,
   headerInline = false,
+  constrained = false,
 }: {
   compact: boolean;
   centered: boolean;
   headerInline?: boolean;
+  constrained?: boolean;
 }) {
   const { colors, styles } = useStyles();
   const { t, formatRelativeDuration } = useI18n();
   const queryClient = useQueryClient();
-  const { status, lastSuccessAt } = useTtcHealth();
+  const { status, lastSuccessAt } = useEffectiveTtcHealth();
   const [expanded, setExpanded] = useState(false);
 
   if (status === 'healthy') return null;
 
   const isOffline = status === 'offline';
+  const isDeviceOffline = status === 'device-offline';
   const isRateLimited = status === 'rate-limited';
-  const accent = isOffline || isRateLimited ? colors.error : colors.warning;
-  const textColor = isOffline || isRateLimited ? colors.rose : colors.sand;
-  
+  const isSevere = isOffline || isRateLimited || isDeviceOffline;
+  const accent = isSevere ? colors.error : colors.warning;
+  const textColor = isSevere ? colors.rose : colors.sand;
+
   const timeAgo = lastSuccessAt
     ? (() => {
         const mins = Math.floor((Date.now() - lastSuccessAt) / 60000);
@@ -58,20 +62,24 @@ function TtcStatusBannerBase({
         return formatRelativeDuration('past', 'hour', hours);
       })()
     : null;
-  
+
   const baseLabel = isRateLimited
     ? t('ttcRateLimited')
-    : isOffline
-    ? t('ttcOffline')
-    : t('ttcUnstable');
-  
-  const label = timeAgo ? `${baseLabel} · ${timeAgo}` : baseLabel;
-    
+    : isDeviceOffline
+      ? t('ttcDeviceOffline')
+      : isOffline
+        ? t('ttcOffline')
+        : t('ttcUnstable');
+
+  const label = constrained ? baseLabel : timeAgo ? `${baseLabel} · ${timeAgo}` : baseLabel;
+
   const message = isRateLimited
     ? t('ttcRateDetail')
-    : isOffline
-    ? t('ttcOfflineDetail')
-    : t('ttcUnstableDetail');
+    : isDeviceOffline
+      ? t('ttcDeviceOfflineDetail')
+      : isOffline
+        ? t('ttcOfflineDetail')
+        : t('ttcUnstableDetail');
 
   const freshness = lastSuccessAt
     ? t('ttcLastUpdate', { time: new Date(lastSuccessAt).toLocaleTimeString('en-GB', {
@@ -81,7 +89,11 @@ function TtcStatusBannerBase({
     : t('ttcNoResponse');
 
   return (
-    <View style={[headerInline ? styles.headerWrap : centered ? styles.centerWrap : styles.rowWrap]}>
+    <View
+      style={[
+        headerInline ? styles.headerWrap : centered ? styles.centerWrap : styles.rowWrap,
+        constrained && styles.centerWrapConstrained,
+      ]}>
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={`${label}. ${expanded ? t('ttcStatusCollapse') : t('ttcStatusExpand')}`}
@@ -90,6 +102,7 @@ function TtcStatusBannerBase({
         style={[
           styles.badge,
           compact && styles.badgeCompact,
+          constrained && styles.badgeConstrained,
           {
             backgroundColor: alpha(accent, '14'),
             borderColor: alpha(accent, '42'),
@@ -97,7 +110,9 @@ function TtcStatusBannerBase({
         ]}>
         <View style={styles.badgeMain}>
           <View style={[styles.dot, { backgroundColor: accent }]} />
-          <Text style={[styles.badgeLabel, { color: textColor }]}>{label}</Text>
+          <Text style={[styles.badgeLabel, { color: textColor }]} numberOfLines={1}>
+            {label}
+          </Text>
           <MaterialCommunityIcons name={expanded ? 'chevron-up' : 'chevron-down'} size={16} color={textColor} />
         </View>
       </Pressable>
@@ -107,6 +122,7 @@ function TtcStatusBannerBase({
           style={[
             styles.details,
             compact && styles.detailsCompact,
+            constrained && styles.detailsConstrained,
             {
               backgroundColor: colors.panel,
               borderColor: alpha(accent, '42'),
@@ -156,6 +172,11 @@ function createStyles(C: AppColors) {
       marginBottom: 0,
       zIndex: 20,
     },
+    centerWrapConstrained: {
+      flexShrink: 1,
+      minWidth: 0,
+      maxWidth: '100%',
+    },
     badge: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -170,9 +191,18 @@ function createStyles(C: AppColors) {
       paddingHorizontal: 9,
       paddingVertical: 6,
     },
-    badgeMain: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    badgeConstrained: {
+      maxWidth: '100%',
+    },
+    badgeMain: { flexDirection: 'row', alignItems: 'center', gap: 8, minWidth: 0 },
     dot: { width: 8, height: 8, borderRadius: 4 },
-    badgeLabel: { fontSize: 12, fontWeight: '800', letterSpacing: 0.35 },
+    badgeLabel: {
+      flexShrink: 1,
+      minWidth: 0,
+      fontSize: 12,
+      fontWeight: '800',
+      letterSpacing: 0.35,
+    },
     details: {
       position: 'absolute',
       top: 42,
@@ -190,6 +220,7 @@ function createStyles(C: AppColors) {
       elevation: 12,
     },
     detailsCompact: { maxWidth: 300 },
+    detailsConstrained: { right: 0 },
     message: { fontSize: 11, lineHeight: 15, marginTop: 1 },
     detailsFooter: {
       flexDirection: 'row',
