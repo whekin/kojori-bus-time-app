@@ -9,6 +9,7 @@
 - Focused map stops can now be dismissed by tapping empty map space or using Android back.
 - Map stop and vehicle popups now use the same themed panel treatment as the rest of the map controls.
 - Accessibility labels and selected states are clearer across tabs, route filters, map controls, TTC status, and Settings, with reduced-motion support for decorative animations.
+- Light and dark theme switches now apply immediately instead of crossfading the full app palette.
 - Departures now calls out the last bus of the day and shows the next scheduled service instead of dead-ending after service ends.
 - App status and empty-state copy is warmer in English, Georgian, and Russian, with plural-aware counts for stops, departures, durations, and saved TTC datasets.
 - Stop picker badges now sit next to the stop name instead of floating at the row edge, with clearer Russian copy for the timetable start stop.

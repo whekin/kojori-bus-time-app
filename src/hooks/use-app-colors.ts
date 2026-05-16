@@ -121,6 +121,13 @@ export function AppColorsProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
+    if (from.mode !== to.mode) {
+      setAnimatedColors(to);
+      currentRef.current = to;
+      fromRef.current = to;
+      return;
+    }
+
     fromRef.current = from;
     const start = Date.now();
 
