@@ -1,7 +1,6 @@
 # Changelog
 
-## [UNRELEASED]
-
+## v2026.5.16
 ### Improved
 
 - Web now shows Kojori app tabs instead of Expo starter navigation.
