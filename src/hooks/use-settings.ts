@@ -5,6 +5,7 @@ import { AppState, Appearance, Platform } from 'react-native';
 import {
   DEFAULT_APP_PALETTE,
   DEFAULT_APP_THEME_MODE,
+  isAppPaletteId,
   resolveAppThemeMode,
   type AppPaletteId,
   type AppThemeMode,
@@ -126,7 +127,8 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
           ...rest
         } = parsed;
         const launchBehavior = migrateLaunchBehavior(parsed);
-        setSettings({ ...DEFAULTS, ...(rest as Partial<Settings>), launchBehavior });
+        const paletteId = isAppPaletteId(rest.paletteId) ? rest.paletteId : DEFAULT_APP_PALETTE;
+        setSettings({ ...DEFAULTS, ...(rest as Partial<Settings>), launchBehavior, paletteId });
       })
       .catch(() => { })
       .finally(() => setIsLoaded(true));

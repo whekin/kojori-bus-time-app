@@ -105,8 +105,6 @@ const TTC_DATASETS: {
   { value: 'polylines', labelKey: 'settingsDatasetPolylines', captionKey: 'settingsDatasetPolylinesNote', requestsKey: 'settingsDatasetFourSlowRequests', syncTitleKey: 'settingsSyncDatasetPolylines', accent: 'primary' },
 ];
 const PALETTE_TRANSLATION_KEYS: Record<AppPaletteId, { name: TranslationKey; tagline: TranslationKey }> = {
-  nightShift: { name: 'paletteNightShiftName', tagline: 'paletteNightShiftTagline' },
-  emberPunch: { name: 'paletteEmberPunchName', tagline: 'paletteEmberPunchTagline' },
   sorbetStatic: { name: 'paletteSorbetStaticName', tagline: 'paletteSorbetStaticTagline' },
   midnightFig: { name: 'paletteMidnightFigName', tagline: 'paletteMidnightFigTagline' },
 };

@@ -42,104 +42,6 @@ type AppPaletteDefinition = {
 };
 
 export const APP_PALETTES = {
-  nightShift: {
-    id: 'nightShift',
-    name: 'Night Shift',
-    tagline: 'Ink black, electric mint, taxi amber.',
-    dark: {
-      bg: '#08090D',
-      surface: '#11141B',
-      surfaceHigh: '#191E27',
-      surfaceRaised: '#202734',
-      panel: '#0D1118',
-      panelHigh: '#141B25',
-      border: '#202837',
-      borderStrong: '#313B4D',
-      text: '#F4EFE7',
-      textDim: '#99A3B6',
-      textFaint: '#5E687B',
-      primary: '#71E7C5',
-      route380: '#39D0BE',
-      route316: '#FFB54A',
-      live: '#71E7C5',
-      warning: '#FFB54A',
-      error: '#FF6B6B',
-      sand: '#FFE3AF',
-      rose: '#FFD2D2',
-      map: '#8BCAFF',
-    },
-    light: {
-      bg: '#F6FBFD',
-      surface: '#FFFFFF',
-      surfaceHigh: '#E9F2F5',
-      surfaceRaised: '#DDEBED',
-      panel: '#EFF7F8',
-      panelHigh: '#E3F0F2',
-      border: '#C8DCE1',
-      borderStrong: '#AFC9D0',
-      text: '#102028',
-      textDim: '#54707B',
-      textFaint: '#7F99A3',
-      primary: '#2A9D84',
-      route380: '#1C9D92',
-      route316: '#D48D1F',
-      live: '#249D84',
-      warning: '#C98928',
-      error: '#D96A6A',
-      sand: '#8B5E12',
-      rose: '#A14F5E',
-      map: '#4D8FC8',
-    },
-  },
-  emberPunch: {
-    id: 'emberPunch',
-    name: 'Ember Punch',
-    tagline: 'Cocoa chrome, hot coral, aqua pulse.',
-    dark: {
-      bg: '#100B0C',
-      surface: '#1A1316',
-      surfaceHigh: '#261B20',
-      surfaceRaised: '#302126',
-      panel: '#140E11',
-      panelHigh: '#20161A',
-      border: '#34252C',
-      borderStrong: '#4B3540',
-      text: '#FFF2EA',
-      textDim: '#BBA39D',
-      textFaint: '#745D61',
-      primary: '#FF8B77',
-      route380: '#6DE4D7',
-      route316: '#FFC561',
-      live: '#6DE4D7',
-      warning: '#FFC561',
-      error: '#FF8B77',
-      sand: '#FFE7B8',
-      rose: '#FFD5CC',
-      map: '#9CDAFF',
-    },
-    light: {
-      bg: '#FFF7F3',
-      surface: '#FFFFFF',
-      surfaceHigh: '#F8E7E2',
-      surfaceRaised: '#F2D8D0',
-      panel: '#FFF0EA',
-      panelHigh: '#FCE4DC',
-      border: '#E8C7BE',
-      borderStrong: '#DCA99C',
-      text: '#351D21',
-      textDim: '#8C6765',
-      textFaint: '#B08B89',
-      primary: '#E46D58',
-      route380: '#3DB7AA',
-      route316: '#E7AC42',
-      live: '#3FAE9E',
-      warning: '#D39E42',
-      error: '#CC6A62',
-      sand: '#9D6B21',
-      rose: '#A8544D',
-      map: '#6FA6D3',
-    },
-  },
   sorbetStatic: {
     id: 'sorbetStatic',
     name: 'Sorbet Static',
@@ -267,8 +169,12 @@ export const Colors = {
 
 export type ThemeColor = keyof typeof Colors.light & keyof typeof Colors.dark;
 
-export const DEFAULT_APP_PALETTE: AppPaletteId = 'nightShift';
+export const DEFAULT_APP_PALETTE: AppPaletteId = 'midnightFig';
 export const DEFAULT_APP_THEME_MODE: AppThemeMode = 'system';
+
+export function isAppPaletteId(value: unknown): value is AppPaletteId {
+  return typeof value === 'string' && value in APP_PALETTES;
+}
 
 export function resolveAppThemeMode(
   themeMode: AppThemeMode = DEFAULT_APP_THEME_MODE,

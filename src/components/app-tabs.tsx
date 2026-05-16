@@ -73,16 +73,15 @@ function TabButton({
 }) {
   const C = useAppColors();
   const styles = React.useMemo(() => createStyles(C), [C]);
+  const iconColor = index === activeIndex ? C.primary : C.textDim;
   const iconStyle = useAnimatedStyle(() => {
     const distance = Math.min(Math.abs(pagerProgress.value - index), 1);
-    const color = interpolateColor(distance, [0, 1], [C.primary, C.textDim]);
 
     return {
-      color,
       opacity: 1 - distance * 0.15,
       transform: [{ scale: 1 - distance * 0.04 }],
     };
-  }, [C.primary, C.textDim, index]);
+  }, [index]);
 
   const labelStyle = useAnimatedStyle(() => {
     const distance = Math.min(Math.abs(pagerProgress.value - index), 1);
@@ -108,6 +107,7 @@ function TabButton({
       <AnimatedIcon
         name={tab.icon}
         size={20}
+        color={iconColor}
         style={iconStyle}
       />
       <Animated.Text
