@@ -100,7 +100,7 @@ function MapStopGlyph({ size, color }: { size: number; color: string }) {
   const poleWidth = Math.max(1, Math.round(size * 0.1));
   const dotSize = Math.max(2, Math.round(size * 0.2));
   const poleHeight = Math.round(size * 0.58);
-  const busSize = Math.round(size * 0.78);
+  const busSize = Math.round(size * 0.68);
 
   return (
     <View style={{ width: size, height: size }}>

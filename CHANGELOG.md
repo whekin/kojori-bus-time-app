@@ -19,6 +19,7 @@
 
 ### Fixed
 
+- Saved map stop markers no longer clip their bus-stop glyph at smaller zoom levels.
 - Stop cards no longer flash an uneven map-texture background during pointer interaction.
 - Map refresh stays reachable when a TTC warning chip is visible.
 
