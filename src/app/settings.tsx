@@ -107,6 +107,7 @@ const TTC_DATASETS: {
 const PALETTE_TRANSLATION_KEYS: Record<AppPaletteId, { name: TranslationKey; tagline: TranslationKey }> = {
   sorbetStatic: { name: 'paletteSorbetStaticName', tagline: 'paletteSorbetStaticTagline' },
   midnightFig: { name: 'paletteMidnightFigName', tagline: 'paletteMidnightFigTagline' },
+  woodlandParty: { name: 'paletteWoodlandPartyName', tagline: 'paletteWoodlandPartyTagline' },
 };
 const LEGAL_BASE_URL = 'https://github.com/whekin/kojori-bus-time-app/blob/main/release/google-play';
 const LEGAL_URLS = {
