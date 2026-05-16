@@ -381,7 +381,6 @@ export default function TimetableScreen() {
         renderItem={({ item, index, section }) => {
           const minsUntil = item.minsFromMidnight - nowMins;
           const relativeHint = formatRelativeTimeHint(minsUntil, t, formatDuration, formatRelativeDuration);
-          const isPast = minsUntil < -1;
           const isSoon = minsUntil >= -1 && minsUntil <= 30;
 
           return (
@@ -392,7 +391,6 @@ export default function TimetableScreen() {
                 index < section.data.length - 1
                   ? styles.timeRowDivider
                   : styles.timeRowLast,
-                isPast && styles.timeRowPast,
                 isSoon && {
                   borderColor: alpha(accentColor, "55"),
                   backgroundColor: alpha(accentColor, "0D"),
@@ -521,7 +519,6 @@ function createStyles(C: AppColors) {
       marginBottom: 6,
     },
     timeRowDivider: { borderBottomWidth: 1, borderBottomColor: C.border },
-    timeRowPast: { opacity: 0.54 },
     timeMain: { flex: 1, minWidth: 0 },
     timeText: {
       color: C.text,

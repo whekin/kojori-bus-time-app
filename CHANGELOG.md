@@ -21,6 +21,7 @@
 
 ### Fixed
 
+- Timetable rows stay fully readable after their scheduled time has passed.
 - Bottom tab icons now reliably update their active tint when the app theme changes.
 - Bottom tab highlighting now updates after direct tab taps even when the pager does not emit scroll progress.
 - Saved map stop markers no longer clip their bus-stop glyph at smaller zoom levels.
