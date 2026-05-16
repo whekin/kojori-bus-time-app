@@ -8,6 +8,7 @@ import Animated, {
   useEvent,
   useHandler,
   useSharedValue,
+  withTiming,
   type SharedValue,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -34,6 +35,7 @@ type TabItem = {
 const NAV_GAP = 10;
 const NAV_PADDING = 10;
 const NAV_HIGHLIGHT_EXTRA = 8;
+const NAV_PROGRESS_TIMING = { duration: 220 };
 const TAB_ROUTES: TabRoute[] = ['index', 'explore', 'timetable', 'settings'];
 const ALL_TAB_INDEXES = new Set(TAB_ROUTES.map((_, index) => index));
 
@@ -168,9 +170,10 @@ export default function AppTabs({
     const idx = TAB_ROUTES.indexOf(route);
     if (idx >= 0) {
       mountTab(idx);
+      pagerProgress.value = withTiming(idx, NAV_PROGRESS_TIMING);
       pagerRef.current?.setPage(idx);
     }
-  }, [mountTab]);
+  }, [mountTab, pagerProgress]);
 
   useEffect(() => {
     if (!backEnabled) return;
@@ -182,12 +185,14 @@ export default function AppTabs({
         history.pop();
         const previousIndex = history[history.length - 1] ?? 0;
         mountTab(previousIndex);
+        pagerProgress.value = withTiming(previousIndex, NAV_PROGRESS_TIMING);
         pagerRef.current?.setPage(previousIndex);
         return true;
       }
 
       if (activeIndex !== 0) {
         mountTab(0);
+        pagerProgress.value = withTiming(0, NAV_PROGRESS_TIMING);
         pagerRef.current?.setPage(0);
         tabHistoryRef.current = [0];
         return true;
@@ -234,6 +239,7 @@ export default function AppTabs({
             onPageScroll={pageScrollHandler}
             onPageSelected={event => {
               const nextIndex = event.nativeEvent.position;
+              pagerProgress.value = withTiming(nextIndex, NAV_PROGRESS_TIMING);
               mountTab(nextIndex);
               if (nextIndex === activeIndex) return;
               tabHistoryRef.current = [
@@ -281,6 +287,7 @@ export default function AppTabs({
                     pagerProgress={pagerProgress}
                     onPress={() => {
                       mountTab(index);
+                      pagerProgress.value = withTiming(index, NAV_PROGRESS_TIMING);
                       pagerRef.current?.setPage(index);
                     }}
                   />
