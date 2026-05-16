@@ -63,13 +63,6 @@ function directionToMode(direction: "toKojori" | "toTbilisi"): SharedMode {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-function formatHeaderTime(date = new Date()) {
-  return date.toLocaleTimeString("en-GB", {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
 function formatMins(mins: number, t: ReturnType<typeof useI18n>["t"]) {
   if (mins < 1) return t("commonNow");
   if (mins < 60) return t("timePlusMinutes", { minutes: mins });
@@ -1112,27 +1105,6 @@ export default function HomeScreen({
         <View style={styles.headerLeft}>
           <DirectionPill accentColor={accentColor} />
         </View>
-        <View style={styles.headerCenter} />
-        <View style={styles.headerRight}>
-          <Text style={[styles.headerClock, { fontFamily: MONO }]}>
-            {formatHeaderTime(now)}
-          </Text>
-          <Pressable
-            style={styles.refreshButton}
-            onPress={handleRefresh}
-            disabled={isRefreshing}
-          >
-            {isRefreshing ? (
-              <ActivityIndicator size="small" color={colors.textDim} />
-            ) : (
-              <MaterialCommunityIcons
-                name="refresh"
-                size={18}
-                color={colors.textDim}
-              />
-            )}
-          </Pressable>
-        </View>
       </View>
 
       <View style={styles.contentTopSpacer} />
@@ -1203,27 +1175,7 @@ function createStyles(C: AppColors) {
       minWidth: 128,
       flexShrink: 0,
     },
-    headerCenter: { flex: 1, alignItems: "center", paddingHorizontal: 8 },
-    headerRight: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 8,
-      minWidth: 92,
-      justifyContent: "flex-end",
-      flexShrink: 0,
-    },
     contentTopSpacer: { height: 0 },
-    headerClock: { color: C.textDim, fontSize: 15, letterSpacing: 0.4 },
-    refreshButton: {
-      width: 34,
-      height: 34,
-      borderRadius: 17,
-      borderWidth: 1,
-      borderColor: C.border,
-      backgroundColor: C.surface,
-      alignItems: "center",
-      justifyContent: "center",
-    },
 
     modeContainer: { flex: 1 },
     directionPaneStack: { flex: 1 },

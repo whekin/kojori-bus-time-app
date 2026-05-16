@@ -4,6 +4,7 @@
 ### Fixed
 
 - Bottom sheets now use a single scroll-aware implementation, so long stop lists remain scrollable while preserving drag-to-close.
+- Departures no longer shows a redundant header clock and refresh button; pull-to-refresh remains available for manual updates.
 
 ## v2026.5.16
 ### Improved
