@@ -43,7 +43,7 @@ function createStyles(C: ReturnType<typeof useAppColors>) {
       justifyContent: 'flex-end',
     },
     backdrop: {
-      ...StyleSheet.absoluteFillObject,
+      ...StyleSheet.absoluteFill,
       backgroundColor: SCRIM_COLOR,
     },
     sheet: {

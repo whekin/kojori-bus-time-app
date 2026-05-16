@@ -339,7 +339,7 @@ function createStyles(C: AppColors) {
       overflow: 'hidden',
     },
     cardImageBackground: {
-      ...StyleSheet.absoluteFillObject,
+      ...StyleSheet.absoluteFill,
     },
     cardImage: {
       borderRadius: 23,
@@ -496,6 +496,6 @@ const stylesStatic = StyleSheet.create({
     opacity: 1,
   },
   cardScrim: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
 });

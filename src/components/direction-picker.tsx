@@ -421,7 +421,7 @@ function createPillStyles(C: AppColors) {
       maxWidth: 320,
     },
     pillBorder: {
-      ...StyleSheet.absoluteFillObject,
+      ...StyleSheet.absoluteFill,
       borderRadius: 16,
       borderWidth: 1,
     },

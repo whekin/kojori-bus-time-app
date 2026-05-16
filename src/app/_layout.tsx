@@ -153,7 +153,7 @@ function AppReady() {
 
 const styles = StyleSheet.create({
   startOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     zIndex: 10,
     elevation: 10,
   },

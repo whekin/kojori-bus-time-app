@@ -170,7 +170,7 @@ const styles = StyleSheet.create({
     height: 128,
   },
   backgroundSolidColor: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: '#111316',
     zIndex: 1000,
     alignItems: 'center',

@@ -24,6 +24,7 @@
 ### Infra
 
 - Added an i18n parity check so English, Georgian, and Russian translation keys and placeholders stay aligned.
+- Aligned Android native dependencies with Expo 55 compatibility so debug builds install cleanly after dependency updates.
 
 ## v2026.5.15
 ### Improved

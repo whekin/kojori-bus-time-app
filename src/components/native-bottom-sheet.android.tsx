@@ -106,7 +106,7 @@ export function NativeBottomSheet({
 
 const styles = StyleSheet.create({
   host: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     zIndex: 1000,
   },
 });

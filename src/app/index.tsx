@@ -1227,7 +1227,7 @@ function createStyles(C: AppColors) {
 
     modeContainer: { flex: 1 },
     directionPaneStack: { flex: 1 },
-    directionPane: { ...StyleSheet.absoluteFillObject },
+    directionPane: { ...StyleSheet.absoluteFill },
     directionPaneHidden: { opacity: 0 },
     pageScroll: { flex: 1 },
     pageScrollContent: { flexGrow: 1 },
