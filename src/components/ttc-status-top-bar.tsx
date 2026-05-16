@@ -1,12 +1,12 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
-import { useQueryClient } from '@tanstack/react-query';
 import React, { useEffect, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { alpha, type AppColors } from '@/constants/theme';
 import { useAppColors } from '@/hooks/use-app-colors';
 import { useEffectiveTtcHealth } from '@/hooks/use-effective-ttc-health';
 import { useI18n } from '@/hooks/use-i18n';
+import { useTtcStatusRefresh } from '@/hooks/use-ttc-status-refresh';
 
 type StatusBarItem = {
   key: string;
@@ -24,8 +24,8 @@ export function TtcStatusTopBar() {
   const colors = useAppColors();
   const styles = useStyles(colors);
   const { t, formatRelativeDuration } = useI18n();
-  const queryClient = useQueryClient();
   const { status, lastSuccessAt } = useEffectiveTtcHealth();
+  const { isRefreshing, refreshTtcStatus } = useTtcStatusRefresh();
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
 
   let item: StatusBarItem | null = null;
@@ -74,11 +74,7 @@ export function TtcStatusTopBar() {
           })
         : t('ttcNoResponse'),
       actionLabel: t('commonRefresh'),
-      onAction: () => {
-        queryClient.refetchQueries({
-          predicate: query => query.meta?.source === 'ttc' && query.getObserversCount() > 0,
-        });
-      },
+      onAction: refreshTtcStatus,
       accentColor: accent,
       textColor,
     };
@@ -97,13 +93,7 @@ export function TtcStatusTopBar() {
   const isExpanded = Boolean(expandedItem);
 
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={`${primaryItem.modeLabel}. ${primaryItem.label}. ${
-        isExpanded ? t('ttcStatusCollapse') : t('ttcStatusExpand')
-      }`}
-      accessibilityState={{ expanded: isExpanded }}
-      onPress={() => setExpandedKey(current => current === primaryItem.key ? null : primaryItem.key)}
+    <View
       style={[
         styles.statusBar,
         isExpanded && styles.statusBarExpanded,
@@ -112,7 +102,14 @@ export function TtcStatusTopBar() {
           borderColor: alpha(primaryItem.accentColor, isExpanded ? '45' : '2E'),
         },
       ]}>
-      <View style={styles.statusBarHeader}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`${primaryItem.modeLabel}. ${primaryItem.label}. ${
+          isExpanded ? t('ttcStatusCollapse') : t('ttcStatusExpand')
+        }`}
+        accessibilityState={{ expanded: isExpanded }}
+        onPress={() => setExpandedKey(current => current === primaryItem.key ? null : primaryItem.key)}
+        style={styles.statusBarHeader}>
         <View
           style={[
             styles.statusBarIcon,
@@ -135,7 +132,7 @@ export function TtcStatusTopBar() {
           size={16}
           color={primaryItem.textColor}
         />
-      </View>
+      </Pressable>
 
       {isExpanded ? (
         <View style={styles.statusBarBody}>
@@ -146,16 +143,22 @@ export function TtcStatusTopBar() {
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={primaryItem.actionLabel}
+                accessibilityState={{ busy: isRefreshing, disabled: isRefreshing }}
                 hitSlop={8}
-                onPress={event => {
-                  event.stopPropagation();
+                disabled={isRefreshing}
+                onPress={() => {
                   primaryItem.onAction?.();
                 }}
                 style={[
                   styles.statusBarAction,
+                  isRefreshing && styles.statusBarActionBusy,
                   { borderColor: alpha(primaryItem.accentColor, '55') },
                 ]}>
-                <MaterialCommunityIcons name="refresh" size={14} color={primaryItem.textColor} />
+                {isRefreshing ? (
+                  <ActivityIndicator size="small" color={primaryItem.textColor} />
+                ) : (
+                  <MaterialCommunityIcons name="refresh" size={14} color={primaryItem.textColor} />
+                )}
                 <Text style={[styles.statusBarActionText, { color: primaryItem.textColor }]}>
                   {primaryItem.actionLabel}
                 </Text>
@@ -164,7 +167,7 @@ export function TtcStatusTopBar() {
           </View>
         </View>
       ) : null}
-    </Pressable>
+    </View>
   );
 }
 
@@ -240,6 +243,7 @@ function createStyles(C: AppColors) {
       backgroundColor: alpha(C.surfaceHigh, 'AA'),
       flexShrink: 0,
     },
+    statusBarActionBusy: { opacity: 0.78 },
     statusBarActionText: { fontSize: 11, fontWeight: '800' },
   });
 }

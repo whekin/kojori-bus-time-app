@@ -1,12 +1,12 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
-import { useQueryClient } from '@tanstack/react-query';
 import React, { useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { alpha, type AppColors } from '@/constants/theme';
 import { useAppColors } from '@/hooks/use-app-colors';
 import { useEffectiveTtcHealth } from '@/hooks/use-effective-ttc-health';
 import { useI18n } from '@/hooks/use-i18n';
+import { useTtcStatusRefresh } from '@/hooks/use-ttc-status-refresh';
 
 function useStyles() {
   const colors = useAppColors();
@@ -40,8 +40,8 @@ function TtcStatusBannerBase({
 }) {
   const { colors, styles } = useStyles();
   const { t, formatRelativeDuration } = useI18n();
-  const queryClient = useQueryClient();
   const { status, lastSuccessAt } = useEffectiveTtcHealth();
+  const { isRefreshing, refreshTtcStatus } = useTtcStatusRefresh();
   const [expanded, setExpanded] = useState(false);
 
   if (status === 'healthy') return null;
@@ -134,13 +134,15 @@ function TtcStatusBannerBase({
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={t('ttcStatusRefresh')}
-              style={[styles.retryButton, { borderColor: alpha(accent, '55') }]}
-              onPress={() => {
-                queryClient.refetchQueries({
-                  predicate: query => query.meta?.source === 'ttc' && query.getObserversCount() > 0,
-                });
-              }}>
-              <MaterialCommunityIcons name="refresh" size={16} color={textColor} />
+              accessibilityState={{ busy: isRefreshing, disabled: isRefreshing }}
+              disabled={isRefreshing}
+              style={[styles.retryButton, isRefreshing && styles.retryButtonBusy, { borderColor: alpha(accent, '55') }]}
+              onPress={refreshTtcStatus}>
+              {isRefreshing ? (
+                <ActivityIndicator size="small" color={textColor} />
+              ) : (
+                <MaterialCommunityIcons name="refresh" size={16} color={textColor} />
+              )}
             </Pressable>
           </View>
         </View>
@@ -239,5 +241,6 @@ function createStyles(C: AppColors) {
       justifyContent: 'center',
       backgroundColor: alpha(C.bg, '33'),
     },
+    retryButtonBusy: { opacity: 0.78 },
   });
 }

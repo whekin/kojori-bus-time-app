@@ -12,7 +12,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { type AppColors } from '@/constants/theme';
+import { alpha, type AppColors } from '@/constants/theme';
 import ExploreScreen from '@/app/explore';
 import HomeScreen from '@/app/index';
 import SettingsScreen from '@/app/settings';
@@ -28,7 +28,6 @@ type TabItem = {
   route: TabRoute;
   title: string;
   icon: React.ComponentProps<typeof MaterialCommunityIcons>['name'];
-  accent: string;
   render: (isActive: boolean) => React.ReactNode;
 };
 
@@ -74,14 +73,14 @@ function TabButton({
   const styles = React.useMemo(() => createStyles(C), [C]);
   const iconStyle = useAnimatedStyle(() => {
     const distance = Math.min(Math.abs(pagerProgress.value - index), 1);
-    const color = interpolateColor(distance, [0, 1], [tab.accent, C.textDim]);
+    const color = interpolateColor(distance, [0, 1], [C.primary, C.textDim]);
 
     return {
       color,
       opacity: 1 - distance * 0.15,
       transform: [{ scale: 1 - distance * 0.04 }],
     };
-  }, [C.textDim, index, tab.accent]);
+  }, [C.primary, C.textDim, index]);
 
   const labelStyle = useAnimatedStyle(() => {
     const distance = Math.min(Math.abs(pagerProgress.value - index), 1);
@@ -140,10 +139,10 @@ export default function AppTabs({
   const pagerProgress = useSharedValue(0);
   const { t } = useI18n();
   const tabs: TabItem[] = [
-    { route: 'index', title: t('tabsDepartures'), icon: 'bus-clock', accent: C.route380, render: isActive => <HomeScreen isActive={isActive} /> },
-    { route: 'explore', title: t('tabsMap'), icon: 'map-marker-radius', accent: C.map, render: isActive => <ExploreScreen isActive={isActive} /> },
-    { route: 'timetable', title: t('tabsTimetable'), icon: 'table-clock', accent: C.route316, render: () => <TimetableScreen /> },
-    { route: 'settings', title: t('tabsSettings'), icon: 'cog', accent: C.primary, render: () => <SettingsScreen /> },
+    { route: 'index', title: t('tabsDepartures'), icon: 'bus-clock', render: isActive => <HomeScreen isActive={isActive} /> },
+    { route: 'explore', title: t('tabsMap'), icon: 'map-marker-radius', render: isActive => <ExploreScreen isActive={isActive} /> },
+    { route: 'timetable', title: t('tabsTimetable'), icon: 'table-clock', render: () => <TimetableScreen /> },
+    { route: 'settings', title: t('tabsSettings'), icon: 'cog', render: () => <SettingsScreen /> },
   ];
 
   useEffect(() => {
@@ -235,7 +234,6 @@ export default function AppTabs({
             onPageScroll={pageScrollHandler}
             onPageSelected={event => {
               const nextIndex = event.nativeEvent.position;
-              pagerProgress.value = nextIndex;
               mountTab(nextIndex);
               if (nextIndex === activeIndex) return;
               tabHistoryRef.current = [
@@ -266,6 +264,8 @@ export default function AppTabs({
                     styles.navHighlight,
                     {
                       width: tabWidth + NAV_HIGHLIGHT_EXTRA,
+                      backgroundColor: alpha(C.primary, C.mode === 'dark' ? '22' : '18'),
+                      borderColor: alpha(C.primary, C.mode === 'dark' ? '66' : '55'),
                     },
                     highlightStyle,
                   ]}
