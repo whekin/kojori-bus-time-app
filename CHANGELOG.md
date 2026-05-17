@@ -1,6 +1,6 @@
 # Changelog
 
-## [UNRELEASED]
+## v2026.5.17
 ### Improved
 
 - Departures and Timetable now fold direction switching into the stop card, leaving stop changes available without a separate route card.
