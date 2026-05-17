@@ -19,10 +19,12 @@ import {
 import { StopChoiceRow } from '@/components/stop-choice-row';
 import { StopPickerModal } from '@/components/stop-picker-modal';
 import { alpha } from '@/constants/theme';
+import { useActiveDirection } from '@/hooks/use-active-direction';
 import { useAppColors } from '@/hooks/use-app-colors';
 import { useI18n } from '@/hooks/use-i18n';
 import { useMapFocus } from '@/hooks/use-map-focus';
 import { useTabNav, type TabRoute } from '@/hooks/use-tab-nav';
+import { type SharedDirection } from '@/hooks/use-settings';
 
 const MONO = Platform.select({ android: 'monospace', ios: 'Menlo', default: 'monospace' });
 const DISPLAY = Platform.select({ android: 'serif', ios: 'Georgia', default: 'serif' });
@@ -52,14 +54,7 @@ interface StopSelectorProps {
   };
   label?: string;
   mapReturnRoute: TabRoute;
-}
-
-function formatIndex(index: number) {
-  return String(index + 1).padStart(2, '0');
-}
-
-function formatCount(currentIndex: number, total: number) {
-  return `${formatIndex(currentIndex)} / ${formatIndex(total)}`;
+  showDirectionSwitch?: boolean;
 }
 
 function formatDistance(distanceMeters: number, t: ReturnType<typeof useI18n>['t']) {
@@ -69,6 +64,68 @@ function formatDistance(distanceMeters: number, t: ReturnType<typeof useI18n>['t
 
 function stopCode(id: string) {
   return '#' + (id.split(':')[1] ?? id);
+}
+
+function originLabel(
+  direction: SharedDirection,
+  t: ReturnType<typeof useI18n>['t'],
+) {
+  return direction === 'toKojori' ? t('cityTbilisi') : t('cityKojori');
+}
+
+function destinationLabel(
+  direction: SharedDirection,
+  t: ReturnType<typeof useI18n>['t'],
+) {
+  return direction === 'toKojori' ? t('cityKojori') : t('cityTbilisi');
+}
+
+function DirectionSwitch({ accentColor }: { accentColor: string }) {
+  const colors = useAppColors();
+  const styles = useStopSelectorStyles();
+  const { activeDirection, selectDirection } = useActiveDirection();
+  const { t } = useI18n();
+  const origin = originLabel(activeDirection, t);
+  const destination = destinationLabel(activeDirection, t);
+  const nextDirection = activeDirection === 'toKojori' ? 'toTbilisi' : 'toKojori';
+
+  function handlePress(event: GestureResponderEvent) {
+    event.stopPropagation();
+    selectDirection(nextDirection, { persist: 'deferred' });
+  }
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={t('directionAccessibility', { origin, destination })}
+      onPress={handlePress}
+      hitSlop={6}
+      style={({ pressed }) => [
+        styles.directionSwitch,
+        {
+          borderColor: alpha(accentColor, pressed ? '66' : '38'),
+          backgroundColor: pressed ? alpha(accentColor, '1C') : alpha(accentColor, '10'),
+        },
+      ]}>
+      <View style={[styles.directionSwitchDot, { backgroundColor: accentColor }]} />
+      <Text
+        style={[styles.directionSwitchText, { color: colors.text }]}
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        minimumFontScale={0.78}>
+        {origin}
+      </Text>
+      <MaterialCommunityIcons name="arrow-right" size={13} color={colors.textDim} />
+      <Text
+        style={[styles.directionSwitchText, { color: colors.text }]}
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        minimumFontScale={0.78}>
+        {destination}
+      </Text>
+      <MaterialCommunityIcons name="swap-horizontal" size={15} color={accentColor} />
+    </Pressable>
+  );
 }
 
 function BoardingStopMapBackdrop({ accentColor }: { accentColor: string }) {
@@ -141,6 +198,7 @@ export function StopSelector({
   addStopModal,
   label,
   mapReturnRoute,
+  showDirectionSwitch = false,
 }: StopSelectorProps) {
   const colors = useAppColors();
   const styles = useStopSelectorStyles();
@@ -254,22 +312,15 @@ export function StopSelector({
         </View>
 
         <View style={styles.triggerSide}>
+          {showDirectionSwitch ? <DirectionSwitch accentColor={accentColor} /> : null}
           {totalStops > 1 ? (
-            <>
-              <View
-                style={[
-                  styles.triggerCount,
-                  {
-                    borderColor: accentColor + '30',
-                    backgroundColor: accentColor + '10',
-                  },
-                ]}>
-                <Text style={[styles.triggerCountText, { color: accentColor, fontFamily: MONO }]}>
-                  {formatCount(activeIndex, totalStops)}
-                </Text>
-              </View>
-              <Text style={[styles.triggerAction, { color: accentColor }]}>{t('commonChange')}</Text>
-            </>
+            <Text
+              style={[styles.triggerAction, { color: accentColor }]}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.78}>
+              {t('stopChange')}
+            </Text>
           ) : (
             <View style={styles.triggerActionSolo}>
               <Text style={[styles.triggerAction, { color: accentColor }]}>{t('commonAdd')}</Text>
@@ -315,11 +366,6 @@ export function StopSelector({
                 </Text>
                 <Text style={[styles.currentCode, { fontFamily: MONO }]}>{stopCode(activeStop.id)}</Text>
               </View>
-              {totalStops > 1 && (
-                <Text style={[styles.currentCount, { color: accentColor, fontFamily: MONO }]}>
-                  {formatCount(activeIndex, totalStops)}
-                </Text>
-              )}
             </View>
 
             <ScrollableBottomSheetScrollView
@@ -468,18 +514,32 @@ function createStyles(C: ReturnType<typeof useAppColors>) {
     alignItems: 'flex-end',
     justifyContent: 'space-between',
     gap: 6,
-    minWidth: 76,
+    minWidth: 128,
     zIndex: 1,
   },
-  triggerCount: {
+  directionSwitch: {
+    minHeight: 30,
+    maxWidth: 154,
     borderRadius: 999,
     borderWidth: 1,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingLeft: 8,
+    paddingRight: 7,
+    paddingVertical: 5,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
   },
-  triggerCountText: {
+  directionSwitchDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    flexShrink: 0,
+  },
+  directionSwitchText: {
     fontSize: 12,
-    fontWeight: '700',
+    fontWeight: '800',
+    flexShrink: 1,
+    minWidth: 28,
   },
   triggerAction: {
     fontSize: 12,
@@ -661,10 +721,6 @@ function createStyles(C: ReturnType<typeof useAppColors>) {
     color: C.text,
     fontSize: 18,
     lineHeight: 22,
-    fontWeight: '700',
-  },
-  currentCount: {
-    fontSize: 12,
     fontWeight: '700',
   },
   optionsContent: {

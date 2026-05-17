@@ -10,7 +10,6 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { DirectionPill } from "@/components/direction-picker";
 import { StopSelector } from "@/components/stop-selector";
 import { TtcStatusTopBar } from "@/components/ttc-status-top-bar";
 import { alpha, BottomTabInset, type AppColors } from "@/constants/theme";
@@ -136,7 +135,7 @@ function BusTag({ bus }: { bus: BusLine }) {
 export default function TimetableScreen() {
   const colors = useAppColors();
   const styles = useTimetableStyles();
-  const { t, formatCount, formatDuration, formatRelativeDuration } = useI18n();
+  const { t, formatDuration, formatRelativeDuration } = useI18n();
   const insets = useSafeAreaInsets();
   const { settings, update, toggleKojoriFavorite, toggleTbilisiFavorite } =
     useSettings();
@@ -261,25 +260,9 @@ export default function TimetableScreen() {
     );
   }, [s380, s316, stopId, filter, t]);
 
-  const totalCount = sections.reduce((n, s) => n + s.data.length, 0);
-
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
       <TtcStatusTopBar />
-
-      {/* Header */}
-      <View style={styles.header}>
-        <DirectionPill accentColor={accentColor} />
-        <View style={styles.headerRight}>
-          {isLoading ? (
-            <ActivityIndicator color={colors.textDim} size="small" />
-          ) : (
-            <Text style={styles.headerCount}>
-              {t("timetableCount", { count: formatCount("departures", totalCount) })}
-            </Text>
-          )}
-        </View>
-      </View>
 
       <SectionList
         sections={sections}
@@ -292,10 +275,6 @@ export default function TimetableScreen() {
         ]}
         ListHeaderComponent={
           <View>
-            <View style={styles.topDivider}>
-              <View style={styles.dividerLine} />
-            </View>
-
             <View style={styles.stopSelectorWrap}>
               <StopSelector
                 stops={stops}
@@ -304,6 +283,7 @@ export default function TimetableScreen() {
                 onSelectStop={handleSelectStop}
                 mapReturnRoute="timetable"
                 locationSuggestion={locationSuggestion}
+                showDirectionSwitch
                 addStopModal={{
                   title:
                     direction === "toKojori"
@@ -375,7 +355,6 @@ export default function TimetableScreen() {
               {section.title.toUpperCase()}
             </Text>
             <View style={styles.sectionHeaderLine} />
-            <Text style={styles.sectionCount}>{section.data.length}</Text>
           </View>
         )}
         renderItem={({ item, index, section }) => {
@@ -431,22 +410,7 @@ export default function TimetableScreen() {
 function createStyles(C: AppColors) {
   return StyleSheet.create({
     screen: { flex: 1, backgroundColor: C.bg },
-    header: {
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "space-between",
-      paddingHorizontal: 20,
-      paddingVertical: 14,
-    },
-    headerRight: { minWidth: 72, alignItems: "flex-end" },
-    headerCount: { color: C.textDim, fontSize: 13, fontWeight: "500" },
-
-    topDivider: {
-      paddingTop: 4,
-      paddingBottom: 16,
-    },
-    dividerLine: { height: 1, backgroundColor: C.border },
-    stopSelectorWrap: { paddingTop: 2 },
+    stopSelectorWrap: { paddingTop: 0 },
 
     filterRow: {
       flexDirection: "row",
@@ -494,8 +458,6 @@ function createStyles(C: AppColors) {
       letterSpacing: 2.5,
     },
     sectionHeaderLine: { flex: 1, height: 1, backgroundColor: C.border },
-    sectionCount: { color: C.textFaint, fontSize: 11, fontWeight: "600" },
-
     timeRow: {
       flexDirection: "row",
       alignItems: "center",

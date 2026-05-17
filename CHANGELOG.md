@@ -1,6 +1,11 @@
 # Changelog
 
 ## [UNRELEASED]
+### Improved
+
+- Departures and Timetable now fold direction switching into the stop card, leaving stop changes available without a separate route card.
+- Timetable no longer shows departure-count totals in the header or section dividers.
+
 ### Fixed
 
 - Bottom sheets now use a single scroll-aware implementation, so long stop lists remain scrollable while preserving drag-to-close.

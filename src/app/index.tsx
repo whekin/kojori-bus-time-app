@@ -16,7 +16,6 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { DirectionPill } from "@/components/direction-picker";
 import { StopSelector } from "@/components/stop-selector";
 import { TtcStatusTopBar } from "@/components/ttc-status-top-bar";
 import { alpha, BottomTabInset, type AppColors } from "@/constants/theme";
@@ -51,8 +50,6 @@ const MONO = Platform.select({
 type SharedMode = "kojori" | "tbilisi";
 const CONTENT_SIDE = 20;
 const SECTION_SPACE = 12;
-const TOP_DIVIDER_TOP_SPACE = 4;
-const TOP_DIVIDER_BOTTOM_SPACE = SECTION_SPACE + TOP_DIVIDER_TOP_SPACE;
 
 function modeToDirection(mode: SharedMode) {
   return mode === "kojori" ? "toKojori" : "toTbilisi";
@@ -245,15 +242,6 @@ function SectionDivider({
     <View style={[styles.divider, style]}>
       <View style={styles.dividerLine} />
       <Text style={styles.dividerLabel}>{label}</Text>
-      <View style={styles.dividerLine} />
-    </View>
-  );
-}
-
-function PlainDivider({ style }: { style?: ViewStyle }) {
-  const styles = useHomeStyles();
-  return (
-    <View style={[styles.plainDivider, style]}>
       <View style={styles.dividerLine} />
     </View>
   );
@@ -741,8 +729,6 @@ function ToKojoriView({
         }
       >
         <View style={styles.fixedSection}>
-          <PlainDivider style={styles.topDivider} />
-
           <StopSelector
             stops={favoriteStops}
             activeStopId={activeStopId}
@@ -750,6 +736,7 @@ function ToKojoriView({
             onSelectStop={onSelectStop}
             mapReturnRoute="index"
             locationSuggestion={locationSuggestion}
+            showDirectionSwitch
             addStopModal={{
               title: t("timetableTbilisiStops"),
               direction: "toKojori",
@@ -918,8 +905,6 @@ function ToTbilisiView({
         }
       >
         <View style={styles.fixedSection}>
-          <PlainDivider style={styles.topDivider} />
-
           <StopSelector
             stops={favoriteStops}
             activeStopId={activeStopId}
@@ -927,6 +912,7 @@ function ToTbilisiView({
             onSelectStop={onSelectStop}
             mapReturnRoute="index"
             locationSuggestion={locationSuggestion}
+            showDirectionSwitch
             addStopModal={{
               title: t("timetableKojoriStops"),
               direction: "toTbilisi",
@@ -975,9 +961,7 @@ export default function HomeScreen({
 }: {
   isActive?: boolean;
 }) {
-  const colors = useAppColors();
   const styles = useHomeStyles();
-  const { t } = useI18n();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const { settings, update, toggleKojoriFavorite, toggleTbilisiFavorite } =
@@ -1054,7 +1038,6 @@ export default function HomeScreen({
     };
   }, []);
 
-  const accentColor = mode === "kojori" ? colors.route380 : colors.route316;
   const activeStopId =
     mode === "kojori"
       ? settings.activeTbilisiStopId
@@ -1099,15 +1082,6 @@ export default function HomeScreen({
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
       <TtcStatusTopBar />
-
-      {/* Header */}
-      <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <DirectionPill accentColor={accentColor} />
-        </View>
-      </View>
-
-      <View style={styles.contentTopSpacer} />
 
       <View style={styles.directionPaneStack}>
         <View
@@ -1159,23 +1133,6 @@ export default function HomeScreen({
 function createStyles(C: AppColors) {
   return StyleSheet.create({
     screen: { flex: 1, backgroundColor: C.bg },
-    header: {
-      flexDirection: "row",
-      justifyContent: "space-between",
-      alignItems: "center",
-      paddingHorizontal: CONTENT_SIDE,
-      paddingTop: 14,
-      paddingBottom: 12,
-      zIndex: 50,
-    },
-    headerLeft: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 8,
-      minWidth: 128,
-      flexShrink: 0,
-    },
-    contentTopSpacer: { height: 0 },
 
     modeContainer: { flex: 1 },
     directionPaneStack: { flex: 1 },
@@ -1186,11 +1143,6 @@ function createStyles(C: AppColors) {
     fixedSection: { paddingHorizontal: CONTENT_SIDE, paddingTop: 0 },
     dividerPadded: { paddingHorizontal: CONTENT_SIDE },
 
-    plainDivider: { flexDirection: "row", alignItems: "center" },
-    topDivider: {
-      paddingTop: TOP_DIVIDER_TOP_SPACE,
-      paddingBottom: TOP_DIVIDER_BOTTOM_SPACE,
-    },
     divider: {
       flexDirection: "row",
       alignItems: "center",

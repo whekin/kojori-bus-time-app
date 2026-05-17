@@ -46,10 +46,6 @@ export const translations = {
     countStopsFew: '{count} stops',
     countStopsMany: '{count} stops',
     countStopsOther: '{count} stops',
-    countDeparturesOne: '{count} departure',
-    countDeparturesFew: '{count} departures',
-    countDeparturesMany: '{count} departures',
-    countDeparturesOther: '{count} departures',
     countDatasetsOne: '{available}/{total} dataset',
     countDatasetsFew: '{available}/{total} datasets',
     countDatasetsMany: '{available}/{total} datasets',
@@ -114,6 +110,7 @@ export const translations = {
     stopOption: 'STOP {index}',
     stopCurrent: 'CURRENT',
     stopSwitch: 'SWITCH',
+    stopChange: 'Change stop',
     stopAccessibility: '{label}. {stop}. Double tap to change stop.',
     stopSheetTitle: 'Which stop do you need?',
     stopSheetNote: 'We use it to show the next buses on this screen.',
@@ -170,7 +167,6 @@ export const translations = {
     timetableMorning: 'Morning',
     timetableAfternoon: 'Afternoon',
     timetableEvening: 'Evening',
-    timetableCount: '{count}',
     timetableTbilisiStops: 'Tbilisi Stops',
     timetableKojoriStops: 'Kojori Stops',
     timetableAllBuses: 'All buses',
@@ -411,10 +407,6 @@ export const translations = {
     countStopsFew: '{count} გაჩერება',
     countStopsMany: '{count} გაჩერება',
     countStopsOther: '{count} გაჩერება',
-    countDeparturesOne: '{count} გასვლა',
-    countDeparturesFew: '{count} გასვლა',
-    countDeparturesMany: '{count} გასვლა',
-    countDeparturesOther: '{count} გასვლა',
     countDatasetsOne: '{available}/{total} მონაცემთა ნაკრები',
     countDatasetsFew: '{available}/{total} მონაცემთა ნაკრები',
     countDatasetsMany: '{available}/{total} მონაცემთა ნაკრები',
@@ -479,6 +471,7 @@ export const translations = {
     stopOption: 'გაჩერება {index}',
     stopCurrent: 'აქტიური',
     stopSwitch: 'შეცვლა',
+    stopChange: 'გაჩერების შეცვლა',
     stopAccessibility: '{label}. {stop}. შეცვლისთვის ორჯერ შეეხეთ.',
     stopSheetTitle: 'აირჩიეთ საყურებელი გაჩერება',
     stopSheetNote: 'არჩეული გაჩერება მართავს ამ ეკრანზე ნაჩვენებ გასვლებს.',
@@ -535,7 +528,6 @@ export const translations = {
     timetableMorning: 'დილა',
     timetableAfternoon: 'შუადღე',
     timetableEvening: 'საღამო',
-    timetableCount: '{count}',
     timetableTbilisiStops: 'თბილისიდან გასვლის გაჩერებები',
     timetableKojoriStops: 'კოჯრის გაჩერებები',
     timetableAllBuses: 'ყველა ავტობუსი',
@@ -776,10 +768,6 @@ export const translations = {
     countStopsFew: '{count} остановки',
     countStopsMany: '{count} остановок',
     countStopsOther: '{count} остановки',
-    countDeparturesOne: '{count} отправление',
-    countDeparturesFew: '{count} отправления',
-    countDeparturesMany: '{count} отправлений',
-    countDeparturesOther: '{count} отправления',
     countDatasetsOne: '{available}/{total} раздел',
     countDatasetsFew: '{available}/{total} раздела',
     countDatasetsMany: '{available}/{total} разделов',
@@ -844,6 +832,7 @@ export const translations = {
     stopOption: 'ОСТАНОВКА {index}',
     stopCurrent: 'ТЕКУЩАЯ',
     stopSwitch: 'ВЫБРАТЬ',
+    stopChange: 'Сменить остановку',
     stopAccessibility: '{label}. {stop}. Дважды нажмите, чтобы изменить.',
     stopSheetTitle: 'Какая остановка нужна?',
     stopSheetNote: 'От нее считаем ближайшие автобусы на этом экране.',
@@ -900,7 +889,6 @@ export const translations = {
     timetableMorning: 'Утро',
     timetableAfternoon: 'День',
     timetableEvening: 'Вечер',
-    timetableCount: '{count}',
     timetableTbilisiStops: 'Остановки в Тбилиси',
     timetableKojoriStops: 'Остановки Коджори',
     timetableAllBuses: 'Все автобусы',
@@ -1103,7 +1091,7 @@ export type TranslationKey = keyof typeof translations.en;
 
 type Params = Record<string, string | number>;
 type PluralCategory = 'one' | 'few' | 'many' | 'other';
-type CountKind = 'stops' | 'departures' | 'datasets';
+type CountKind = 'stops' | 'datasets';
 type DurationUnit = 'minute' | 'hour';
 type RelativeDirection = 'future' | 'past';
 
@@ -1113,12 +1101,6 @@ const COUNT_TRANSLATION_KEYS = {
     few: 'countStopsFew',
     many: 'countStopsMany',
     other: 'countStopsOther',
-  },
-  departures: {
-    one: 'countDeparturesOne',
-    few: 'countDeparturesFew',
-    many: 'countDeparturesMany',
-    other: 'countDeparturesOther',
   },
   datasets: {
     one: 'countDatasetsOne',
