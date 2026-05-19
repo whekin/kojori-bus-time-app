@@ -4,6 +4,7 @@
 ### Improved
 
 - Shortened the Russian timetable stop heading so the direction switch has more room.
+- Removed the duplicate plus sign from the add-stop button.
 
 ## v2026.5.19
 ### Improved
