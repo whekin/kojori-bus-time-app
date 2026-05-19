@@ -1140,7 +1140,7 @@ function createStyles(C: AppColors) {
     directionPaneHidden: { opacity: 0 },
     pageScroll: { flex: 1 },
     pageScrollContent: { flexGrow: 1 },
-    fixedSection: { paddingHorizontal: CONTENT_SIDE, paddingTop: 0 },
+    fixedSection: { paddingHorizontal: CONTENT_SIDE, paddingTop: 12 },
     dividerPadded: { paddingHorizontal: CONTENT_SIDE },
 
     divider: {

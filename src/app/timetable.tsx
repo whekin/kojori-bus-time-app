@@ -410,7 +410,7 @@ export default function TimetableScreen() {
 function createStyles(C: AppColors) {
   return StyleSheet.create({
     screen: { flex: 1, backgroundColor: C.bg },
-    stopSelectorWrap: { paddingTop: 0 },
+    stopSelectorWrap: { paddingTop: 12 },
 
     filterRow: {
       flexDirection: "row",

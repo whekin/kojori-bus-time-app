@@ -10,7 +10,6 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Svg, { Defs, G, LinearGradient, Path, Rect, Stop } from 'react-native-svg';
 
 import {
   ScrollableBottomSheet,
@@ -103,88 +102,31 @@ function DirectionSwitch({ accentColor }: { accentColor: string }) {
       style={({ pressed }) => [
         styles.directionSwitch,
         {
-          borderColor: alpha(accentColor, pressed ? '66' : '38'),
-          backgroundColor: pressed ? alpha(accentColor, '1C') : alpha(accentColor, '10'),
+          borderColor: pressed ? alpha(accentColor, '55') : colors.border,
+          backgroundColor: pressed ? colors.surfaceHigh : colors.surface,
         },
       ]}>
-      <View style={[styles.directionSwitchDot, { backgroundColor: accentColor }]} />
-      <Text
-        style={[styles.directionSwitchText, { color: colors.text }]}
-        numberOfLines={1}
-        adjustsFontSizeToFit
-        minimumFontScale={0.78}>
-        {origin}
-      </Text>
-      <MaterialCommunityIcons name="arrow-right" size={13} color={colors.textDim} />
-      <Text
-        style={[styles.directionSwitchText, { color: colors.text }]}
-        numberOfLines={1}
-        adjustsFontSizeToFit
-        minimumFontScale={0.78}>
-        {destination}
-      </Text>
-      <MaterialCommunityIcons name="swap-horizontal" size={15} color={accentColor} />
-    </Pressable>
-  );
-}
-
-function BoardingStopMapBackdrop({ accentColor }: { accentColor: string }) {
-  const colors = useAppColors();
-  const styles = useStopSelectorStyles();
-  const minorOpacity = colors.mode === 'dark' ? 0.1 : 0.16;
-  const streetOpacity = colors.mode === 'dark' ? 0.13 : 0.2;
-  const arterialOpacity = colors.mode === 'dark' ? 0.16 : 0.17;
-  const iconOpacity = colors.mode === 'dark' ? 0.64 : 0.58;
-
-  return (
-    <View pointerEvents="none" style={styles.triggerMapLayer}>
-      <Svg width="100%" height="100%" viewBox="0 0 280 132" preserveAspectRatio="none">
-        <Defs>
-          <LinearGradient id="mapFade" x1="0" y1="0" x2="1" y2="0">
-            <Stop offset="0" stopColor={colors.surface} stopOpacity="1" />
-            <Stop offset="0.3" stopColor={colors.surface} stopOpacity="0.93" />
-            <Stop offset="0.64" stopColor={colors.surface} stopOpacity={colors.mode === 'dark' ? '0.48' : '0.28'} />
-            <Stop offset="1" stopColor={colors.surface} stopOpacity={colors.mode === 'dark' ? '0.1' : '0.08'} />
-          </LinearGradient>
-          <LinearGradient id="rightGlow" x1="0" y1="0" x2="1" y2="1">
-            <Stop offset="0" stopColor={alpha(accentColor, '00')} stopOpacity="0" />
-            <Stop offset="1" stopColor={accentColor} stopOpacity={colors.mode === 'dark' ? '0.045' : '0.055'} />
-          </LinearGradient>
-        </Defs>
-
-        <Rect width="280" height="132" fill="url(#rightGlow)" />
-        <G opacity={minorOpacity} stroke={colors.textDim} strokeWidth="0.8" fill="none" strokeLinecap="round">
-          <Path d="M58 18 L224 100" />
-          <Path d="M70 8 L246 88" />
-          <Path d="M42 36 L202 119" />
-          <Path d="M94 0 L88 132" />
-          <Path d="M126 0 L112 132" />
-          <Path d="M158 0 L142 132" />
-          <Path d="M198 0 L170 132" />
-          <Path d="M230 0 L198 132" />
-        </G>
-        <G opacity={streetOpacity} stroke={colors.textDim} strokeWidth="1" fill="none" strokeLinecap="round">
-          <Path d="M18 18 C52 28 78 30 118 24 S190 20 268 2" />
-          <Path d="M0 44 C42 54 76 54 112 44 S184 28 280 34" />
-          <Path d="M14 74 C66 68 98 64 140 56 S214 42 280 44" />
-          <Path d="M24 103 C74 82 112 74 158 67 S226 54 280 58" />
-          <Path d="M60 128 C88 101 110 90 146 76 S204 56 270 70" />
-          <Path d="M28 86 L204 18" />
-          <Path d="M36 113 L258 26" />
-          <Path d="M84 12 C112 46 142 66 184 90 C210 105 236 118 272 130" />
-          <Path d="M110 14 C134 36 160 54 204 70 C230 79 254 88 280 104" />
-        </G>
-        <G opacity={arterialOpacity} stroke={accentColor} strokeWidth="3.2" fill="none" strokeLinecap="round">
-          <Path d="M0 122 C58 88 100 75 144 66 C184 58 220 40 280 6" />
-          <Path d="M70 132 C112 105 150 88 188 78 C224 68 248 52 280 31" />
-        </G>
-        <Rect width="280" height="132" fill="url(#mapFade)" />
-      </Svg>
-      <View style={[styles.triggerMapIconWrap, { opacity: iconOpacity, borderColor: alpha(accentColor, '30'), backgroundColor: alpha(colors.surfaceHigh, colors.mode === 'dark' ? '80' : 'B8') }]}>
-        <MaterialCommunityIcons name="bus" size={20} color={colors.textDim} />
-        <View style={[styles.triggerMapIconDot, { backgroundColor: accentColor }]} />
+      <View style={[styles.directionRouteSegment, { backgroundColor: accentColor }]}>
+        <Text
+          style={styles.directionRouteText}
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          minimumFontScale={0.78}>
+          {origin}
+        </Text>
+        <MaterialCommunityIcons name="arrow-right" size={14} color="#fff" />
+        <Text
+          style={styles.directionRouteText}
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          minimumFontScale={0.78}>
+          {destination}
+        </Text>
       </View>
-    </View>
+      <View style={styles.directionSwapSegment}>
+        <MaterialCommunityIcons name="swap-horizontal" size={17} color={colors.textDim} />
+      </View>
+    </Pressable>
   );
 }
 
@@ -252,6 +194,22 @@ export function StopSelector({
 
   if (!activeStop) return null;
 
+  function handleOpenStopPicker(event?: GestureResponderEvent) {
+    event?.stopPropagation();
+
+    if (totalStops > 1) {
+      setOpen(true);
+      return;
+    }
+
+    if (addStopModal) {
+      setAddOpen(true);
+      return;
+    }
+
+    onAddStop?.();
+  }
+
   function handleShowActiveStopOnMap(event?: GestureResponderEvent) {
     event?.stopPropagation();
     requestStopFocus(activeStop, addStopModal?.direction ?? 'toKojori', { returnRoute: mapReturnRoute });
@@ -263,19 +221,7 @@ export function StopSelector({
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={t('stopAccessibility', { label: resolvedLabel, stop: activeStop.label })}
-        onPress={() => {
-          if (totalStops > 1) {
-            setOpen(true);
-            return;
-          }
-
-          if (addStopModal) {
-            setAddOpen(true);
-            return;
-          }
-
-          onAddStop?.();
-        }}
+        onPress={handleOpenStopPicker}
         style={({ pressed }) => [
           styles.trigger,
           {
@@ -283,14 +229,30 @@ export function StopSelector({
             backgroundColor: colors.surface,
           },
         ]}>
-        <BoardingStopMapBackdrop accentColor={accentColor} />
         <View style={styles.triggerMain}>
           <View style={styles.triggerTopRow}>
             <Text style={styles.triggerLabel}>{resolvedLabel}</Text>
+            {showDirectionSwitch ? <DirectionSwitch accentColor={accentColor} /> : null}
           </View>
-          <Text style={[styles.triggerValue, { fontFamily: DISPLAY }]} numberOfLines={1}>
-            {activeStop.label}
-          </Text>
+          <View style={styles.triggerTitleRow}>
+            <View style={[
+              styles.triggerStopIcon,
+              {
+                borderColor: accentColor + '35',
+                backgroundColor: accentColor + '10',
+              },
+            ]}>
+              <MaterialCommunityIcons name="bus-stop" size={24} color={accentColor} />
+            </View>
+            <Text
+              style={[styles.triggerValue, { fontFamily: DISPLAY }]}
+              numberOfLines={2}
+              adjustsFontSizeToFit
+              minimumFontScale={0.82}>
+              {activeStop.label}
+            </Text>
+          </View>
+          <View style={[styles.triggerInnerDivider, { backgroundColor: accentColor + '32' }]} />
           <View style={styles.triggerBottomRow}>
             <Text style={[styles.triggerCode, { fontFamily: MONO }]}>{stopCode(activeStop.id)}</Text>
             <Pressable
@@ -308,24 +270,44 @@ export function StopSelector({
               <MaterialCommunityIcons name="map-marker-radius" size={14} color={accentColor} />
               <Text style={[styles.routeButtonText, { color: accentColor }]}>{t('tabsMap')}</Text>
             </Pressable>
+            {totalStops > 1 ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={t('stopAccessibility', { label: resolvedLabel, stop: activeStop.label })}
+                onPress={handleOpenStopPicker}
+                hitSlop={8}
+                style={({ pressed }) => [
+                  styles.changeStopButton,
+                  {
+                    borderColor: pressed ? accentColor + '40' : colors.border,
+                    backgroundColor: pressed ? accentColor + '10' : colors.surfaceHigh,
+                  },
+                ]}>
+                <MaterialCommunityIcons name="map-marker-outline" size={14} color={colors.textDim} />
+                <Text style={styles.changeStopButtonText} numberOfLines={1}>
+                  {t('stopChange')}
+                </Text>
+              </Pressable>
+            ) : (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={t('commonAdd')}
+                onPress={handleOpenStopPicker}
+                hitSlop={8}
+                style={({ pressed }) => [
+                  styles.changeStopButton,
+                  {
+                    borderColor: pressed ? accentColor + '40' : colors.border,
+                    backgroundColor: pressed ? accentColor + '10' : colors.surfaceHigh,
+                  },
+                ]}>
+                <MaterialCommunityIcons name="plus" size={14} color={colors.textDim} />
+                <Text style={styles.changeStopButtonText} numberOfLines={1}>
+                  {t('commonAdd')}
+                </Text>
+              </Pressable>
+            )}
           </View>
-        </View>
-
-        <View style={styles.triggerSide}>
-          {showDirectionSwitch ? <DirectionSwitch accentColor={accentColor} /> : null}
-          {totalStops > 1 ? (
-            <Text
-              style={[styles.triggerAction, { color: accentColor }]}
-              numberOfLines={1}
-              adjustsFontSizeToFit
-              minimumFontScale={0.78}>
-              {t('stopChange')}
-            </Text>
-          ) : (
-            <View style={styles.triggerActionSolo}>
-              <Text style={[styles.triggerAction, { color: accentColor }]}>{t('commonAdd')}</Text>
-            </View>
-          )}
         </View>
       </Pressable>
 
@@ -445,110 +427,97 @@ export function StopSelector({
 function createStyles(C: ReturnType<typeof useAppColors>) {
   return StyleSheet.create({
   trigger: {
-    minHeight: 74,
+    minHeight: 108,
     borderRadius: 18,
     borderWidth: 1,
     overflow: 'hidden',
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    flexDirection: 'row',
-    alignItems: 'stretch',
-    justifyContent: 'space-between',
-    gap: 12,
-  },
-  triggerMapLayer: {
-    position: 'absolute',
-    top: 0,
-    right: -10,
-    bottom: 0,
-    width: '76%',
-  },
-  triggerMapIconWrap: {
-    position: 'absolute',
-    top: 28,
-    right: 98,
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  triggerMapIconDot: {
-    position: 'absolute',
-    bottom: -8,
-    width: 4,
-    height: 4,
-    borderRadius: 2,
+    paddingHorizontal: 18,
+    paddingVertical: 16,
   },
   triggerMain: {
-    flex: 1,
     minWidth: 0,
-    zIndex: 1,
+    gap: 12,
   },
   triggerTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    justifyContent: 'space-between',
+    gap: 10,
   },
   triggerLabel: {
     color: C.textDim,
     fontSize: 10,
     fontWeight: '800',
     letterSpacing: 2.1,
+    flexShrink: 0,
+  },
+  triggerTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    minWidth: 0,
+  },
+  triggerStopIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
   },
   triggerValue: {
     color: C.text,
-    fontSize: 18,
-    lineHeight: 22,
+    fontSize: 28,
+    lineHeight: 30,
     fontWeight: '700',
-    marginTop: 4,
+    flexShrink: 1,
+    minWidth: 0,
   },
   triggerBottomRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginTop: 8,
+    flexWrap: 'wrap',
   },
-  triggerSide: {
-    alignItems: 'flex-end',
-    justifyContent: 'space-between',
-    gap: 6,
-    minWidth: 128,
-    zIndex: 1,
+  triggerInnerDivider: {
+    height: 1.5,
+    marginHorizontal: 6,
+    marginVertical: 1,
+    borderRadius: 999,
   },
   directionSwitch: {
-    minHeight: 30,
-    maxWidth: 154,
+    height: 38,
+    maxWidth: 224,
     borderRadius: 999,
     borderWidth: 1,
-    paddingLeft: 8,
-    paddingRight: 7,
-    paddingVertical: 5,
+    padding: 2,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
+    flexShrink: 1,
   },
-  directionSwitchDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 3.5,
-    flexShrink: 0,
+  directionRouteSegment: {
+    height: 32,
+    borderRadius: 16,
+    paddingHorizontal: 13,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    minWidth: 0,
+    flexShrink: 1,
   },
-  directionSwitchText: {
-    fontSize: 12,
+  directionRouteText: {
+    color: '#fff',
+    fontSize: 14,
     fontWeight: '800',
     flexShrink: 1,
     minWidth: 28,
   },
-  triggerAction: {
-    fontSize: 12,
-    fontWeight: '700',
-    letterSpacing: 0.4,
-  },
-  triggerActionSolo: {
-    flex: 1,
-    justifyContent: 'flex-end',
+  directionSwapSegment: {
+    width: 34,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   routeButton: {
     flexDirection: 'row',
@@ -563,6 +532,23 @@ function createStyles(C: ReturnType<typeof useAppColors>) {
     fontSize: 12,
     fontWeight: '700',
     letterSpacing: 0.3,
+  },
+  changeStopButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    maxWidth: 160,
+  },
+  changeStopButtonText: {
+    color: C.textDim,
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.1,
+    flexShrink: 1,
   },
   sheetFrame: {
     maxHeight: '76%',
