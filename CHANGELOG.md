@@ -1,6 +1,6 @@
 # Changelog
 
-## [UNRELEASED]
+## v2026.5.19
 ### Improved
 
 - Stop cards now use a cleaner plain background, put the stop-change action beside the map button, and sit more comfortably below the status area.
