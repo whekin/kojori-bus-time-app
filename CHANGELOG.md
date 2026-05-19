@@ -1,5 +1,10 @@
 # Changelog
 
+## [UNRELEASED]
+### Improved
+
+- Shortened the Russian timetable stop heading so the direction switch has more room.
+
 ## v2026.5.19
 ### Improved
 

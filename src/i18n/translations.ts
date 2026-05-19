@@ -828,7 +828,7 @@ export const translations = {
     startKojoriSub: 'В горы',
     startTbilisiSub: 'В город',
     stopBoarding: 'ГДЕ САДИМСЯ',
-    stopTimetable: 'ОСТАНОВКА ДЛЯ РАСПИСАНИЯ',
+    stopTimetable: 'РАСПИСАНИЕ',
     stopOption: 'ОСТАНОВКА {index}',
     stopCurrent: 'ТЕКУЩАЯ',
     stopSwitch: 'ВЫБРАТЬ',
