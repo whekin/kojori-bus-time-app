@@ -2,6 +2,7 @@ import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import React, { useRef } from 'react';
 import {
   ActivityIndicator,
+  Image,
   ImageBackground,
   Platform,
   Pressable,
@@ -9,10 +10,9 @@ import {
   StyleSheet,
   Text,
   View,
-  useWindowDimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Svg, { Circle, Defs, G, LinearGradient, Path, Polygon, Rect, Stop } from 'react-native-svg';
+import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 
 import { SettingsSwitch } from '@/components/settings-switch';
 import { alpha, type AppColors } from '@/constants/theme';
@@ -29,6 +29,7 @@ const CARD_BACKGROUNDS = {
   kojori: require('@/assets/images/start-kojori-card.png'),
   tbilisi: require('@/assets/images/start-tbilisi-card.png'),
 } as const;
+const APP_ICON = require('@/assets/images/icon.png');
 
 type Mode = 'kojori' | 'tbilisi';
 
@@ -40,7 +41,6 @@ export function StartScreen({ onDone }: { onDone: () => void }) {
   const colors = useAppColors();
   const styles = useStyles();
   const insets = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
   const { selectDirection } = useActiveDirection();
   const { settings, update } = useSettings();
   const { t, resolvedLanguage } = useI18n();
@@ -101,14 +101,13 @@ export function StartScreen({ onDone }: { onDone: () => void }) {
 
   return (
     <View style={[styles.root, { paddingTop: insets.top + 10 }]}>
-      <ScenicBackdrop width={width} accent={kojoriAccent} colors={colors} />
       <ScrollView
         contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 118 }]}
         showsVerticalScrollIndicator={false}>
         <View style={styles.topBar}>
           <View style={styles.brandRow}>
-            <MaterialCommunityIcons name="map-marker" size={27} color={kojoriAccent} />
-            <Text style={styles.eyebrow}>{t('startEyebrow')}</Text>
+            <Image source={APP_ICON} style={styles.brandIcon} />
+            <Text style={styles.brandName} numberOfLines={1}>Kojoring Time</Text>
           </View>
         </View>
 
@@ -258,52 +257,6 @@ function CardScrim({ mode, colors, accent }: { mode: Mode; colors: AppColors; ac
   );
 }
 
-function ScenicBackdrop({ width, accent, colors }: { width: number; accent: string; colors: AppColors }) {
-  const sceneWidth = Math.max(320, width * 0.92);
-  return (
-    <View pointerEvents="none" style={[stylesStatic.backdrop, { opacity: colors.mode === 'dark' ? 0.72 : 1 }]}>
-      <Svg width={sceneWidth} height={260} viewBox="0 0 360 230" preserveAspectRatio="xMidYMid slice">
-        <Defs>
-          <LinearGradient id="start-mist" x1="0" y1="0" x2="0" y2="1">
-            <Stop offset="0" stopColor={colors.bg} stopOpacity="0" />
-            <Stop offset="1" stopColor={colors.bg} stopOpacity={colors.mode === 'dark' ? '0.86' : '0.72'} />
-          </LinearGradient>
-          <LinearGradient id="start-ridge" x1="0" y1="0" x2="0" y2="1">
-            <Stop offset="0" stopColor={accent} stopOpacity={colors.mode === 'dark' ? '0.22' : '0.26'} />
-            <Stop offset="1" stopColor={accent} stopOpacity={colors.mode === 'dark' ? '0.06' : '0.08'} />
-          </LinearGradient>
-        </Defs>
-
-        <Circle cx="286" cy="78" r="15" fill={colors.warning} opacity={colors.mode === 'dark' ? '0.34' : '0.5'} />
-        <Circle cx="286" cy="78" r="26" fill={colors.sand} opacity={colors.mode === 'dark' ? '0.16' : '0.28'} />
-        <Path d="M 10 152 L 52 116 L 80 144 L 122 106 L 154 136 L 194 86 L 226 120 L 262 82 L 288 102 L 322 58 L 342 72 L 368 44 L 368 230 L 10 230 Z" fill={accent} opacity="0.12" />
-        <Path d="M -16 178 L 38 132 L 72 162 L 130 108 L 166 142 L 214 112 L 258 152 L 312 120 L 380 142 L 380 230 L -16 230 Z" fill="url(#start-ridge)" />
-        <Path d="M 78 198 Q 142 134 218 142 Q 278 148 370 134 L 370 230 L 78 230 Z" fill={accent} opacity="0.2" />
-
-        <G opacity="0.36">
-          <Rect x="188" y="73" width="18" height="58" fill={accent} />
-          <Rect x="184" y="61" width="5" height="13" fill={accent} />
-          <Rect x="192" y="60" width="5" height="13" fill={accent} />
-          <Rect x="200" y="62" width="5" height="11" fill={accent} />
-          <Rect x="207" y="114" width="22" height="18" fill={accent} />
-          <Rect x="235" y="120" width="14" height="12" fill={accent} />
-          <Path d="M 214 132 L 214 112 Q 224 101 234 112 L 234 132 Z" fill={colors.surface} opacity="0.38" />
-          <Path d="M 250 132 L 250 102 L 260 94 L 270 102 L 270 132 Z" fill={accent} />
-          <Rect x="195" y="52" width="2" height="10" fill={accent} />
-          <Polygon points="197,52 207,55 197,58" fill={accent} />
-        </G>
-
-        <G opacity={colors.mode === 'dark' ? '0.22' : '0.32'} fill={colors.map}>
-          <Polygon points="86,196 98,154 110,196" />
-          <Polygon points="118,190 128,166 138,190" />
-          <Polygon points="145,188 154,166 163,188" />
-        </G>
-        <Rect x="0" y="0" width="360" height="230" fill="url(#start-mist)" />
-      </Svg>
-    </View>
-  );
-}
-
 function createStyles(C: AppColors) {
   return StyleSheet.create({
     root: { flex: 1, backgroundColor: C.bg },
@@ -319,9 +272,21 @@ function createStyles(C: AppColors) {
       minWidth: 0,
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 10,
+      gap: 11,
     },
-    eyebrow: { color: C.textFaint, fontSize: 12, fontWeight: '900', letterSpacing: 5 },
+    brandIcon: {
+      width: 34,
+      height: 34,
+      borderRadius: 9,
+    },
+    brandName: {
+      flex: 1,
+      minWidth: 0,
+      color: C.text,
+      fontSize: 17,
+      lineHeight: 22,
+      fontWeight: '900',
+    },
     header: { gap: 8, marginTop: 10, marginBottom: 16, maxWidth: 330 },
     title: { color: C.text, fontSize: 42, fontWeight: '700', lineHeight: 47 },
     subtitle: { color: C.textDim, fontSize: 18, lineHeight: 24 },
@@ -489,12 +454,6 @@ function useStyles() {
 }
 
 const stylesStatic = StyleSheet.create({
-  backdrop: {
-    position: 'absolute',
-    right: -20,
-    top: 88,
-    opacity: 1,
-  },
   cardScrim: {
     ...StyleSheet.absoluteFill,
   },

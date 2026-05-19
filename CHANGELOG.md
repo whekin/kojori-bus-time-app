@@ -5,6 +5,9 @@
 
 - Shortened the Russian timetable stop heading so the direction switch has more room.
 - Removed the duplicate plus sign from the add-stop button.
+- Removed the decorative SVG background from the start direction chooser.
+- Added the app icon and name to the start direction chooser.
+- Live departure cards now ignore stale live ETAs and match delayed buses to the correct scheduled trip.
 
 ## v2026.5.19
 ### Improved

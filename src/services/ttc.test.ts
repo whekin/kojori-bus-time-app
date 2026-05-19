@@ -22,7 +22,11 @@ function makeDeparture(bus: '380' | '316', minsUntil: number, time: string): Dep
   };
 }
 
-function makeArrival(bus: '380' | '316', realtimeArrivalMinutes: number): ArrivalTime {
+function makeArrival(
+  bus: '380' | '316',
+  realtimeArrivalMinutes: number,
+  scheduledArrivalMinutes = realtimeArrivalMinutes,
+): ArrivalTime {
   return {
     shortName: bus,
     color: '',
@@ -31,7 +35,7 @@ function makeArrival(bus: '380' | '316', realtimeArrivalMinutes: number): Arriva
     vehicleMode: 'BUS',
     realtime: true,
     realtimeArrivalMinutes,
-    scheduledArrivalMinutes: realtimeArrivalMinutes,
+    scheduledArrivalMinutes,
   };
 }
 
@@ -125,6 +129,44 @@ describe('mergeArrivalsIntoSchedule', () => {
 
     expect(result).toHaveLength(1);
     expect(result[0].time).toBe('18:02');
+  });
+
+  it('ignores stale live arrivals instead of counting them down indefinitely', () => {
+    const departures = [
+      makeDeparture('380', 1, '18:00'),
+      makeDeparture('380', 20, '18:19'),
+    ];
+    const now = new Date('2026-04-15T17:59:00Z');
+    const staleUpdatedAt = now.getTime() - 9 * 60_000;
+
+    const result = mergeArrivalsIntoSchedule(
+      departures,
+      [makeArrival('380', 10, 9)],
+      now,
+      staleUpdatedAt,
+    );
+
+    expect(result.map(dep => dep.status)).toEqual(['scheduled', 'scheduled']);
+    expect(result.some(dep => dep.live)).toBe(false);
+  });
+
+  it('matches delayed live arrivals by TTC scheduled ETA, not nearest live ETA', () => {
+    const departures = [
+      makeDeparture('380', 1, '18:00'),
+      makeDeparture('380', 15, '18:14'),
+    ];
+
+    const result = mergeArrivalsIntoSchedule(
+      departures,
+      [makeArrival('380', 10, 1)],
+      new Date('2026-04-15T17:59:00Z'),
+    );
+
+    expect(result[0].status).toBe('live');
+    expect(result[0].time).toBe('18:09');
+    expect(result[0].minsUntil).toBe(10);
+    expect(result[0].driftMinutes).toBe(9);
+    expect(result[1].status).toBe('scheduled');
   });
 });
 

@@ -441,6 +441,9 @@ export interface DepartureServiceBoundary {
   serviceEndedToday: boolean;
 }
 
+const LIVE_ARRIVAL_MATCH_WINDOW_MINUTES = 8;
+const MAX_LIVE_ARRIVAL_AGE_MS = 2 * 60_000;
+
 function scheduledDeparturesForDate(
   schedule380: SchedulePeriod[] | undefined,
   schedule316: SchedulePeriod[] | undefined,
@@ -625,7 +628,9 @@ export function mergeArrivalsIntoSchedule(
   now = new Date(),
   arrivalsUpdatedAt?: number,
 ): Departure[] {
-  const elapsedLiveMinutes = arrivalsUpdatedAt
+  const liveDataAgeMs = arrivalsUpdatedAt ? now.getTime() - arrivalsUpdatedAt : 0;
+  const useLiveArrivals = !arrivalsUpdatedAt || liveDataAgeMs <= MAX_LIVE_ARRIVAL_AGE_MS;
+  const elapsedLiveMinutes = useLiveArrivals && arrivalsUpdatedAt
     ? Math.max(0, Math.floor((now.getTime() - arrivalsUpdatedAt) / 60_000))
     : 0;
 
@@ -645,14 +650,20 @@ export function mergeArrivalsIntoSchedule(
 
   for (const bus of ['380', '316'] as const) {
     const scheduled = (byBus.get(bus) ?? [])
-      .filter(dep => dep.minsUntil >= 0)
+      .filter(dep => dep.minsUntil >= -5)
       .sort((a, b) => a.minsUntil - b.minsUntil);
     if (scheduled.length === 0) continue;
 
-    const realtimeArrivals = arrivals
-      .filter(arrival => arrival.shortName === bus && arrival.realtime)
-      .map(arrival => Math.max(0, arrival.realtimeArrivalMinutes - elapsedLiveMinutes))
-      .sort((a, b) => a - b);
+    const realtimeArrivals = useLiveArrivals
+      ? arrivals
+          .filter(arrival => arrival.shortName === bus && arrival.realtime)
+          .map(arrival => ({
+            realtimeMinutes: Math.max(0, arrival.realtimeArrivalMinutes - elapsedLiveMinutes),
+            scheduledMinutes: arrival.scheduledArrivalMinutes - elapsedLiveMinutes,
+          }))
+          .filter(arrival => Number.isFinite(arrival.realtimeMinutes) && Number.isFinite(arrival.scheduledMinutes))
+          .sort((a, b) => a.scheduledMinutes - b.scheduledMinutes)
+      : [];
 
     if (realtimeArrivals.length === 0) {
       merged.push(...scheduled.map<Departure>(dep => ({
@@ -665,25 +676,25 @@ export function mergeArrivalsIntoSchedule(
       continue;
     }
 
-    const matchedByIndex = new Map<number, number>();
+    const matchedByIndex = new Map<number, { realtimeMinutes: number; scheduledMinutes: number }>();
     const usedIndexes = new Set<number>();
 
-    for (const liveMinutes of realtimeArrivals) {
+    for (const arrival of realtimeArrivals) {
       let closestIndex = -1;
       let closestDistance = Number.POSITIVE_INFINITY;
 
       for (let index = 0; index < scheduled.length; index += 1) {
         if (usedIndexes.has(index)) continue;
-        const distance = Math.abs(scheduled[index].minsUntil - liveMinutes);
+        const distance = Math.abs(scheduled[index].minsUntil - arrival.scheduledMinutes);
         if (distance < closestDistance) {
           closestDistance = distance;
           closestIndex = index;
         }
       }
 
-      if (closestIndex === -1) continue;
+      if (closestIndex === -1 || closestDistance > LIVE_ARRIVAL_MATCH_WINDOW_MINUTES) continue;
       usedIndexes.add(closestIndex);
-      matchedByIndex.set(closestIndex, liveMinutes);
+      matchedByIndex.set(closestIndex, arrival);
     }
 
     const cancelledIndexes = new Set<number>();
@@ -700,20 +711,20 @@ export function mergeArrivalsIntoSchedule(
     let mostRecentCancelled: DepartureSummary | undefined;
     for (let index = 0; index < scheduled.length; index += 1) {
       const dep = scheduled[index];
-      const matchedLiveMinutes = matchedByIndex.get(index);
+      const matchedArrival = matchedByIndex.get(index);
 
-      if (matchedLiveMinutes != null) {
+      if (matchedArrival != null) {
         merged.push({
           ...dep,
           status: 'live',
           live: true,
           cancelled: false,
-          time: formatFutureTime(matchedLiveMinutes, now),
+          time: formatFutureTime(matchedArrival.realtimeMinutes, now),
           scheduledTime: dep.scheduledTime ?? dep.time,
           scheduledMinsUntil: dep.minsUntil,
-          liveMinutes: matchedLiveMinutes,
-          driftMinutes: matchedLiveMinutes - dep.minsUntil,
-          minsUntil: matchedLiveMinutes,
+          liveMinutes: matchedArrival.realtimeMinutes,
+          driftMinutes: matchedArrival.realtimeMinutes - matchedArrival.scheduledMinutes,
+          minsUntil: matchedArrival.realtimeMinutes,
           replacedCancelledDeparture: mostRecentCancelled,
         });
         mostRecentCancelled = undefined;
