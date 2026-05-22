@@ -1,14 +1,14 @@
 import { useQuery } from '@tanstack/react-query';
 
 import { useI18n } from '@/hooks/use-i18n';
-import { ArrivalTime, BusLine, fetchArrivalTimes, ROUTES, SCHEDULE_STOP_PROXY } from '@/services/ttc';
+import { ArrivalTime, BusLine, fetchArrivalTimes, resolveTtcLookupStopId, ROUTES } from '@/services/ttc';
 
 const BUSES: BusLine[] = ['380', '316'];
 
 /** Real-time + scheduled arrivals for a stop. Refreshes every 30s. */
 export function useArrivals(stopId: string, direction?: 'toKojori' | 'toTbilisi', enabled = true) {
   const { ttcLocale } = useI18n();
-  const fetchStopId = SCHEDULE_STOP_PROXY[stopId] ?? stopId;
+  const fetchStopId = resolveTtcLookupStopId(stopId);
   const query = useQuery<ArrivalTime[]>({
     queryKey: ['arrivals', stopId, ttcLocale],
     meta: { source: 'ttc' },

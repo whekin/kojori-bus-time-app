@@ -27,8 +27,8 @@ import {
   findStop,
   getTodayPeriod,
   parseTimeToMins,
+  resolveTtcLookupStopId,
   ROUTES,
-  SCHEDULE_STOP_PROXY,
   type StopInfo,
 } from "@/services/ttc";
 
@@ -239,8 +239,7 @@ export default function TimetableScreen() {
       "316": s316,
     };
 
-    // Apply proxy fallback for stops that TTC omits from schedule
-    const lookupStopId = SCHEDULE_STOP_PROXY[stopId] ?? stopId;
+    const lookupStopId = resolveTtcLookupStopId(stopId);
 
     for (const bus of buses) {
       const schedule = schedules[bus];

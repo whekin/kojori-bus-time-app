@@ -227,12 +227,25 @@ export const ALL_TBILISI_STOPS: StopInfo[] = [
 ];
 
 /**
- * TTC omits stop 1:2994 from schedule data. When computing departures
- * for it, use 1:3932 (next stop, ~1 min later) as a proxy.
+ * TTC handles Elene Akhvlediani inconsistently and omits it from schedules.
+ * Keep it as a user-facing stop, but use Baratashvili for TTC data lookups.
  */
-export const SCHEDULE_STOP_PROXY: Record<string, string> = {
+export const TTC_STOP_LOOKUP_PROXY: Record<string, string> = {
   '1:2994': '1:3932',
 };
+
+export function resolveTtcLookupStopId(stopId: string) {
+  return TTC_STOP_LOOKUP_PROXY[stopId] ?? stopId;
+}
+
+const EARLY_ROUTE_STOP_IDS = new Set([
+  '1:2994',
+  '1:3932',
+  '1:853',
+  '1:3078',
+  '1:4186',
+  '1:2856',
+]);
 
 export const ALL_KOJORI_STOPS: StopInfo[] = [
   { id: '1:3078', label: 'Kojori Center', lat: 41.663244, lon: 44.707207 },
@@ -401,8 +414,9 @@ export function parseTimeToMins(timeStr: string): number {
 
 /** Formats minutes since midnight to "HH:mm". */
 export function formatTime(mins: number): string {
-  const h = Math.floor(mins / 60) % 24;
-  const m = mins % 60;
+  const normalized = ((mins % (24 * 60)) + 24 * 60) % (24 * 60);
+  const h = Math.floor(normalized / 60);
+  const m = normalized % 60;
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 }
 
@@ -443,6 +457,9 @@ export interface DepartureServiceBoundary {
 
 const LIVE_ARRIVAL_MATCH_WINDOW_MINUTES = 8;
 const MAX_LIVE_ARRIVAL_AGE_MS = 2 * 60_000;
+const PAST_DEPARTURE_GRACE_MINUTES = 5;
+const SUSPICIOUS_ORIGIN_LIVE_MINUTES_MIN = 6;
+const SUSPICIOUS_ORIGIN_LIVE_MINUTES_MAX = 8;
 
 function scheduledDeparturesForDate(
   schedule380: SchedulePeriod[] | undefined,
@@ -451,7 +468,7 @@ function scheduledDeparturesForDate(
   date: Date,
   daysUntil: number,
 ): ServiceDeparture[] {
-  const lookupStopId = SCHEDULE_STOP_PROXY[stopId] ?? stopId;
+  const lookupStopId = resolveTtcLookupStopId(stopId);
   const result: ServiceDeparture[] = [];
   const entries: [BusLine, SchedulePeriod[] | undefined][] = [
     ['380', schedule380],
@@ -579,7 +596,7 @@ export function computeUpcomingDepartures(
   horizonMins = 23 * 60,
   now = new Date(),
 ): Departure[] {
-  const lookupStopId = SCHEDULE_STOP_PROXY[stopId] ?? stopId;
+  const lookupStopId = resolveTtcLookupStopId(stopId);
   const nowMins = now.getHours() * 60 + now.getMinutes();
   const midnightWrapThresholdMins = 12 * 60;
   const result: Departure[] = [];
@@ -600,9 +617,8 @@ export function computeUpcomingDepartures(
       // Wrap only clearly next-day trips; slightly past departures should disappear.
       let minsUntil = mins - nowMins;
       if (minsUntil < -midnightWrapThresholdMins) minsUntil += 24 * 60;
-      // Allow up to 5 min past scheduled time — a late bus can still be coming;
-      // mergeArrivalsIntoSchedule will drop unmatched past departures.
-      if (minsUntil < -5 || minsUntil > horizonMins) continue;
+      // Allow up to 5 min past scheduled time — a late bus can still be coming.
+      if (minsUntil < -PAST_DEPARTURE_GRACE_MINUTES || minsUntil > horizonMins) continue;
       result.push({
         key: `${bus}-${mins}`,
         bus,
@@ -620,13 +636,15 @@ export function computeUpcomingDepartures(
 /**
  * Overlays live arrival data onto schedule-based departures.
  * If a live arrival matches a departure within ±8 min, marks it live
- * and updates minsUntil to the realtime ETA.
+ * and updates minsUntil to the realtime ETA. Unmatched live arrivals are
+ * still shown because TTC can expose delayed buses after schedule time.
  */
 export function mergeArrivalsIntoSchedule(
   departures: Departure[],
   arrivals: ArrivalTime[],
   now = new Date(),
   arrivalsUpdatedAt?: number,
+  options: { stopId?: string } = {},
 ): Departure[] {
   const liveDataAgeMs = arrivalsUpdatedAt ? now.getTime() - arrivalsUpdatedAt : 0;
   const useLiveArrivals = !arrivalsUpdatedAt || liveDataAgeMs <= MAX_LIVE_ARRIVAL_AGE_MS;
@@ -650,20 +668,26 @@ export function mergeArrivalsIntoSchedule(
 
   for (const bus of ['380', '316'] as const) {
     const scheduled = (byBus.get(bus) ?? [])
-      .filter(dep => dep.minsUntil >= -5)
+      .filter(dep => dep.minsUntil >= -PAST_DEPARTURE_GRACE_MINUTES)
       .sort((a, b) => a.minsUntil - b.minsUntil);
-    if (scheduled.length === 0) continue;
 
     const realtimeArrivals = useLiveArrivals
       ? arrivals
           .filter(arrival => arrival.shortName === bus && arrival.realtime)
           .map(arrival => ({
             realtimeMinutes: Math.max(0, arrival.realtimeArrivalMinutes - elapsedLiveMinutes),
+            reportedRealtimeMinutes: arrival.realtimeArrivalMinutes,
             scheduledMinutes: arrival.scheduledArrivalMinutes - elapsedLiveMinutes,
           }))
           .filter(arrival => Number.isFinite(arrival.realtimeMinutes) && Number.isFinite(arrival.scheduledMinutes))
+          .filter(arrival => !isSuspiciousEarlyStopLiveArrival(arrival, scheduled, options.stopId))
           .sort((a, b) => a.scheduledMinutes - b.scheduledMinutes)
       : [];
+
+    if (scheduled.length === 0) {
+      merged.push(...realtimeArrivals.map<Departure>(arrival => liveDepartureFromArrival(bus, arrival, now)));
+      continue;
+    }
 
     if (realtimeArrivals.length === 0) {
       merged.push(...scheduled.map<Departure>(dep => ({
@@ -677,14 +701,15 @@ export function mergeArrivalsIntoSchedule(
     }
 
     const matchedByIndex = new Map<number, { realtimeMinutes: number; scheduledMinutes: number }>();
-    const usedIndexes = new Set<number>();
+    const usedScheduledIndexes = new Set<number>();
+    const usedArrivalIndexes = new Set<number>();
 
-    for (const arrival of realtimeArrivals) {
+    realtimeArrivals.forEach((arrival, arrivalIndex) => {
       let closestIndex = -1;
       let closestDistance = Number.POSITIVE_INFINITY;
 
       for (let index = 0; index < scheduled.length; index += 1) {
-        if (usedIndexes.has(index)) continue;
+        if (usedScheduledIndexes.has(index)) continue;
         const distance = Math.abs(scheduled[index].minsUntil - arrival.scheduledMinutes);
         if (distance < closestDistance) {
           closestDistance = distance;
@@ -692,23 +717,12 @@ export function mergeArrivalsIntoSchedule(
         }
       }
 
-      if (closestIndex === -1 || closestDistance > LIVE_ARRIVAL_MATCH_WINDOW_MINUTES) continue;
-      usedIndexes.add(closestIndex);
+      if (closestIndex === -1 || closestDistance > LIVE_ARRIVAL_MATCH_WINDOW_MINUTES) return;
+      usedScheduledIndexes.add(closestIndex);
+      usedArrivalIndexes.add(arrivalIndex);
       matchedByIndex.set(closestIndex, arrival);
-    }
+    });
 
-    const cancelledIndexes = new Set<number>();
-    let latestMatchedIndex = -1;
-    for (let index = 0; index < scheduled.length; index += 1) {
-      if (matchedByIndex.has(index)) {
-        for (let skipped = latestMatchedIndex + 1; skipped < index; skipped += 1) {
-          if (!matchedByIndex.has(skipped)) cancelledIndexes.add(skipped);
-        }
-        latestMatchedIndex = index;
-      }
-    }
-
-    let mostRecentCancelled: DepartureSummary | undefined;
     for (let index = 0; index < scheduled.length; index += 1) {
       const dep = scheduled[index];
       const matchedArrival = matchedByIndex.get(index);
@@ -725,30 +739,7 @@ export function mergeArrivalsIntoSchedule(
           liveMinutes: matchedArrival.realtimeMinutes,
           driftMinutes: matchedArrival.realtimeMinutes - matchedArrival.scheduledMinutes,
           minsUntil: matchedArrival.realtimeMinutes,
-          replacedCancelledDeparture: mostRecentCancelled,
         });
-        mostRecentCancelled = undefined;
-        continue;
-      }
-
-      if (cancelledIndexes.has(index)) {
-        const cancelledDep: Departure = {
-          ...dep,
-          status: 'cancelled',
-          cancelled: true,
-          live: false,
-          scheduledTime: dep.scheduledTime ?? dep.time,
-          scheduledMinsUntil: dep.minsUntil,
-        };
-        merged.push(cancelledDep);
-        mostRecentCancelled = {
-          key: cancelledDep.key,
-          bus: cancelledDep.bus,
-          time: cancelledDep.time,
-          minsUntil: cancelledDep.minsUntil,
-          scheduledTime: cancelledDep.scheduledTime,
-          scheduledMinsUntil: cancelledDep.scheduledMinsUntil,
-        };
         continue;
       }
 
@@ -761,11 +752,58 @@ export function mergeArrivalsIntoSchedule(
         scheduledMinsUntil: dep.minsUntil,
       });
     }
+
+    realtimeArrivals.forEach((arrival, index) => {
+      if (usedArrivalIndexes.has(index)) return;
+      merged.push(liveDepartureFromArrival(bus, arrival, now));
+    });
   }
 
   return merged
-    .filter(dep => dep.minsUntil >= 0)
+    .filter(dep => dep.live || dep.minsUntil >= -PAST_DEPARTURE_GRACE_MINUTES)
     .sort((a, b) => a.minsUntil - b.minsUntil);
+}
+
+function isSuspiciousEarlyStopLiveArrival(
+  arrival: { realtimeMinutes: number; reportedRealtimeMinutes: number; scheduledMinutes: number },
+  scheduled: Departure[],
+  stopId?: string,
+) {
+  if (!stopId || !EARLY_ROUTE_STOP_IDS.has(stopId)) return false;
+  if (
+    arrival.reportedRealtimeMinutes < SUSPICIOUS_ORIGIN_LIVE_MINUTES_MIN ||
+    arrival.reportedRealtimeMinutes > SUSPICIOUS_ORIGIN_LIVE_MINUTES_MAX
+  ) {
+    return false;
+  }
+
+  const nearestSchedule = scheduled.reduce<Departure | undefined>((nearest, dep) => {
+    if (!nearest) return dep;
+    const depDistance = Math.abs(dep.minsUntil - arrival.scheduledMinutes);
+    const nearestDistance = Math.abs(nearest.minsUntil - arrival.scheduledMinutes);
+    return depDistance < nearestDistance ? dep : nearest;
+  }, undefined);
+  return Boolean(nearestSchedule && nearestSchedule.minsUntil < arrival.realtimeMinutes);
+}
+
+function liveDepartureFromArrival(
+  bus: BusLine,
+  arrival: { realtimeMinutes: number; scheduledMinutes: number },
+  now: Date,
+): Departure {
+  return {
+    key: `${bus}-live-${arrival.scheduledMinutes}-${arrival.realtimeMinutes}`,
+    bus,
+    status: 'live',
+    live: true,
+    cancelled: false,
+    time: formatFutureTime(arrival.realtimeMinutes, now),
+    minsUntil: arrival.realtimeMinutes,
+    scheduledTime: formatFutureTime(arrival.scheduledMinutes, now),
+    scheduledMinsUntil: arrival.scheduledMinutes,
+    liveMinutes: arrival.realtimeMinutes,
+    driftMinutes: arrival.realtimeMinutes - arrival.scheduledMinutes,
+  };
 }
 
 export function injectCancelledDemo(

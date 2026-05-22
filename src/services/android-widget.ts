@@ -11,8 +11,8 @@ import {
   findStop,
   formatTime,
   parseTimeToMins,
+  resolveTtcLookupStopId,
   ROUTES,
-  SCHEDULE_STOP_PROXY,
   SchedulePeriod
 } from '@/services/ttc';
 import {
@@ -84,7 +84,7 @@ function buildWidgetItems(
   schedule316: SchedulePeriod[] | undefined,
   now: Date,
 ): WidgetItemPayload[] {
-  const lookupStopId = SCHEDULE_STOP_PROXY[stopId] ?? stopId;
+  const lookupStopId = resolveTtcLookupStopId(stopId);
   const nowMs = now.getTime();
   const baseDate = new Date(now);
   baseDate.setHours(0, 0, 0, 0);

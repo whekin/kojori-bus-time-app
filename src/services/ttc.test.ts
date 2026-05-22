@@ -9,6 +9,7 @@ import {
   injectCancelledDemo,
   isFinalDepartureToday,
   mergeArrivalsIntoSchedule,
+  resolveTtcLookupStopId,
 } from './ttc';
 
 function makeDeparture(bus: '380' | '316', minsUntil: number, time: string): Departure {
@@ -58,8 +59,15 @@ function makeSchedule(
   ];
 }
 
+describe('resolveTtcLookupStopId', () => {
+  it('uses Baratashvili for every TTC lookup when Elene is selected', () => {
+    expect(resolveTtcLookupStopId('1:2994')).toBe('1:3932');
+    expect(resolveTtcLookupStopId('1:3932')).toBe('1:3932');
+  });
+});
+
 describe('mergeArrivalsIntoSchedule', () => {
-  it('marks skipped earlier scheduled departure as cancelled when live snaps to later departure', () => {
+  it('does not mark skipped earlier scheduled departures as cancelled', () => {
     const departures = [
       makeDeparture('380', 10, '18:00'),
       makeDeparture('380', 40, '18:30'),
@@ -67,9 +75,9 @@ describe('mergeArrivalsIntoSchedule', () => {
 
     const result = mergeArrivalsIntoSchedule(departures, [makeArrival('380', 35)], new Date('2026-04-15T17:50:00Z'));
 
-    expect(result.map(dep => dep.status)).toEqual(['cancelled', 'live']);
+    expect(result.map(dep => dep.status)).toEqual(['scheduled', 'live']);
     expect(result[1].scheduledTime).toBe('18:30');
-    expect(result[1].replacedCancelledDeparture?.time).toBe('18:00');
+    expect(result.some(dep => dep.cancelled)).toBe(false);
   });
 
   it('keeps schedule unchanged when no realtime arrivals exist for route', () => {
@@ -97,7 +105,7 @@ describe('mergeArrivalsIntoSchedule', () => {
       new Date('2026-04-15T17:50:00Z'),
     );
 
-    expect(result.map(dep => dep.status)).toEqual(['live', 'cancelled', 'live']);
+    expect(result.map(dep => dep.status)).toEqual(['live', 'scheduled', 'live']);
     expect(result[0].scheduledTime).toBe('18:00');
     expect(result[2].scheduledTime).toBe('18:30');
   });
@@ -116,10 +124,10 @@ describe('mergeArrivalsIntoSchedule', () => {
     );
 
     expect(result.find(dep => dep.bus === '380')?.status).toBe('scheduled');
-    expect(result.filter(dep => dep.bus === '316').map(dep => dep.status)).toEqual(['cancelled', 'live']);
+    expect(result.filter(dep => dep.bus === '316').map(dep => dep.status)).toEqual(['scheduled', 'live']);
   });
 
-  it('drops already-past scheduled departures', () => {
+  it('keeps just-past scheduled departures through the delay grace window', () => {
     const departures = [
       makeDeparture('380', -1, '17:49'),
       makeDeparture('380', 12, '18:02'),
@@ -127,8 +135,125 @@ describe('mergeArrivalsIntoSchedule', () => {
 
     const result = mergeArrivalsIntoSchedule(departures, [], new Date('2026-04-15T17:50:00Z'));
 
+    expect(result).toHaveLength(2);
+    expect(result[0].time).toBe('17:49');
+    expect(result[0].status).toBe('scheduled');
+  });
+
+  it('drops scheduled departures after the delay grace window', () => {
+    const departures = [
+      makeDeparture('380', -6, '17:44'),
+      makeDeparture('380', 12, '18:02'),
+    ];
+
+    const result = mergeArrivalsIntoSchedule(departures, [], new Date('2026-04-15T17:50:00Z'));
+
     expect(result).toHaveLength(1);
     expect(result[0].time).toBe('18:02');
+  });
+
+  it('shows delayed live arrivals whose scheduled departure is already in the past', () => {
+    const departures = [
+      makeDeparture('316', -2, '14:58'),
+      makeDeparture('316', 28, '15:28'),
+    ];
+
+    const result = mergeArrivalsIntoSchedule(
+      departures,
+      [makeArrival('316', 3, -2)],
+      new Date('2026-04-15T15:00:00Z'),
+    );
+
+    expect(result[0].status).toBe('live');
+    expect(result[0].time).toBe('15:03');
+    expect(result[0].scheduledTime).toBe('14:58');
+    expect(result[0].driftMinutes).toBe(5);
+  });
+
+  it('adds unmatched live arrivals instead of requiring an active schedule row', () => {
+    const result = mergeArrivalsIntoSchedule(
+      [],
+      [makeArrival('316', 3, -10)],
+      new Date('2026-04-15T15:00:00Z'),
+    );
+
+    expect(result).toHaveLength(1);
+    expect(result[0].status).toBe('live');
+    expect(result[0].time).toBe('15:03');
+    expect(result[0].scheduledTime).toBe('14:50');
+  });
+
+  it('suppresses suspicious seven-minute live arrivals at early route stops when schedule is sooner', () => {
+    const departures = [
+      makeDeparture('316', 1, '15:01'),
+      makeDeparture('316', 31, '15:31'),
+    ];
+
+    const result = mergeArrivalsIntoSchedule(
+      departures,
+      [makeArrival('316', 7, 1)],
+      new Date('2026-04-15T15:00:00Z'),
+      undefined,
+      { stopId: '1:3932' },
+    );
+
+    expect(result.map(dep => dep.status)).toEqual(['scheduled', 'scheduled']);
+    expect(result.some(dep => dep.live)).toBe(false);
+  });
+
+  it('suppresses cached seven-minute early-stop signals after local countdown adjustment', () => {
+    const departures = [
+      makeDeparture('316', 1, '15:01'),
+      makeDeparture('316', 31, '15:31'),
+    ];
+    const now = new Date('2026-04-15T15:00:00Z');
+
+    const result = mergeArrivalsIntoSchedule(
+      departures,
+      [makeArrival('316', 7, 1)],
+      now,
+      now.getTime() - 60_000,
+      { stopId: '1:4186' },
+    );
+
+    expect(result.map(dep => dep.status)).toEqual(['scheduled', 'scheduled']);
+    expect(result.some(dep => dep.live)).toBe(false);
+  });
+
+  it('keeps seven-minute live arrivals away from the early route zone', () => {
+    const departures = [
+      makeDeparture('316', 1, '15:01'),
+      makeDeparture('316', 31, '15:31'),
+    ];
+
+    const result = mergeArrivalsIntoSchedule(
+      departures,
+      [makeArrival('316', 7, 1)],
+      new Date('2026-04-15T15:00:00Z'),
+      undefined,
+      { stopId: '1:2139' },
+    );
+
+    expect(result[0].status).toBe('live');
+    expect(result[0].time).toBe('15:07');
+  });
+
+  it('keeps early-stop seven-minute live arrivals when schedule is not sooner', () => {
+    const departures = [
+      makeDeparture('316', 10, '15:10'),
+      makeDeparture('316', 31, '15:31'),
+    ];
+
+    const result = mergeArrivalsIntoSchedule(
+      departures,
+      [makeArrival('316', 7, 10)],
+      new Date('2026-04-15T15:00:00Z'),
+      undefined,
+      { stopId: '1:3078' },
+    );
+
+    expect(result[0].status).toBe('live');
+    expect(result[0].time).toBe('15:07');
   });
 
   it('ignores stale live arrivals instead of counting them down indefinitely', () => {
@@ -237,7 +362,7 @@ describe('service boundary helpers', () => {
     expect(nextService?.time).toBe('09:15');
   });
 
-  it('uses the schedule proxy stop for service-boundary checks', () => {
+  it('uses the TTC lookup proxy stop for service-boundary checks', () => {
     const schedule380 = makeSchedule(['2026-04-15'], { '1:3932': '07:11,21:52' });
     const now = new Date(2026, 3, 15, 21, 0);
     const nextDeparture = makeDeparture('380', 52, '21:52');

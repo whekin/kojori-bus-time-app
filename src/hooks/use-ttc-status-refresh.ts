@@ -2,10 +2,10 @@ import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 
 import { useI18n } from '@/hooks/use-i18n';
-import { fetchArrivalTimes, SCHEDULE_STOP_PROXY } from '@/services/ttc';
+import { fetchArrivalTimes, resolveTtcLookupStopId } from '@/services/ttc';
 
 const MIN_REFRESH_VISIBLE_MS = 450;
-const TTC_PROBE_STOP_ID = SCHEDULE_STOP_PROXY['1:2994'] ?? '1:3932';
+const TTC_PROBE_STOP_ID = resolveTtcLookupStopId('1:2994');
 
 function wait(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms));

@@ -692,9 +692,10 @@ function ToKojoriView({
       arrivals,
       now,
       dataUpdatedAt,
+      { stopId: activeStopId },
     );
     return demoEnabled ? injectCancelledDemo(merged, now) : merged;
-  }, [rawDepartures, arrivals, now, dataUpdatedAt, demoEnabled]);
+  }, [rawDepartures, arrivals, now, dataUpdatedAt, activeStopId, demoEnabled]);
 
   const isLoading = l380 || l316;
   const isError = (e380 || e316) && !s380 && !s316;
@@ -868,9 +869,10 @@ function ToTbilisiView({
       arrivals,
       now,
       dataUpdatedAt,
+      { stopId: activeStopId },
     );
     return demoEnabled ? injectCancelledDemo(merged, now) : merged;
-  }, [rawDepartures, arrivals, now, dataUpdatedAt, demoEnabled]);
+  }, [rawDepartures, arrivals, now, dataUpdatedAt, activeStopId, demoEnabled]);
 
   const isLoading = l380 || l316;
   const isError = (e380 || e316 || eArrival) && !s380 && !s316;

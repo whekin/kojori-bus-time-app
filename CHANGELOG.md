@@ -4,6 +4,8 @@
 ### Fixed
 
 - Android now keeps the app window background themed so physical devices do not show a white frame around the app.
+- Departures no longer infer cancelled buses from TTC live-data gaps, keep delayed live buses visible after their scheduled time, and ignore noisy seven-minute live ETAs at early route stops when the schedule says the bus is sooner.
+- Elene Akhvlediani now consistently uses Baratashvili for TTC data lookups while staying selectable as the displayed stop.
 
 ## v2026.5.20
 ### Improved
