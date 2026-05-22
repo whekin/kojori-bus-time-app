@@ -21,6 +21,15 @@ import { useSettings } from '@/hooks/use-settings';
 import { useTabNav } from '@/hooks/use-tab-nav';
 import { findStop, type StopInfo } from '@/services/ttc';
 import { simplifyPolyline, splitPolylinesByOverlap } from '@/utils/polyline-offset';
+import {
+  buildPolylineMetrics,
+  distanceMeters,
+  headingAlongPolyline,
+  interpolatePolylineAtDistance,
+  projectPointToPolyline,
+  projectStopToRoute,
+  type PolylineMetrics,
+} from '@/utils/route-progress';
 
 const DEFAULT_REGION: Region = {
   latitude: 41.639,
@@ -111,6 +120,16 @@ const PROMOTED_STOP_DECLUTTER_PX = {
 const KOJORI_CENTER_STOP_ID = '1:3078';
 const ROUTE_LINE_SIMPLIFY_TOLERANCE_METERS = 12;
 const SHARED_ROUTE_STRIPE_METERS = 260;
+const LIVE_VEHICLE_CRUISE_MS = 8_500;
+const LIVE_VEHICLE_CORRECTION_MS = 900;
+const LIVE_VEHICLE_START_HOLD_METERS = 350;
+const LIVE_VEHICLE_HEADING_LOOKAHEAD_METERS = 24;
+const LIVE_VEHICLE_OFF_ROUTE_LIMIT_METERS = 280;
+const VEHICLE_PIN_BACKGROUND_OPACITY = 0.82;
+const TBILISI_TRAFFIC_ANCHOR_STOP_ID = '1:845';
+const TBILISI_TRAFFIC_SPEED_KMH = 22;
+const CITY_SPEED_KMH = 25;
+const KOJORI_SPEED_KMH = 45;
 const GOOGLE_DARK_MAP_STYLE = [
   { elementType: 'geometry', stylers: [{ color: '#1d1d1d' }] },
   { elementType: 'labels.text.stroke', stylers: [{ color: '#1d1d1d' }] },
@@ -135,6 +154,22 @@ type StopMarkerData = {
 type DeclutteredStopMarkers = {
   visible: StopMarkerData[];
   compact: StopMarkerData[];
+};
+type VehicleDisplayPosition = {
+  bus: '380' | '316';
+  vehicleId: string;
+  nextStopId: string;
+  heading: number;
+  headingSamples: { progress: number; heading: number }[];
+  currentCoordinate: { latitude: number; longitude: number };
+  targetCoordinate: { latitude: number; longitude: number };
+  sampleKey: string;
+  correctionDurationMs: number;
+  cruiseDurationMs: number;
+};
+type VehicleRouteTrack = {
+  metrics: PolylineMetrics;
+  trafficAnchorMeters: number | null;
 };
 
 function StopMarkerCallout({
@@ -332,6 +367,324 @@ function stopMarkerPriority(
   return 1;
 }
 
+function kmhToMetersPerSecond(kmh: number) {
+  return kmh / 3.6;
+}
+
+function isLikelyTbilisiTraffic(point: { latitude: number; longitude: number }) {
+  return point.latitude >= 41.675 || point.longitude >= 44.77;
+}
+
+function vehicleCruiseSpeedMetersPerSecond(
+  direction: MapDirection,
+  progressMeters: number,
+  point: { latitude: number; longitude: number },
+  track: VehicleRouteTrack,
+) {
+  const trafficAnchorMeters = track.trafficAnchorMeters;
+  const isAfterTrafficAnchor = trafficAnchorMeters !== null
+    ? direction === 'toTbilisi'
+      ? progressMeters >= trafficAnchorMeters
+      : progressMeters <= trafficAnchorMeters
+    : false;
+
+  if (isAfterTrafficAnchor) return kmhToMetersPerSecond(TBILISI_TRAFFIC_SPEED_KMH);
+  if (isLikelyTbilisiTraffic(point)) return kmhToMetersPerSecond(CITY_SPEED_KMH);
+  return kmhToMetersPerSecond(KOJORI_SPEED_KMH);
+}
+
+function buildVehicleDisplayPosition(
+  position: {
+    bus: '380' | '316';
+    vehicleId: string;
+    nextStopId: string;
+    lat: number;
+    lon: number;
+    heading: number;
+  },
+  direction: MapDirection,
+  track: VehicleRouteTrack | undefined,
+  reduceMotion: boolean,
+): VehicleDisplayPosition {
+  const rawCoordinate = { latitude: position.lat, longitude: position.lon };
+  const rawHeading = Number.isFinite(position.heading) ? position.heading : 0;
+  const fallback = {
+    bus: position.bus,
+    vehicleId: position.vehicleId,
+    nextStopId: position.nextStopId,
+    heading: rawHeading,
+    headingSamples: [{ progress: 0, heading: rawHeading }],
+    currentCoordinate: rawCoordinate,
+    targetCoordinate: rawCoordinate,
+    sampleKey: `${position.bus}-${position.vehicleId}-${position.lat}-${position.lon}-${position.nextStopId}`,
+    correctionDurationMs: reduceMotion ? 0 : LIVE_VEHICLE_CORRECTION_MS,
+    cruiseDurationMs: reduceMotion ? 0 : LIVE_VEHICLE_CRUISE_MS,
+  };
+
+  if (!track || track.metrics.points.length < 2) return fallback;
+
+  const projected = projectPointToPolyline(rawCoordinate, track.metrics);
+  if (!projected || projected.offRouteMeters > LIVE_VEHICLE_OFF_ROUTE_LIMIT_METERS) {
+    return fallback;
+  }
+
+  const nextStopProjection = projectStopToRoute(findStop(position.nextStopId), track.metrics);
+  const nextStopMeters = nextStopProjection?.distanceMeters ?? track.metrics.totalMeters;
+  const currentMeters = Math.min(projected.distanceMeters, nextStopMeters);
+  const current = interpolatePolylineAtDistance(track.metrics, currentMeters);
+  const currentPoint = current?.point ?? projected.point;
+  const routeHeading = headingAlongPolyline(
+    track.metrics,
+    currentMeters,
+    Math.min(LIVE_VEHICLE_HEADING_LOOKAHEAD_METERS, Math.max(0, nextStopMeters - currentMeters)),
+  ) ?? current?.heading ?? projected.heading;
+
+  if (currentMeters <= LIVE_VEHICLE_START_HOLD_METERS) {
+    return {
+      ...fallback,
+      heading: routeHeading,
+      headingSamples: [{ progress: 0, heading: routeHeading }],
+      currentCoordinate: currentPoint,
+      targetCoordinate: currentPoint,
+      correctionDurationMs: 0,
+      cruiseDurationMs: 0,
+    };
+  }
+
+  const speedMetersPerSecond = vehicleCruiseSpeedMetersPerSecond(
+    direction,
+    currentMeters,
+    currentPoint,
+    track,
+  );
+  const cruiseMeters = speedMetersPerSecond * (LIVE_VEHICLE_CRUISE_MS / 1000);
+  const targetMeters = Math.min(
+    currentMeters + cruiseMeters,
+    nextStopMeters,
+  );
+  const target = interpolatePolylineAtDistance(track.metrics, targetMeters);
+  const headingSamples = [0, 0.25, 0.5, 0.75, 1].map(progress => {
+    const sampleMeters = currentMeters + (targetMeters - currentMeters) * progress;
+    return {
+      progress,
+      heading: headingAlongPolyline(
+        track.metrics,
+        sampleMeters,
+        Math.min(LIVE_VEHICLE_HEADING_LOOKAHEAD_METERS, Math.max(0, nextStopMeters - sampleMeters)),
+      ) ?? routeHeading,
+    };
+  });
+
+  return {
+    ...fallback,
+    heading: routeHeading,
+    headingSamples,
+    currentCoordinate: currentPoint,
+    targetCoordinate: target?.point ?? currentPoint,
+  };
+}
+
+function AnimatedVehicleMarker({
+  position,
+  accent,
+  title,
+  subtitle,
+  styles,
+}: {
+  position: VehicleDisplayPosition;
+  accent: string;
+  title: string;
+  subtitle: string;
+  styles: ReturnType<typeof createStyles>;
+}) {
+  const shapeMarkerRef = useRef<MapMarker | null>(null);
+  const contentMarkerRef = useRef<MapMarker | null>(null);
+  const animationStartTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const animationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cruiseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const headingTimeoutRefs = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const renderedCoordinateRef = useRef(position.currentCoordinate);
+  const [renderedCoordinate, setRenderedCoordinate] = useState(position.currentCoordinate);
+  const [displayHeading, setDisplayHeading] = useState(position.heading);
+  const [canAnimateNativeMarker, setCanAnimateNativeMarker] = useState(false);
+  const pinWidth = VEHICLE_PIN_CANVAS_SIZE;
+  const pinHeight = VEHICLE_PIN_CANVAS_SIZE;
+  const busIconSize = 16;
+  const routeFontSize = 10;
+  const routeDigits = position.bus.split('');
+  const heading = Number.isFinite(displayHeading) ? displayHeading : 0;
+
+  useEffect(() => {
+    const readyTimeoutId = setTimeout(() => setCanAnimateNativeMarker(true), 250);
+    return () => clearTimeout(readyTimeoutId);
+  }, []);
+
+  useEffect(() => {
+    const clearTimers = () => {
+      if (animationStartTimeoutRef.current) {
+        clearTimeout(animationStartTimeoutRef.current);
+        animationStartTimeoutRef.current = null;
+      }
+      if (animationTimeoutRef.current) {
+        clearTimeout(animationTimeoutRef.current);
+        animationTimeoutRef.current = null;
+      }
+      if (cruiseTimeoutRef.current) {
+        clearTimeout(cruiseTimeoutRef.current);
+        cruiseTimeoutRef.current = null;
+      }
+      headingTimeoutRefs.current.forEach(timeoutId => clearTimeout(timeoutId));
+      headingTimeoutRefs.current = [];
+    };
+    const scheduleHeadingSamples = (
+      samples: { progress: number; heading: number }[],
+      durationMs: number,
+    ) => {
+      if (samples.length === 0) return;
+      setDisplayHeading(samples[0].heading);
+      samples.slice(1).forEach(sample => {
+        const timeoutId = setTimeout(
+          () => setDisplayHeading(sample.heading),
+          Math.max(0, durationMs * sample.progress),
+        );
+        headingTimeoutRefs.current.push(timeoutId);
+      });
+    };
+    const settleAt = (
+      coordinate: { latitude: number; longitude: number },
+      durationMs: number,
+      headingSamples: { progress: number; heading: number }[],
+    ) => {
+      if (durationMs <= 0) {
+        renderedCoordinateRef.current = coordinate;
+        setRenderedCoordinate(coordinate);
+        scheduleHeadingSamples(headingSamples, 0);
+        shapeMarkerRef.current?.setCoordinates(coordinate);
+        contentMarkerRef.current?.setCoordinates(coordinate);
+        return;
+      }
+
+      scheduleHeadingSamples(headingSamples, durationMs);
+      shapeMarkerRef.current?.setCoordinates(renderedCoordinateRef.current);
+      contentMarkerRef.current?.setCoordinates(renderedCoordinateRef.current);
+      animationStartTimeoutRef.current = setTimeout(() => {
+        shapeMarkerRef.current?.animateMarkerToCoordinate(coordinate, durationMs);
+        contentMarkerRef.current?.animateMarkerToCoordinate(coordinate, durationMs);
+      }, 50);
+      animationTimeoutRef.current = setTimeout(() => {
+        renderedCoordinateRef.current = coordinate;
+        setRenderedCoordinate(coordinate);
+      }, durationMs + 50);
+    };
+    const cruise = () => settleAt(position.targetCoordinate, position.cruiseDurationMs, position.headingSamples);
+    const predictionDistance = distanceMeters(position.currentCoordinate, position.targetCoordinate);
+
+    clearTimers();
+
+    if (!canAnimateNativeMarker) {
+      renderedCoordinateRef.current = position.currentCoordinate;
+      setRenderedCoordinate(position.currentCoordinate);
+      setDisplayHeading(position.heading);
+      return clearTimers;
+    }
+
+    if (predictionDistance > 8 && position.correctionDurationMs > 0) {
+      settleAt(position.currentCoordinate, position.correctionDurationMs, [{ progress: 0, heading: position.heading }]);
+      cruiseTimeoutRef.current = setTimeout(cruise, position.correctionDurationMs);
+    } else {
+      cruise();
+    }
+
+    return clearTimers;
+  }, [
+    canAnimateNativeMarker,
+    position.correctionDurationMs,
+    position.cruiseDurationMs,
+    position.currentCoordinate,
+    position.heading,
+    position.headingSamples,
+    position.sampleKey,
+    position.targetCoordinate,
+  ]);
+
+  return (
+    <>
+      <Marker
+        ref={shapeMarkerRef}
+        coordinate={renderedCoordinate}
+        anchor={VEHICLE_PIN_ANCHOR}
+        rotation={heading}
+        tracksViewChanges={false}
+        zIndex={21}>
+        <View
+          collapsable={false}
+          style={[
+            styles.vehiclePin,
+            styles.vehiclePinTranslucent,
+            { width: pinWidth, height: pinHeight },
+          ]}>
+          <View style={styles.vehiclePinShape}>
+            <View style={styles.vehiclePinOuterCircle} />
+            <View style={styles.vehiclePinOuterPoint} />
+            <View style={[styles.vehiclePinInnerCircle, { backgroundColor: accent }]} />
+            <View style={[styles.vehiclePinInnerPoint, { borderBottomColor: accent }]} />
+          </View>
+        </View>
+      </Marker>
+      <Marker
+        ref={contentMarkerRef}
+        coordinate={renderedCoordinate}
+        anchor={VEHICLE_PIN_ANCHOR}
+        tracksViewChanges={false}
+        zIndex={22}>
+        <View collapsable={false} style={{ width: pinWidth, height: pinHeight }}>
+          <View collapsable={false} style={styles.vehiclePinContent}>
+            <View collapsable={false} style={styles.vehiclePinBusIconSlot}>
+              <MaterialCommunityIcons
+                name="bus"
+                size={busIconSize}
+                color="#FFFFFF"
+                style={styles.vehiclePinBusIcon}
+              />
+            </View>
+            <View style={styles.vehicleRouteDigits}>
+              {routeDigits.map((digit, index) => (
+                <Text
+                  key={`${position.bus}-${index}`}
+                  allowFontScaling={false}
+                  style={[
+                    styles.vehicleRouteLabel,
+                    {
+                      fontSize: routeFontSize,
+                      lineHeight: routeFontSize + 2,
+                    },
+                  ]}>
+                  {digit}
+                </Text>
+              ))}
+            </View>
+          </View>
+        </View>
+        <Callout tooltip>
+          <View style={styles.vehicleCallout}>
+            <View style={[styles.vehicleCalloutIcon, { backgroundColor: accent }]}>
+              <MaterialCommunityIcons name="bus" size={22} color="#FFFFFF" />
+            </View>
+            <View style={styles.vehicleCalloutCopy}>
+              <Text style={styles.vehicleCalloutTitle} numberOfLines={1}>
+                {title}
+              </Text>
+              <Text style={styles.vehicleCalloutSubtitle} numberOfLines={1}>
+                {subtitle}
+              </Text>
+            </View>
+          </View>
+        </Callout>
+      </Marker>
+    </>
+  );
+}
+
 export default function ExploreScreen({ isActive = false }: ExploreScreenProps) {
   const colors = useAppColors();
   const { t } = useI18n();
@@ -384,7 +737,6 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
   }, [isActive, settings.cancelledBusDemo]);
 
   const spinAnim = useRef(new Animated.Value(0)).current;
-  const vehiclePinSpinAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     if (isFetching && !reduceMotion) {
@@ -403,34 +755,7 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
     }
   }, [isFetching, reduceMotion, spinAnim]);
 
-  const shouldAnimateVehiclePins = typeof __DEV__ === 'boolean' && __DEV__ && isActive && !reduceMotion;
-
-  useEffect(() => {
-    if (!shouldAnimateVehiclePins) {
-      vehiclePinSpinAnim.stopAnimation();
-      vehiclePinSpinAnim.setValue(0);
-      return;
-    }
-
-    vehiclePinSpinAnim.setValue(0);
-    const animation = Animated.loop(
-      Animated.timing(vehiclePinSpinAnim, {
-        toValue: 1,
-        duration: 4000,
-        easing: Easing.linear,
-        useNativeDriver: true,
-      }),
-    );
-    animation.start();
-
-    return () => animation.stop();
-  }, [shouldAnimateVehiclePins, vehiclePinSpinAnim]);
-
   const spinRotation = spinAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['0deg', '360deg'],
-  });
-  const vehiclePinDebugRotation = vehiclePinSpinAnim.interpolate({
     inputRange: [0, 1],
     outputRange: ['0deg', '360deg'],
   });
@@ -447,6 +772,27 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
   const routeData = direction === 'toKojori' ? toKojoriRouteData : toTbilisiRouteData;
   const focusedRouteData = focusedStop?.direction === 'toKojori' ? toKojoriRouteData : toTbilisiRouteData;
   const routePolylines = routeData?.polylines;
+  const vehicleRouteTracks = useMemo<Partial<Record<'380' | '316', VehicleRouteTrack>>>(() => {
+    if (!routePolylines) return {};
+
+    return (['316', '380'] as const).reduce<Partial<Record<'380' | '316', VehicleRouteTrack>>>((tracks, bus) => {
+      const points = routePolylines[bus] ?? [];
+      if (points.length < 2) return tracks;
+
+      const metrics = buildPolylineMetrics(points);
+      const trafficAnchorMeters = projectStopToRoute(findStop(TBILISI_TRAFFIC_ANCHOR_STOP_ID), metrics)?.distanceMeters ?? null;
+      tracks[bus] = { metrics, trafficAnchorMeters };
+      return tracks;
+    }, {});
+  }, [routePolylines]);
+  const vehicleDisplayPositions = useMemo(() => {
+    return positions.map(position => buildVehicleDisplayPosition(
+      position,
+      direction,
+      vehicleRouteTracks[position.bus],
+      reduceMotion,
+    ));
+  }, [direction, positions, reduceMotion, vehicleRouteTracks]);
   const focusedStopAccent = focusedStop?.direction === 'toKojori' ? colors.route380 : colors.route316;
   const focusedStopIsSaved = focusedStop
     ? focusedStop.direction === 'toKojori'
@@ -843,78 +1189,19 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
             />
           );
         })}
-        {showMarkers && positions.map(position => {
+        {showMarkers && vehicleDisplayPositions.map(position => {
           const accent = routeAccent(position.bus, colors);
-          const pinWidth = VEHICLE_PIN_CANVAS_SIZE;
-          const pinHeight = VEHICLE_PIN_CANVAS_SIZE;
-          const busIconSize = 16;
-          const routeFontSize = 10;
-          const routeDigits = position.bus.split('');
           const destination = direction === 'toKojori' ? t('cityKojori') : t('cityTbilisi');
-          const heading = Number.isFinite(position.heading) ? position.heading : 0;
           
           return (
-            <React.Fragment key={`${position.bus}-${position.vehicleId}`}>
-              <Marker
-                coordinate={{ latitude: position.lat, longitude: position.lon }}
-                anchor={VEHICLE_PIN_ANCHOR}
-                tracksViewChanges={shouldAnimateVehiclePins}
-                zIndex={21}>
-                <View collapsable={false} style={[styles.vehiclePin, { width: pinWidth, height: pinHeight }]}>
-                  <Animated.View
-                    style={[
-                      styles.vehiclePinShape,
-                      { transform: [{ rotate: `${heading}deg` }, { rotate: vehiclePinDebugRotation }] },
-                    ]}>
-                    <View style={styles.vehiclePinOuterCircle} />
-                    <View style={styles.vehiclePinOuterPoint} />
-                    <View style={[styles.vehiclePinInnerCircle, { backgroundColor: accent }]} />
-                    <View style={[styles.vehiclePinInnerPoint, { borderBottomColor: accent }]} />
-                  </Animated.View>
-                  <View collapsable={false} style={styles.vehiclePinContent}>
-                    <View collapsable={false} style={styles.vehiclePinBusIconSlot}>
-                      <MaterialCommunityIcons
-                        name="bus"
-                        size={busIconSize}
-                        color="#FFFFFF"
-                        style={styles.vehiclePinBusIcon}
-                      />
-                    </View>
-                    <View style={styles.vehicleRouteDigits}>
-                      {routeDigits.map((digit, index) => (
-                        <Text
-                          key={`${position.bus}-${index}`}
-                          allowFontScaling={false}
-                          style={[
-                            styles.vehicleRouteLabel,
-                            {
-                              fontSize: routeFontSize,
-                              lineHeight: routeFontSize + 2,
-                            },
-                          ]}>
-                          {digit}
-                        </Text>
-                      ))}
-                    </View>
-                  </View>
-                </View>
-                <Callout tooltip>
-                  <View style={styles.vehicleCallout}>
-                    <View style={[styles.vehicleCalloutIcon, { backgroundColor: accent }]}>
-                      <MaterialCommunityIcons name="bus" size={22} color="#FFFFFF" />
-                    </View>
-                    <View style={styles.vehicleCalloutCopy}>
-                      <Text style={styles.vehicleCalloutTitle} numberOfLines={1}>
-                        {position.bus} {t('directionTo')}{destination}
-                      </Text>
-                      <Text style={styles.vehicleCalloutSubtitle} numberOfLines={1}>
-                        {t('mapVehicle', { id: position.vehicleId })}
-                      </Text>
-                    </View>
-                  </View>
-                </Callout>
-              </Marker>
-            </React.Fragment>
+            <AnimatedVehicleMarker
+              key={`${position.bus}-${position.vehicleId}`}
+              position={position}
+              accent={accent}
+              title={`${position.bus} ${t('directionTo')}${destination}`}
+              subtitle={t('mapVehicle', { id: position.vehicleId })}
+              styles={styles}
+            />
           );
         })}
         {focusedStop && focusedStopCoordinate ? (
@@ -1406,6 +1693,9 @@ function createStyles(C: ReturnType<typeof useAppColors>) {
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 4 },
     elevation: 6,
+  },
+  vehiclePinTranslucent: {
+    opacity: VEHICLE_PIN_BACKGROUND_OPACITY,
   },
   vehiclePinShape: {
     position: 'absolute',

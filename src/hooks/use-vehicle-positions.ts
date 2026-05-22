@@ -4,7 +4,7 @@ import { BAKED_POLYLINES } from '@/assets/ttc-baked';
 import { BusLine, decodeGooglePolyline, fetchVehiclePositions, ROUTES, VehiclePosition, type PolylinePoint } from '@/services/ttc';
 
 type Direction = 'toKojori' | 'toTbilisi';
-const LIVE_REFRESH_MS = 10_000;
+const ACTIVE_MAP_LIVE_REFRESH_MS = 5_000;
 const OFFLINE_REFRESH_MS = 30_000;
 const DEMO_POLYLINES: Record<`${BusLine}_${Direction}`, PolylinePoint[]> = {
   '380_toKojori': decodeGooglePolyline(BAKED_POLYLINES['380_toKojori'] ?? ''),
@@ -36,7 +36,7 @@ function demoPolylinePoint(bus: BusLine, direction: Direction, progress: number)
 }
 
 export function getDemoVehiclePositions(direction: Direction, nowMs = Date.now()): LiveVehiclePosition[] {
-  const phase = ((Math.floor(nowMs / LIVE_REFRESH_MS) % 18) / 18);
+  const phase = ((Math.floor(nowMs / ACTIVE_MAP_LIVE_REFRESH_MS) % 18) / 18);
   const demos: { bus: BusLine; offset: number; id: string; nextStopId: string }[] = [
     { bus: '380', offset: 0.12, id: 'demo-380-lead', nextStopId: direction === 'toKojori' ? '1:3078' : '1:3932' },
     { bus: '316', offset: 0.46, id: 'demo-316-mid', nextStopId: direction === 'toKojori' ? '1:2856' : '1:4673' },
@@ -93,7 +93,7 @@ export function useVehiclePositions(direction: Direction, enabled: boolean) {
     staleTime: 2_000,
     refetchInterval: query => {
       if (!enabled) return false;
-      return query.state.status === 'error' ? OFFLINE_REFRESH_MS : LIVE_REFRESH_MS;
+      return query.state.status === 'error' ? OFFLINE_REFRESH_MS : ACTIVE_MAP_LIVE_REFRESH_MS;
     },
     retry: 0,
   });
