@@ -15,6 +15,7 @@
     "web": "NODE_ENV=development expo start --web",
     "bake:ttc": "bun scripts/bake-ttc.ts",
     "i18n:check": "bun scripts/check-i18n-parity.ts",
+    "runtime:check": "node scripts/check-runtime-version.js",
     "lint": "NODE_ENV=development expo lint",
     "typecheck": "NODE_ENV=development tsc --noEmit",
     "release:android:preflight": "NODE_ENV=production bun run lint && NODE_ENV=production bun run typecheck && NODE_ENV=production bun run release:android:doctor",
@@ -26,8 +27,8 @@
     "release:android:build:apk:local": "NODE_ENV=production bunx eas build --platform android --profile production-apk --local",
     "release:android:submit": "NODE_ENV=production bunx eas submit --platform android --profile production",
     "release:android:doctor": "NODE_ENV=production node ./scripts/release-android-doctor.js",
-    "update:preview": "NODE_ENV=production bunx eas update --channel preview --environment preview",
-    "update:production": "NODE_ENV=production bunx eas update --channel production --environment production",
+    "update:preview": "NODE_ENV=production bun run runtime:check && NODE_ENV=production bunx eas update --channel preview --environment preview",
+    "update:production": "NODE_ENV=production bun run runtime:check && NODE_ENV=production bunx eas update --channel production --environment production",
     "release": "bun scripts/release.ts",
     "release:revert": "sh -c 'TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo \"no-tag\"); if [ \"$TAG\" = \"no-tag\" ]; then echo \"No tags found\"; exit 1; fi; echo \"Reverting release $TAG\"; gh release delete \"$TAG\" --yes && git tag -d \"$TAG\" && git push origin \":refs/tags/$TAG\"'"
   },

@@ -183,6 +183,16 @@ function getReleaseArtifactsStatus(tag: string) {
   };
 }
 
+function checkRuntimeVersion(baseRef: string) {
+  run(`node scripts/check-runtime-version.js --base=${shellQuote(baseRef)}`);
+}
+
+function getRuntimeCheckBase() {
+  return String(
+    run('git describe --tags --match "v*" --abbrev=0 || git rev-parse HEAD', { stdio: 'pipe' }) ?? ''
+  ).trim();
+}
+
 // ── Parse args ──────────────────────────────────────────────────────────────
 
 const args = process.argv.slice(2);
@@ -230,6 +240,8 @@ console.log(`Build:       ${buildNumber}`);
 console.log(`Tag:         ${tag}`);
 console.log(`Continue:    ${continueMode ? 'yes' : 'no'}`);
 
+const runtimeCheckBase = continueMode ? null : getRuntimeCheckBase();
+
 // ── 1. Preflight ────────────────────────────────────────────────────────────
 
 step('1/9  Preflight');
@@ -255,6 +267,7 @@ if (!isDone(state, 'preflight')) {
   }
 
   console.log(`Tag ${tag} available ✓`);
+  if (runtimeCheckBase) checkRuntimeVersion(runtimeCheckBase);
   markDone(state, 'preflight');
 } else {
   console.log('Already completed ✓');

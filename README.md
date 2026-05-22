@@ -70,6 +70,8 @@ bun run android:bundle
 bun run ios
 bun run web
 bun run typecheck
+bun run runtime:check
+bun run update:production
 bun run release:android:preflight
 bun run release:android:doctor
 bun run release:android:build
@@ -82,10 +84,18 @@ What they do:
 - `bun run android:apk`: builds debug APK at `android/app/build/outputs/apk/debug/app-debug.apk`
 - `bun run android:bundle`: builds release AAB at `android/app/build/outputs/bundle/release/app-release.aab`
 - `bun run typecheck`: runs TypeScript without emitting files
+- `bun run runtime:check`: blocks OTA updates when native/runtime files changed without a runtime bump
+- `bun run update:production`: publishes a production EAS update for JS/assets-only changes
 - `bun run release:android:preflight`: runs lint + typecheck before production build
 - `bun run release:android:doctor`: checks the EAS release environment
 - `bun run release:android:build`: builds the Android production AAB with EAS
 - `bun run release:android:submit`: submits the latest production build to Play Console
+
+## Updates
+
+EAS Updates use the manual runtime in `app.json` (`kojori-android-1`) instead of the date-based app version. This lets daily releases and JS-only fixes update existing compatible installs automatically.
+
+Only bump `expo.runtimeVersion` when native compatibility changes, such as Expo SDK or React Native upgrades, native dependency changes, config plugin changes, Android widget Kotlin/XML changes, permissions, icons, splash screen, or other native app config. The runtime guard checks these files before releases and manual EAS updates.
 
 ## Widget testing
 

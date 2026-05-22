@@ -1,5 +1,11 @@
 # Changelog
 
+## [UNRELEASED]
+### Infra
+
+- EAS Updates now use a stable manual runtime so compatible daily releases can receive automatic JS and asset updates.
+- Runtime checks now block releases and OTA publishes when native/runtime files changed without a runtime bump.
+
 ## v2026.5.23
 ### Improved
 
