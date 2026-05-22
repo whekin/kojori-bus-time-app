@@ -4,27 +4,21 @@ import Constants from 'expo-constants';
 import { File } from 'expo-file-system';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    BackHandler,
-    Linking,
-    Modal,
-    Platform,
-    Pressable,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    useWindowDimensions,
-    View,
+  ActivityIndicator,
+  Alert,
+  BackHandler,
+  InteractionManager,
+  Linking,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  useWindowDimensions,
+  View,
 } from 'react-native';
-import Animated, {
-    interpolate,
-    interpolateColor,
-    useAnimatedStyle,
-    useSharedValue,
-    withTiming,
-} from 'react-native-reanimated';
 import Carousel, { ICarouselInstance } from 'react-native-reanimated-carousel';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -49,7 +43,6 @@ import {
 import { useAppColors, useResolvedAppThemeMode } from '@/hooks/use-app-colors';
 import { useI18n, type TranslationKey } from '@/hooks/use-i18n';
 import { useLocation } from '@/hooks/use-location';
-import { useReducedMotion } from '@/hooks/use-reduced-motion';
 import { useRouteStops } from '@/hooks/use-route-stops';
 import { useSettings, type LaunchBehavior, type TtcHealthDemo } from '@/hooks/use-settings';
 import { useStopNames } from '@/hooks/use-stop-names';
@@ -85,6 +78,7 @@ const BUILD_NUMBER = Platform.select({
 });
 const EASTER_EGG_TAPS = 7;
 const TTC_MANUAL_REFRESH_COOLDOWN_MS = 3 * 60 * 60 * 1000;
+const APPEARANCE_UPDATE_DELAY_MS = 240;
 const EASTER_EGG_MESSAGES = [
   'You found it! This app was made with love for Kojori commuters.',
   'Fun fact: Kojori is 1,340m above sea level.',
@@ -824,156 +818,25 @@ function PaletteCard({
 }) {
   const { colors, styles } = useStyles();
   const { t } = useI18n();
-  const reduceMotion = useReducedMotion();
-  const darkPalette = getAppColors(paletteId, 'dark');
-  const lightPalette = getAppColors(paletteId, 'light');
+  const previewPalette = getAppColors(paletteId, resolvedMode);
   const copyKeys = PALETTE_TRANSLATION_KEYS[paletteId];
-  const darkPreviewChipBorder = alpha(darkPalette.primary, '55');
-  const lightPreviewChipBorder = alpha(lightPalette.primary, '55');
-  const darkPreviewChipFill = alpha(darkPalette.primary, '14');
-  const lightPreviewChipFill = alpha(lightPalette.primary, '14');
-  const mutedPreviewRoute380 = alpha(resolvedMode === 'light' ? lightPalette.route380 : darkPalette.route380, '66');
-  const mutedPreviewRoute316 = alpha(resolvedMode === 'light' ? lightPalette.route316 : darkPalette.route316, '5A');
-  const mutedPreviewChipBorder = alpha(resolvedMode === 'light' ? lightPalette.primary : darkPalette.primary, '3A');
+  const mutedPreviewRoute380 = alpha(previewPalette.route380, '66');
+  const mutedPreviewRoute316 = alpha(previewPalette.route316, '5A');
+  const mutedPreviewChipBorder = alpha(previewPalette.primary, '3A');
   const mutedPreviewChipFill = alpha(colors.surfaceHigh, 'AA');
-  const selectedProgress = useSharedValue(selected ? 1 : 0);
-  const modeProgress = useSharedValue(resolvedMode === 'light' ? 1 : 0);
-
-  useEffect(() => {
-    selectedProgress.value = withTiming(selected ? 1 : 0, { duration: reduceMotion ? 1 : 220 });
-  }, [reduceMotion, selected, selectedProgress]);
-
-  useEffect(() => {
-    modeProgress.value = withTiming(resolvedMode === 'light' ? 1 : 0, { duration: reduceMotion ? 1 : 260 });
-  }, [modeProgress, reduceMotion, resolvedMode]);
-
-  const animatedCardStyle = useAnimatedStyle(() => ({
-    transform: [
-      { scale: interpolate(selectedProgress.value, [0, 1], [0.97, 1]) },
-      { translateY: interpolate(selectedProgress.value, [0, 1], [0, -2]) },
-    ],
-    backgroundColor: interpolateColor(
-      selectedProgress.value,
-      [0, 1],
-      [
-        colors.surface,
-        interpolateColor(modeProgress.value, [0, 1], [darkPalette.surface, lightPalette.surface]),
-      ],
-    ),
-    borderColor: interpolateColor(
-      selectedProgress.value,
-      [0, 1],
-      [
-        colors.border,
-        interpolateColor(modeProgress.value, [0, 1], [darkPalette.primary, lightPalette.primary]),
-      ],
-    ),
-    shadowColor: interpolateColor(
-      selectedProgress.value,
-      [0, 1],
-      [colors.borderStrong, interpolateColor(modeProgress.value, [0, 1], [darkPalette.primary, lightPalette.primary])],
-    ),
-    shadowOpacity: interpolate(selectedProgress.value, [0, 1], [0.08, 0.26]),
-  }));
-
-  const animatedGlowStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(selectedProgress.value, [0, 1], [0.08, 1]),
-    transform: [{ scale: interpolate(selectedProgress.value, [0, 1], [0.92, 1]) }],
-  }));
-
-  const previewStyle = useAnimatedStyle(() => ({
-    backgroundColor: interpolateColor(
-      selectedProgress.value,
-      [0, 1],
-      [colors.panel, interpolateColor(modeProgress.value, [0, 1], [darkPalette.bg, lightPalette.bg])],
-    ),
-    borderColor: interpolateColor(
-      selectedProgress.value,
-      [0, 1],
-      [colors.border, interpolateColor(modeProgress.value, [0, 1], [darkPalette.border, lightPalette.border])],
-    ),
-  }));
-
-  const previewTopStyle = useAnimatedStyle(() => ({
-    backgroundColor: interpolateColor(
-      selectedProgress.value,
-      [0, 1],
-      [colors.surfaceHigh, interpolateColor(modeProgress.value, [0, 1], [darkPalette.panelHigh, lightPalette.panelHigh])],
-    ),
-  }));
-
-  const previewAccentStyle = useAnimatedStyle(() => ({
-    backgroundColor: interpolateColor(
-      selectedProgress.value,
-      [0, 1],
-      [
-        mutedPreviewRoute380,
-        interpolateColor(modeProgress.value, [0, 1], [darkPalette.route380, lightPalette.route380]),
-      ],
-    ),
-  }));
-
-  const previewAccentAltStyle = useAnimatedStyle(() => ({
-    backgroundColor: interpolateColor(
-      selectedProgress.value,
-      [0, 1],
-      [
-        mutedPreviewRoute316,
-        interpolateColor(modeProgress.value, [0, 1], [darkPalette.route316, lightPalette.route316]),
-      ],
-    ),
-  }));
-
-  const previewChipStyle = useAnimatedStyle(() => ({
-    borderColor: interpolateColor(
-      selectedProgress.value,
-      [0, 1],
-      [
-        mutedPreviewChipBorder,
-        interpolateColor(modeProgress.value, [0, 1], [darkPreviewChipBorder, lightPreviewChipBorder]),
-      ],
-    ),
-    backgroundColor: interpolateColor(
-      selectedProgress.value,
-      [0, 1],
-      [
-        mutedPreviewChipFill,
-        interpolateColor(modeProgress.value, [0, 1], [darkPreviewChipFill, lightPreviewChipFill]),
-      ],
-    ),
-  }));
-
-  const nameStyle = useAnimatedStyle(() => ({
-    color: interpolateColor(
-      selectedProgress.value,
-      [0, 1],
-      [colors.text, interpolateColor(modeProgress.value, [0, 1], [darkPalette.text, lightPalette.text])],
-    ),
-  }));
-
-  const liveStyle = useAnimatedStyle(() => ({
-    color: interpolateColor(modeProgress.value, [0, 1], [darkPalette.primary, lightPalette.primary]),
-  }));
-
-  const taglineStyle = useAnimatedStyle(() => ({
-    color: interpolateColor(
-      selectedProgress.value,
-      [0, 1],
-      [colors.textDim, interpolateColor(modeProgress.value, [0, 1], [darkPalette.textDim, lightPalette.textDim])],
-    ),
-  }));
-
-  const swatchPrimaryStyle = useAnimatedStyle(() => ({
-    backgroundColor: interpolateColor(modeProgress.value, [0, 1], [darkPalette.primary, lightPalette.primary]),
-  }));
-
-  const swatchRoute380Style = useAnimatedStyle(() => ({
-    backgroundColor: interpolateColor(modeProgress.value, [0, 1], [darkPalette.route380, lightPalette.route380]),
-  }));
-
-  const swatchRoute316Style = useAnimatedStyle(() => ({
-    backgroundColor: interpolateColor(modeProgress.value, [0, 1], [darkPalette.route316, lightPalette.route316]),
-  }));
+  const cardBackground = selected ? previewPalette.surface : colors.surface;
+  const cardBorder = selected ? previewPalette.primary : colors.border;
+  const cardShadow = selected ? previewPalette.primary : colors.borderStrong;
+  const glowOpacity = selected ? 1 : 0.08;
+  const previewBackground = selected ? previewPalette.bg : colors.panel;
+  const previewBorder = selected ? previewPalette.border : colors.border;
+  const previewTopBackground = selected ? previewPalette.panelHigh : colors.surfaceHigh;
+  const previewRoute380 = selected ? previewPalette.route380 : mutedPreviewRoute380;
+  const previewRoute316 = selected ? previewPalette.route316 : mutedPreviewRoute316;
+  const previewChipBorder = selected ? alpha(previewPalette.primary, '55') : mutedPreviewChipBorder;
+  const previewChipFill = selected ? alpha(previewPalette.primary, '14') : mutedPreviewChipFill;
+  const nameColor = selected ? previewPalette.text : colors.text;
+  const taglineColor = selected ? previewPalette.textDim : colors.textDim;
 
   return (
     <Pressable
@@ -981,64 +844,70 @@ function PaletteCard({
       accessibilityLabel={t(copyKeys.name)}
       accessibilityState={{ selected }}
       onPress={() => onSelect(paletteId)}>
-      <Animated.View
+      <View
         style={[
           styles.paletteCard,
-          animatedCardStyle,
+          {
+            backgroundColor: cardBackground,
+            borderColor: cardBorder,
+            shadowColor: cardShadow,
+            shadowOpacity: selected ? 0.18 : 0.08,
+            transform: [{ translateY: selected ? -2 : 0 }, { scale: selected ? 1 : 0.97 }],
+          },
         ]}>
-        <Animated.View
+        <View
           style={[
             styles.paletteGlow,
             {
-              backgroundColor: alpha(resolvedMode === 'light' ? lightPalette.primary : darkPalette.primary, '22'),
+              backgroundColor: alpha(previewPalette.primary, '22'),
+              opacity: glowOpacity,
             },
-            animatedGlowStyle,
           ]}
         />
-        <Animated.View
+        <View
           style={[
             styles.paletteGlowSecondary,
             {
-              backgroundColor: alpha(resolvedMode === 'light' ? lightPalette.route380 : darkPalette.route380, '18'),
+              backgroundColor: alpha(previewPalette.route380, '18'),
+              opacity: glowOpacity,
             },
-            animatedGlowStyle,
           ]}
         />
 
-        <Animated.View style={[styles.palettePreview, previewStyle]}>
-          <Animated.View style={[styles.palettePreviewTop, previewTopStyle]} />
-          <Animated.View style={[styles.palettePreviewAccent, previewAccentStyle]} />
-          <Animated.View style={[styles.palettePreviewAccentAlt, previewAccentAltStyle]} />
-          <Animated.View style={[styles.palettePreviewChip, previewChipStyle]} />
-        </Animated.View>
+        <View style={[styles.palettePreview, { backgroundColor: previewBackground, borderColor: previewBorder }]}>
+          <View style={[styles.palettePreviewTop, { backgroundColor: previewTopBackground }]} />
+          <View style={[styles.palettePreviewAccent, { backgroundColor: previewRoute380 }]} />
+          <View style={[styles.palettePreviewAccentAlt, { backgroundColor: previewRoute316 }]} />
+          <View style={[styles.palettePreviewChip, { backgroundColor: previewChipFill, borderColor: previewChipBorder }]} />
+        </View>
 
         <View style={styles.paletteMeta}>
           <View style={styles.paletteHeaderRow}>
-            <Animated.Text
-              style={[styles.paletteName, nameStyle, { fontFamily: DISPLAY }]}
+            <Text
+              style={[styles.paletteName, { color: nameColor, fontFamily: DISPLAY }]}
               numberOfLines={1}
               adjustsFontSizeToFit
               minimumFontScale={0.78}>
               {t(copyKeys.name)}
-            </Animated.Text>
+            </Text>
             {selected ? (
-              <Animated.Text
-                style={[styles.paletteSelected, liveStyle]}
+              <Text
+                style={[styles.paletteSelected, { color: previewPalette.primary }]}
                 numberOfLines={1}
                 adjustsFontSizeToFit
                 minimumFontScale={0.72}>
                 {t('commonSelected')}
-              </Animated.Text>
+              </Text>
             ) : null}
           </View>
-          <Animated.Text style={[styles.paletteTagline, taglineStyle]}>{t(copyKeys.tagline)}</Animated.Text>
+          <Text style={[styles.paletteTagline, { color: taglineColor }]}>{t(copyKeys.tagline)}</Text>
           <View style={styles.paletteSwatches}>
-            <Animated.View style={[styles.paletteSwatch, swatchPrimaryStyle]} />
-            <Animated.View style={[styles.paletteSwatch, swatchRoute380Style]} />
-            <Animated.View style={[styles.paletteSwatch, swatchRoute316Style]} />
+            <View style={[styles.paletteSwatch, { backgroundColor: previewPalette.primary }]} />
+            <View style={[styles.paletteSwatch, { backgroundColor: previewPalette.route380 }]} />
+            <View style={[styles.paletteSwatch, { backgroundColor: previewPalette.route316 }]} />
           </View>
         </View>
-      </Animated.View>
+      </View>
     </Pressable>
   );
 }
@@ -1055,27 +924,7 @@ function ThemeModeCard({
   onSelect: (value: AppThemeMode) => void;
 }) {
   const { styles } = useStyles();
-  const reduceMotion = useReducedMotion();
-  const selectedProgress = useSharedValue(selected ? 1 : 0);
   const selectedBackground = alpha(colors.primary, '14');
-
-  useEffect(() => {
-    selectedProgress.value = withTiming(selected ? 1 : 0, { duration: reduceMotion ? 1 : 220 });
-  }, [reduceMotion, selected, selectedProgress]);
-
-  const animatedStyle = useAnimatedStyle(() => ({
-    borderColor: interpolateColor(selectedProgress.value, [0, 1], [colors.border, colors.primary]),
-    backgroundColor: interpolateColor(selectedProgress.value, [0, 1], [colors.panel, selectedBackground]),
-    transform: [{ translateY: interpolate(selectedProgress.value, [0, 1], [0, -1]) }],
-  }));
-
-  const labelStyle = useAnimatedStyle(() => ({
-    color: interpolateColor(selectedProgress.value, [0, 1], [colors.textDim, colors.text]),
-  }));
-
-  const captionStyle = useAnimatedStyle(() => ({
-    color: interpolateColor(selectedProgress.value, [0, 1], [colors.textFaint, colors.primary]),
-  }));
 
   return (
     <Pressable
@@ -1084,22 +933,30 @@ function ThemeModeCard({
       accessibilityState={{ selected }}
       onPress={() => onSelect(option.value)}
       style={styles.themeModePressable}>
-      <Animated.View style={[styles.themeModeButton, animatedStyle]}>
-        <Animated.Text
-          style={[styles.themeModeLabel, labelStyle]}
+      <View
+        style={[
+          styles.themeModeButton,
+          {
+            backgroundColor: selected ? selectedBackground : colors.panel,
+            borderColor: selected ? colors.primary : colors.border,
+            transform: [{ translateY: selected ? -1 : 0 }],
+          },
+        ]}>
+        <Text
+          style={[styles.themeModeLabel, { color: selected ? colors.text : colors.textDim }]}
           numberOfLines={1}
           adjustsFontSizeToFit
           minimumFontScale={0.72}>
           {option.label}
-        </Animated.Text>
-        <Animated.Text
-          style={[styles.themeModeCaption, captionStyle]}
+        </Text>
+        <Text
+          style={[styles.themeModeCaption, { color: selected ? colors.primary : colors.textFaint }]}
           numberOfLines={2}
           adjustsFontSizeToFit
           minimumFontScale={0.78}>
           {option.caption}
-        </Animated.Text>
-      </Animated.View>
+        </Text>
+      </View>
     </Pressable>
   );
 }
@@ -1129,7 +986,11 @@ export default function SettingsScreen() {
   const [easterEggTaps, setEasterEggTaps] = useState(0);
   const [refreshingDataset, setRefreshingDataset] = useState<TtcRefreshTarget | null>(null);
   const [selectedPaletteId, setSelectedPaletteId] = useState(settings.paletteId);
+  const [selectedThemeMode, setSelectedThemeMode] = useState(settings.themeMode);
   const easterEggTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const appearanceUpdateTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const appearanceUpdateHandleRef = useRef<{ cancel: () => void } | null>(null);
+  const pendingAppearancePatchRef = useRef<Partial<Pick<typeof settings, 'paletteId' | 'themeMode'>>>({});
   const weeklyRefreshStartedRef = useRef(false);
   const settingsScrollRef = useRef<ScrollView>(null);
   const pendingScrollTargetRef = useRef<SettingsScrollTarget | null>(null);
@@ -1141,7 +1002,7 @@ export default function SettingsScreen() {
   const palettePreviewIndexRef = useRef(paletteIndex);
   const paletteProgrammaticIndexRef = useRef<number | null>(null);
   const paletteCarouselWidth = Math.min(windowWidth, PALETTE_CARD_WIDTH + 64);
-  
+
   const [legalModal, setLegalModal] = useState<LegalDocument | null>(null);
   const [legalContent, setLegalContent] = useState<Record<LegalDocument, string>>({
     privacy: '',
@@ -1149,9 +1010,47 @@ export default function SettingsScreen() {
   });
   const [legalLoadError, setLegalLoadError] = useState<string | null>(null);
 
+  function cancelScheduledAppearanceUpdate() {
+    appearanceUpdateHandleRef.current?.cancel();
+    appearanceUpdateHandleRef.current = null;
+    if (appearanceUpdateTimeoutRef.current) {
+      clearTimeout(appearanceUpdateTimeoutRef.current);
+      appearanceUpdateTimeoutRef.current = null;
+    }
+  }
+
+  function flushPendingAppearanceUpdate() {
+    const patch = pendingAppearancePatchRef.current;
+    pendingAppearancePatchRef.current = {};
+    cancelScheduledAppearanceUpdate();
+    if (Object.keys(patch).length > 0) {
+      update(patch);
+    }
+  }
+
+  function scheduleAppearanceUpdate(patch: Partial<Pick<typeof settings, 'paletteId' | 'themeMode'>>) {
+    pendingAppearancePatchRef.current = {
+      ...pendingAppearancePatchRef.current,
+      ...patch,
+    };
+    cancelScheduledAppearanceUpdate();
+    appearanceUpdateHandleRef.current = InteractionManager.runAfterInteractions(() => {
+      appearanceUpdateTimeoutRef.current = setTimeout(
+        flushPendingAppearanceUpdate,
+        APPEARANCE_UPDATE_DELAY_MS,
+      );
+    });
+  }
+
   useEffect(() => {
     const intervalId = setInterval(() => setQueryMetricsNow(Date.now()), 30_000);
     return () => clearInterval(intervalId);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      flushPendingAppearanceUpdate();
+    };
   }, []);
 
   useEffect(() => {
@@ -1200,6 +1099,10 @@ export default function SettingsScreen() {
   useEffect(() => {
     setSelectedPaletteId(settings.paletteId);
   }, [settings.paletteId]);
+
+  useEffect(() => {
+    setSelectedThemeMode(settings.themeMode);
+  }, [settings.themeMode]);
 
   useEffect(() => {
     palettePreviewIndexRef.current = paletteIndex;
@@ -1411,9 +1314,9 @@ export default function SettingsScreen() {
   const activeLanguageLabel = languageOptions.find(option => option.value === resolvedLanguage)?.label ?? t('commonEnglish');
   const activeLanguageDetail = settings.language === 'system' ? t('commonSystem') : t('settingsPinnedLanguage');
   const activePaletteLabel = t(PALETTE_TRANSLATION_KEYS[selectedPaletteId].name);
-  const activeThemeLabel = settings.themeMode === 'system'
+  const activeThemeLabel = selectedThemeMode === 'system'
     ? t('settingsThemeSystemShort')
-    : settings.themeMode === 'light'
+    : selectedThemeMode === 'light'
       ? t('settingsThemeLightShort')
       : t('settingsThemeDarkShort');
   const totalFavoriteStops = settings.kojoriFavorites.length + settings.tbilisiFavorites.length;
@@ -1431,7 +1334,7 @@ export default function SettingsScreen() {
     setSelectedPaletteId(nextPaletteId);
 
     if (nextPaletteId !== settings.paletteId) {
-      update({ paletteId: nextPaletteId });
+      scheduleAppearanceUpdate({ paletteId: nextPaletteId });
     }
 
     paletteCarouselRef.current?.scrollTo({ index: nextIndex, animated });
@@ -1695,12 +1598,6 @@ export default function SettingsScreen() {
               if (nextIndex === palettePreviewIndexRef.current) return;
 
               palettePreviewIndexRef.current = nextIndex;
-              const nextPaletteId = PALETTE_IDS[nextIndex];
-
-              if (nextPaletteId && nextPaletteId !== settings.paletteId) {
-                setSelectedPaletteId(nextPaletteId);
-                update({ paletteId: nextPaletteId });
-              }
             }}
             onScrollEnd={index => {
               if (paletteProgrammaticIndexRef.current !== null) {
@@ -1713,7 +1610,7 @@ export default function SettingsScreen() {
                 const nextPaletteId = PALETTE_IDS[nextIndex];
                 if (nextPaletteId && nextPaletteId !== settings.paletteId) {
                   setSelectedPaletteId(nextPaletteId);
-                  update({ paletteId: nextPaletteId });
+                  scheduleAppearanceUpdate({ paletteId: nextPaletteId });
                 }
                 return;
               }
@@ -1729,7 +1626,7 @@ export default function SettingsScreen() {
               const nextPaletteId = PALETTE_IDS[nextIndex];
               if (nextPaletteId && nextPaletteId !== settings.paletteId) {
                 setSelectedPaletteId(nextPaletteId);
-                update({ paletteId: nextPaletteId });
+                scheduleAppearanceUpdate({ paletteId: nextPaletteId });
               }
             }}
             renderItem={({ item: paletteId, index }) => (
@@ -1791,9 +1688,12 @@ export default function SettingsScreen() {
                 <ThemeModeCard
                   key={option.value}
                   option={option}
-                  selected={settings.themeMode === option.value}
+                  selected={selectedThemeMode === option.value}
                   colors={colors}
-                  onSelect={value => update({ themeMode: value })}
+                  onSelect={value => {
+                    setSelectedThemeMode(value);
+                    scheduleAppearanceUpdate({ themeMode: value });
+                  }}
                 />
               );
             })}

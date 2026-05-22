@@ -1,6 +1,11 @@
 # Changelog
 
 ## [UNRELEASED]
+### Improved
+
+- Theme changes now use simpler Settings controls, preview appearance choices locally, and delay app-wide updates until after interactions to reduce freezes on slower devices.
+- The native map now unmounts while inactive, avoiding hidden map restyles during appearance changes.
+
 ### Fixed
 
 - Scheduled-only next departure labels now use the themed muted text color instead of falling back to black.

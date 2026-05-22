@@ -716,10 +716,16 @@ function AnimatedVehicleMarker({
 }
 
 export default function ExploreScreen({ isActive = false }: ExploreScreenProps) {
-  const colors = useAppColors();
+  const liveColors = useAppColors();
+  const liveResolvedThemeMode = useResolvedAppThemeMode();
+  const [inactiveThemeSnapshot, setInactiveThemeSnapshot] = useState(() => ({
+    colors: liveColors,
+    resolvedThemeMode: liveResolvedThemeMode,
+  }));
+  const colors = isActive ? liveColors : inactiveThemeSnapshot.colors;
+  const resolvedThemeMode = isActive ? liveResolvedThemeMode : inactiveThemeSnapshot.resolvedThemeMode;
   const { t } = useI18n();
   const reduceMotion = useReducedMotion();
-  const resolvedThemeMode = useResolvedAppThemeMode();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -743,15 +749,35 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
   const direction = isActive ? activeDirection : inactiveMapDirection;
 
   useEffect(() => {
+    if (!isActive) return;
+    setInactiveThemeSnapshot((prev) => {
+      if (prev.colors === liveColors && prev.resolvedThemeMode === liveResolvedThemeMode) {
+        return prev;
+      }
+
+      return {
+        colors: liveColors,
+        resolvedThemeMode: liveResolvedThemeMode,
+      };
+    });
+  }, [isActive, liveColors, liveResolvedThemeMode]);
+
+  useEffect(() => {
     if (!isActive || inactiveMapDirection === activeDirection) return;
     setInactiveMapDirection(activeDirection);
   }, [activeDirection, inactiveMapDirection, isActive]);
 
   useEffect(() => {
-    if (mapReady) return;
+    if (!isActive || mapReady) return;
     const id = setTimeout(() => setMapTimedOut(true), 8000);
     return () => clearTimeout(id);
-  }, [mapReady]);
+  }, [isActive, mapReady]);
+
+  useEffect(() => {
+    if (isActive) return;
+    setMapReady(false);
+    setMapTimedOut(false);
+  }, [isActive]);
 
   const { data: toKojoriRouteData } = useRoutePolylines('toKojori');
   const { data: toTbilisiRouteData } = useRoutePolylines('toTbilisi');
@@ -1121,6 +1147,10 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
     }
 
     toggleKojoriFavorite(focusedStop.id);
+  }
+
+  if (!isActive) {
+    return <View style={styles.screen} />;
   }
 
   return (
