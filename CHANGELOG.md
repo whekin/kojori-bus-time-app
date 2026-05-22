@@ -1,13 +1,12 @@
 # Changelog
 
-## [UNRELEASED]
+## v2026.5.23
 ### Infra
 
 - EAS Updates now use a stable manual runtime so compatible daily releases can receive automatic JS and asset updates.
 - Release automation now supports same-day re-releases by incrementing the Android build suffix and replacing the existing GitHub release asset.
 - Runtime checks now block releases and OTA publishes when native/runtime files changed without a runtime bump.
 
-## v2026.5.23
 ### Improved
 
 - Theme changes now use simpler Settings controls, preview appearance choices locally, and delay app-wide updates until after interactions to reduce freezes on slower devices.
