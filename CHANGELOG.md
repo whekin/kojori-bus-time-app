@@ -1,6 +1,6 @@
 # Changelog
 
-## [UNRELEASED]
+## v2026.5.23
 ### Improved
 
 - Theme changes now use simpler Settings controls, preview appearance choices locally, and delay app-wide updates until after interactions to reduce freezes on slower devices.
