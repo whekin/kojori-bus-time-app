@@ -18,6 +18,7 @@
 - Android widgets now open directly with the direction chooser and timetable, without the extra title and refresh row.
 - Settings subpages now use a proper back icon with a cleaner touch target.
 - Demo mode no longer creates fake cancelled departures.
+- Focused map stop markers now use the active route color consistently and a larger centered bus glyph.
 - Live delay badges in departure rows now get enough room for longer localized text.
 - Live arrivals with stale TTC schedule anchors now stay visible without showing absurd delay badges.
 - Map rendering now uses fewer native route overlays and delays ordinary stop markers until close zoom to avoid Android map freezes.

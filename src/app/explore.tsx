@@ -66,7 +66,7 @@ function BusStopGlyph({
 }) {
   const poleWidth = Math.max(1, Math.round(size * 0.1));
   const dotSize = Math.max(2, Math.round(size * 0.2));
-  const busSize = Math.round(size * 0.68);
+  const busSize = Math.round(size * 0.78);
   const poleHeight = Math.round(size * 0.62);
   const xOffset = size * shiftX;
   const yOffset = size * shiftY;
@@ -77,7 +77,7 @@ function BusStopGlyph({
         style={{
           position: 'absolute',
           left: Math.round(size * 0.04),
-          top: Math.round(size * 0.15),
+          top: Math.round(size * 0.13),
           width: dotSize,
           alignItems: 'center',
         }}>
@@ -98,7 +98,7 @@ function BusStopGlyph({
           }}
         />
       </View>
-      <View style={{ position: 'absolute', left: Math.round(size * 0.32), top: Math.round(size * 0.18) }}>
+      <View style={{ position: 'absolute', left: Math.round(size * 0.28), top: Math.round(size * 0.08) }}>
         <MaterialCommunityIcons name="bus" size={busSize} color={color} />
       </View>
     </View>
@@ -1151,7 +1151,7 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
 
           return (
             <StopMapMarker
-              key={`stop-${direction}-${stop.id}`}
+              key={`stop-${direction}-${stop.id}-${markerColor}`}
               direction={direction}
               stop={stop}
               isPromoted={isPromoted}
@@ -1173,7 +1173,7 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
 
           return (
             <StopMapMarker
-              key={`stop-compact-${direction}-${stop.id}`}
+              key={`stop-compact-${direction}-${stop.id}-${stopAccent}`}
               direction={direction}
               stop={stop}
               isPromoted={false}
@@ -1207,7 +1207,7 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
         {focusedStop && focusedStopCoordinate ? (
           <Marker
             ref={focusedStopMarkerRef}
-            key={`focused-stop-${focusedStop.id}-${focusedStop.requestedAt}`}
+            key={`focused-stop-${focusedStop.id}-${focusedStop.requestedAt}-${focusedStopAccent}`}
             coordinate={focusedStopCoordinate}
             anchor={{ x: 0.5, y: 1 }}
             centerOffset={{ x: 0, y: -24 }}
@@ -1215,15 +1215,15 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
             zIndex={30}
           >
             <View collapsable={false} style={styles.focusedStopMarker}>
-              <View style={styles.focusedStopMarkerHalo} />
-              <View style={styles.focusedStopMarkerCore}>
-                <BusStopGlyph size={19} color="#FFFFFF" shiftY={0.18} />
+              <View style={[styles.focusedStopMarkerHalo, { backgroundColor: alpha(focusedStopAccent, '22') }]} />
+              <View style={[styles.focusedStopMarkerCore, { backgroundColor: focusedStopAccent }]}>
+                <BusStopGlyph size={24} color="#FFFFFF" shiftY={0.02} />
               </View>
             </View>
             <Callout tooltip>
               <View style={styles.focusedStopCallout}>
-                <View style={styles.focusedStopCalloutIcon}>
-                  <BusStopGlyph size={22} color="#FFFFFF" shiftY={0.14} />
+                <View style={[styles.focusedStopCalloutIcon, { backgroundColor: focusedStopAccent }]}>
+                  <BusStopGlyph size={26} color="#FFFFFF" shiftY={0.02} />
                 </View>
                 <View style={styles.focusedStopCalloutCopy}>
                   <Text style={styles.focusedStopCalloutLabel} numberOfLines={2}>
@@ -1838,7 +1838,6 @@ function createStyles(C: ReturnType<typeof useAppColors>) {
     width: 50,
     height: 50,
     borderRadius: 15,
-    backgroundColor: alpha(C.error, '20'),
   },
   focusedStopMarkerCore: {
     width: 36,
@@ -1846,7 +1845,6 @@ function createStyles(C: ReturnType<typeof useAppColors>) {
     borderRadius: 10,
     borderWidth: 1.5,
     borderColor: alpha('#FFFFFF', 'E6'),
-    backgroundColor: C.error,
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#000',
@@ -1877,7 +1875,6 @@ function createStyles(C: ReturnType<typeof useAppColors>) {
     width: 42,
     height: 42,
     borderRadius: 11,
-    backgroundColor: C.error,
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
