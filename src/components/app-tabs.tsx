@@ -1,15 +1,15 @@
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
-import { BlurTargetView, BlurView } from "expo-blur";
-import { requireOptionalNativeModule } from "expo-modules-core";
 import PagerView from "react-native-pager-view";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { BackHandler, Pressable, StyleSheet, View } from "react-native";
+import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 import Animated, {
   interpolateColor,
   useAnimatedStyle,
   useEvent,
   useHandler,
   useSharedValue,
+  withSequence,
   withTiming,
   type SharedValue,
 } from "react-native-reanimated";
@@ -33,16 +33,15 @@ type TabItem = {
   render: (isActive: boolean) => React.ReactNode;
 };
 
-const NAV_GAP = 7;
-const NAV_PADDING = 6;
-const NAV_HIGHLIGHT_EXTRA = 4;
+const NAV_GAP = 6;
+const NAV_PADDING = 5;
+const NAV_HIGHLIGHT_EXTRA = 2;
 const NAV_PROGRESS_TIMING = { duration: 220 };
 const TAB_ROUTES: TabRoute[] = ["index", "explore", "timetable", "settings"];
 const ALL_TAB_INDEXES = new Set(TAB_ROUTES.map((_, index) => index));
 
 const AnimatedIcon = Animated.createAnimatedComponent(MaterialCommunityIcons);
 const AnimatedPagerView = Animated.createAnimatedComponent(PagerView);
-const hasNativeBlur = requireOptionalNativeModule("ExpoBlur") !== null;
 
 function usePagerScrollHandler(
   onPageScroll: (event: { position: number; offset: number }) => void,
@@ -78,12 +77,29 @@ function TabButton({
   const C = useAppColors();
   const styles = React.useMemo(() => createStyles(C), [C]);
   const iconColor = index === activeIndex ? C.primary : C.textDim;
+  const pressProgress = useSharedValue(0);
+  const activationPulse = useSharedValue(0);
+
+  useEffect(() => {
+    if (index !== activeIndex) return;
+
+    activationPulse.value = withSequence(
+      withTiming(1, { duration: 120 }),
+      withTiming(0, { duration: 180 }),
+    );
+  }, [activeIndex, activationPulse, index]);
+
   const iconStyle = useAnimatedStyle(() => {
     const distance = Math.min(Math.abs(pagerProgress.value - index), 1);
+    const pressScale = 1 - pressProgress.value * 0.12;
+    const activeScale = 1 + activationPulse.value * 0.08;
 
     return {
       opacity: 1 - distance * 0.15,
-      transform: [{ scale: 1 - distance * 0.04 }],
+      transform: [
+        { translateY: pressProgress.value * 2 - activationPulse.value * 1.5 },
+        { scale: (1 - distance * 0.04) * pressScale * activeScale },
+      ],
     };
   }, [index]);
 
@@ -104,6 +120,12 @@ function TabButton({
       accessibilityRole="tab"
       accessibilityLabel={tab.title}
       accessibilityState={{ selected: index === activeIndex }}
+      onPressIn={() => {
+        pressProgress.value = withTiming(1, { duration: 80 });
+      }}
+      onPressOut={() => {
+        pressProgress.value = withTiming(0, { duration: 140 });
+      }}
       onPress={() => {
         if (index === activeIndex) return;
         onPress();
@@ -111,7 +133,7 @@ function TabButton({
     >
       <AnimatedIcon
         name={tab.icon}
-        size={26}
+        size={22}
         color={iconColor}
         style={iconStyle}
       />
@@ -139,7 +161,6 @@ export default function AppTabs({
   const C = useAppColors();
   const styles = React.useMemo(() => createStyles(C), [C]);
   const insets = useSafeAreaInsets();
-  const blurTargetRef = useRef<View | null>(null);
   const pagerRef = useRef<PagerView>(null);
   const [activeIndex, setActiveIndex] = useState(0);
   const tabHistoryRef = useRef<number[]>([0]);
@@ -301,15 +322,7 @@ export default function AppTabs({
     <MapFocusProvider>
       <TabNavProvider value={navigateToTab}>
         <View style={styles.shell}>
-          {hasNativeBlur ? (
-            <BlurTargetView ref={blurTargetRef} style={styles.pagerTarget}>
-              {pager}
-            </BlurTargetView>
-          ) : (
-            <View ref={blurTargetRef} style={styles.pagerTarget}>
-              {pager}
-            </View>
-          )}
+          <View style={styles.pagerTarget}>{pager}</View>
 
           <View
             style={[
@@ -317,23 +330,22 @@ export default function AppTabs({
               { paddingBottom: Math.max(insets.bottom, 10) },
             ]}
           >
+            <Svg pointerEvents="none" style={styles.navFade}>
+              <Defs>
+                <LinearGradient id="navFade" x1="0" y1="0" x2="0" y2="1">
+                  <Stop offset="0" stopColor={C.bg} stopOpacity="0" />
+                  <Stop offset="0.48" stopColor={C.bg} stopOpacity="0.78" />
+                  <Stop offset="1" stopColor={C.bg} stopOpacity="0.96" />
+                </LinearGradient>
+              </Defs>
+              <Rect x="0" y="0" width="100%" height="100%" fill="url(#navFade)" />
+            </Svg>
             <View
               style={styles.navBar}
               onLayout={(event) => {
                 setNavWidth(event.nativeEvent.layout.width);
               }}
             >
-              {hasNativeBlur ? (
-                <BlurView
-                  pointerEvents="none"
-                  intensity={5}
-                  blurTarget={blurTargetRef}
-                  blurMethod="dimezisBlurViewSdk31Plus"
-                  blurReductionFactor={1}
-                  tint="default"
-                  style={styles.navBlur}
-                />
-              ) : null}
               {tabWidth > 0 ? (
                 <Animated.View
                   pointerEvents="none"
@@ -341,25 +353,10 @@ export default function AppTabs({
                     styles.navHighlight,
                     {
                       width: tabWidth + NAV_HIGHLIGHT_EXTRA,
-                      borderColor: alpha(
-                        C.primary,
-                        C.mode === "dark" ? "44" : "20",
-                      ),
                     },
                     highlightStyle,
                   ]}
                 >
-                  {hasNativeBlur ? (
-                    <BlurView
-                      pointerEvents="none"
-                      intensity={7}
-                      blurTarget={blurTargetRef}
-                      blurMethod="dimezisBlurViewSdk31Plus"
-                      blurReductionFactor={1}
-                      tint="default"
-                      style={styles.navHighlightBlur}
-                    />
-                  ) : null}
                   <View
                     pointerEvents="none"
                     style={[
@@ -367,7 +364,7 @@ export default function AppTabs({
                       {
                         backgroundColor: alpha(
                           C.primary,
-                          C.mode === "dark" ? "24" : "14",
+                          C.mode === "dark" ? "1C" : "11",
                         ),
                       },
                     ]}
@@ -412,58 +409,56 @@ function createStyles(C: AppColors) {
       left: 0,
       right: 0,
       bottom: 0,
-      paddingHorizontal: 12,
-      paddingTop: 6,
+      paddingHorizontal: 18,
+      paddingTop: 34,
       backgroundColor: "transparent",
+    },
+    navFade: {
+      position: "absolute",
+      left: 0,
+      right: 0,
+      top: 0,
+      bottom: 0,
     },
     navBar: {
       position: "relative",
       flexDirection: "row",
       gap: NAV_GAP,
-      minHeight: 76,
+      minHeight: 60,
       padding: NAV_PADDING,
-      borderRadius: 24,
-      borderWidth: 1,
-      borderColor: alpha(C.border, C.mode === "dark" ? "CC" : "9F"),
-      backgroundColor: hasNativeBlur ? "transparent" : C.surface,
+      borderRadius: 30,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: alpha(C.border, C.mode === "dark" ? "80" : "72"),
+      backgroundColor: alpha(C.surface, C.mode === "dark" ? "D9" : "D8"),
       shadowColor: "#000000",
-      shadowOpacity: C.mode === "dark" ? 0.28 : 0.11,
-      shadowRadius: 16,
-      shadowOffset: { width: 0, height: 7 },
-      elevation: 9,
+      shadowOpacity: C.mode === "dark" ? 0.2 : 0.07,
+      shadowRadius: 10,
+      shadowOffset: { width: 0, height: 4 },
+      elevation: 5,
       overflow: "hidden",
-    },
-    navBlur: {
-      ...StyleSheet.absoluteFillObject,
-      borderRadius: 24,
     },
     navHighlight: {
       position: "absolute",
       top: NAV_PADDING,
       bottom: NAV_PADDING,
-      borderRadius: 20,
-      borderWidth: 1,
+      borderRadius: 24,
       overflow: "hidden",
-    },
-    navHighlightBlur: {
-      ...StyleSheet.absoluteFillObject,
-      borderRadius: 20,
     },
     navHighlightTint: {
       ...StyleSheet.absoluteFillObject,
-      borderRadius: 20,
+      borderRadius: 24,
     },
     navButton: {
       flex: 1,
-      minHeight: 64,
+      minHeight: 50,
       alignItems: "center",
       justifyContent: "center",
-      gap: 5,
+      gap: 3,
       zIndex: 1,
     },
     navLabel: {
-      fontSize: 13,
-      lineHeight: 16,
+      fontSize: 11,
+      lineHeight: 14,
       fontWeight: "800",
       letterSpacing: 0,
       textAlign: "center",

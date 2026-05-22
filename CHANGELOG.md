@@ -6,8 +6,14 @@
 - Start screen destination cards now use brighter daytime artwork and higher-contrast overlay details in light mode.
 - Map direction switching now uses the same compact control as Departures and Timetable.
 - Stop selector rows now reserve route accent colors for selected states and use consistent action-button tinting, making unselected stops easier to scan.
-- Settings overview now uses tappable status cards instead of a cramped three-column summary strip.
-- The bottom navigation now uses a compact rounded floating bar with a softer active tab highlight.
+- Settings overview now uses tappable status cards, jumps the language card straight to language choices, and shows the last TTC data refresh instead of dataset counts.
+- The bottom navigation now uses a compact rounded floating bar with a transparent fade behind it and no blur layer.
+- The theme chooser now keeps the selected palette centered and shows compact palette position dots.
+- Theme switching now avoids app-wide per-frame color interpolation, making palette changes much smoother.
+- Dragging the theme chooser now previews palette changes before the carousel settles.
+- Theme chooser swipes now require a shorter drag and settle to the palette preview shown during the drag.
+- Non-selected theme cards now stay visually grounded in the active theme while still showing their palette accents.
+- Tapping a theme card now immediately marks that card as selected and keeps carousel position in sync.
 
 ### Fixed
 

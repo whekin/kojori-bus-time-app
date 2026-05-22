@@ -131,6 +131,7 @@ type NoticeModalState = {
   message: string;
 };
 type SettingsSection = 'commute' | 'appearance' | 'widget' | 'data' | 'about';
+type SettingsScrollTarget = 'language';
 
 async function readBundledTextAsset(moduleId: number) {
   const asset = Asset.fromModule(moduleId);
@@ -821,7 +822,7 @@ function PaletteCard({
   resolvedMode: 'light' | 'dark';
   onSelect: (paletteId: AppPaletteId) => void;
 }) {
-  const { styles } = useStyles();
+  const { colors, styles } = useStyles();
   const { t } = useI18n();
   const reduceMotion = useReducedMotion();
   const darkPalette = getAppColors(paletteId, 'dark');
@@ -831,6 +832,10 @@ function PaletteCard({
   const lightPreviewChipBorder = alpha(lightPalette.primary, '55');
   const darkPreviewChipFill = alpha(darkPalette.primary, '14');
   const lightPreviewChipFill = alpha(lightPalette.primary, '14');
+  const mutedPreviewRoute380 = alpha(resolvedMode === 'light' ? lightPalette.route380 : darkPalette.route380, '66');
+  const mutedPreviewRoute316 = alpha(resolvedMode === 'light' ? lightPalette.route316 : darkPalette.route316, '5A');
+  const mutedPreviewChipBorder = alpha(resolvedMode === 'light' ? lightPalette.primary : darkPalette.primary, '3A');
+  const mutedPreviewChipFill = alpha(colors.surfaceHigh, 'AA');
   const selectedProgress = useSharedValue(selected ? 1 : 0);
   const modeProgress = useSharedValue(resolvedMode === 'light' ? 1 : 0);
 
@@ -847,56 +852,103 @@ function PaletteCard({
       { scale: interpolate(selectedProgress.value, [0, 1], [0.97, 1]) },
       { translateY: interpolate(selectedProgress.value, [0, 1], [0, -2]) },
     ],
-    backgroundColor: interpolateColor(modeProgress.value, [0, 1], [darkPalette.surface, lightPalette.surface]),
+    backgroundColor: interpolateColor(
+      selectedProgress.value,
+      [0, 1],
+      [
+        colors.surface,
+        interpolateColor(modeProgress.value, [0, 1], [darkPalette.surface, lightPalette.surface]),
+      ],
+    ),
     borderColor: interpolateColor(
       selectedProgress.value,
       [0, 1],
       [
-        interpolateColor(modeProgress.value, [0, 1], [darkPalette.border, lightPalette.border]),
+        colors.border,
         interpolateColor(modeProgress.value, [0, 1], [darkPalette.primary, lightPalette.primary]),
       ],
     ),
-    shadowColor: interpolateColor(modeProgress.value, [0, 1], [darkPalette.primary, lightPalette.primary]),
-    shadowOpacity: interpolate(selectedProgress.value, [0, 1], [0.14, 0.26]),
+    shadowColor: interpolateColor(
+      selectedProgress.value,
+      [0, 1],
+      [colors.borderStrong, interpolateColor(modeProgress.value, [0, 1], [darkPalette.primary, lightPalette.primary])],
+    ),
+    shadowOpacity: interpolate(selectedProgress.value, [0, 1], [0.08, 0.26]),
   }));
 
   const animatedGlowStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(selectedProgress.value, [0, 1], [0.28, 1]),
+    opacity: interpolate(selectedProgress.value, [0, 1], [0.08, 1]),
     transform: [{ scale: interpolate(selectedProgress.value, [0, 1], [0.92, 1]) }],
   }));
 
   const previewStyle = useAnimatedStyle(() => ({
-    backgroundColor: interpolateColor(modeProgress.value, [0, 1], [darkPalette.bg, lightPalette.bg]),
-    borderColor: interpolateColor(modeProgress.value, [0, 1], [darkPalette.border, lightPalette.border]),
+    backgroundColor: interpolateColor(
+      selectedProgress.value,
+      [0, 1],
+      [colors.panel, interpolateColor(modeProgress.value, [0, 1], [darkPalette.bg, lightPalette.bg])],
+    ),
+    borderColor: interpolateColor(
+      selectedProgress.value,
+      [0, 1],
+      [colors.border, interpolateColor(modeProgress.value, [0, 1], [darkPalette.border, lightPalette.border])],
+    ),
   }));
 
   const previewTopStyle = useAnimatedStyle(() => ({
-    backgroundColor: interpolateColor(modeProgress.value, [0, 1], [darkPalette.panelHigh, lightPalette.panelHigh]),
+    backgroundColor: interpolateColor(
+      selectedProgress.value,
+      [0, 1],
+      [colors.surfaceHigh, interpolateColor(modeProgress.value, [0, 1], [darkPalette.panelHigh, lightPalette.panelHigh])],
+    ),
   }));
 
   const previewAccentStyle = useAnimatedStyle(() => ({
-    backgroundColor: interpolateColor(modeProgress.value, [0, 1], [darkPalette.route380, lightPalette.route380]),
+    backgroundColor: interpolateColor(
+      selectedProgress.value,
+      [0, 1],
+      [
+        mutedPreviewRoute380,
+        interpolateColor(modeProgress.value, [0, 1], [darkPalette.route380, lightPalette.route380]),
+      ],
+    ),
   }));
 
   const previewAccentAltStyle = useAnimatedStyle(() => ({
-    backgroundColor: interpolateColor(modeProgress.value, [0, 1], [darkPalette.route316, lightPalette.route316]),
+    backgroundColor: interpolateColor(
+      selectedProgress.value,
+      [0, 1],
+      [
+        mutedPreviewRoute316,
+        interpolateColor(modeProgress.value, [0, 1], [darkPalette.route316, lightPalette.route316]),
+      ],
+    ),
   }));
 
   const previewChipStyle = useAnimatedStyle(() => ({
     borderColor: interpolateColor(
-      modeProgress.value,
+      selectedProgress.value,
       [0, 1],
-      [darkPreviewChipBorder, lightPreviewChipBorder],
+      [
+        mutedPreviewChipBorder,
+        interpolateColor(modeProgress.value, [0, 1], [darkPreviewChipBorder, lightPreviewChipBorder]),
+      ],
     ),
     backgroundColor: interpolateColor(
-      modeProgress.value,
+      selectedProgress.value,
       [0, 1],
-      [darkPreviewChipFill, lightPreviewChipFill],
+      [
+        mutedPreviewChipFill,
+        interpolateColor(modeProgress.value, [0, 1], [darkPreviewChipFill, lightPreviewChipFill]),
+      ],
     ),
   }));
 
   const nameStyle = useAnimatedStyle(() => ({
-    color: interpolateColor(modeProgress.value, [0, 1], [darkPalette.text, lightPalette.text]),
+    color: interpolateColor(
+      selectedProgress.value,
+      [0, 1],
+      [colors.text, interpolateColor(modeProgress.value, [0, 1], [darkPalette.text, lightPalette.text])],
+    ),
   }));
 
   const liveStyle = useAnimatedStyle(() => ({
@@ -904,7 +956,11 @@ function PaletteCard({
   }));
 
   const taglineStyle = useAnimatedStyle(() => ({
-    color: interpolateColor(modeProgress.value, [0, 1], [darkPalette.textDim, lightPalette.textDim]),
+    color: interpolateColor(
+      selectedProgress.value,
+      [0, 1],
+      [colors.textDim, interpolateColor(modeProgress.value, [0, 1], [darkPalette.textDim, lightPalette.textDim])],
+    ),
   }));
 
   const swatchPrimaryStyle = useAnimatedStyle(() => ({
@@ -1072,11 +1128,19 @@ export default function SettingsScreen() {
   const [activeSection, setActiveSection] = useState<SettingsSection | null>(null);
   const [easterEggTaps, setEasterEggTaps] = useState(0);
   const [refreshingDataset, setRefreshingDataset] = useState<TtcRefreshTarget | null>(null);
+  const [selectedPaletteId, setSelectedPaletteId] = useState(settings.paletteId);
   const easterEggTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const weeklyRefreshStartedRef = useRef(false);
+  const settingsScrollRef = useRef<ScrollView>(null);
+  const pendingScrollTargetRef = useRef<SettingsScrollTarget | null>(null);
+  const languageSectionYRef = useRef<number | null>(null);
   const paletteCarouselRef = useRef<ICarouselInstance>(null);
-  const paletteIndex = Math.max(0, PALETTE_IDS.indexOf(settings.paletteId));
-  const paletteCarouselWidth = Math.max(windowWidth, PALETTE_CARD_WIDTH + 40);
+  const paletteIndex = Math.max(0, PALETTE_IDS.indexOf(selectedPaletteId));
+  const paletteDragActiveRef = useRef(false);
+  const paletteDragStartIndexRef = useRef(paletteIndex);
+  const palettePreviewIndexRef = useRef(paletteIndex);
+  const paletteProgrammaticIndexRef = useRef<number | null>(null);
+  const paletteCarouselWidth = Math.min(windowWidth, PALETTE_CARD_WIDTH + 64);
   
   const [legalModal, setLegalModal] = useState<LegalDocument | null>(null);
   const [legalContent, setLegalContent] = useState<Record<LegalDocument, string>>({
@@ -1134,6 +1198,15 @@ export default function SettingsScreen() {
   );
 
   useEffect(() => {
+    setSelectedPaletteId(settings.paletteId);
+  }, [settings.paletteId]);
+
+  useEffect(() => {
+    palettePreviewIndexRef.current = paletteIndex;
+  }, [paletteIndex]);
+
+  useEffect(() => {
+    if (paletteDragActiveRef.current) return;
     paletteCarouselRef.current?.scrollTo({ index: paletteIndex, animated: true });
   }, [paletteIndex]);
 
@@ -1172,6 +1245,23 @@ export default function SettingsScreen() {
       skipFreshMs: TTC_MANUAL_REFRESH_COOLDOWN_MS,
     }).finally(() => {
       setRefreshingDataset(current => current === 'all' ? null : current);
+    });
+  }
+
+  function openSection(section: SettingsSection, scrollTarget?: SettingsScrollTarget) {
+    pendingScrollTargetRef.current = scrollTarget ?? null;
+    setActiveSection(section);
+  }
+
+  function flushPendingScrollTarget(target: SettingsScrollTarget, y: number) {
+    if (pendingScrollTargetRef.current !== target || activeSection !== 'appearance') return;
+
+    pendingScrollTargetRef.current = null;
+    requestAnimationFrame(() => {
+      settingsScrollRef.current?.scrollTo({
+        y: Math.max(0, y - 14),
+        animated: true,
+      });
     });
   }
 
@@ -1319,17 +1409,33 @@ export default function SettingsScreen() {
     { value: 'device-offline', label: t('ttcDeviceOffline'), caption: t('settingsTtcDemoDeviceNote') },
   ];
   const activeLanguageLabel = languageOptions.find(option => option.value === resolvedLanguage)?.label ?? t('commonEnglish');
-  const activePaletteLabel = t(PALETTE_TRANSLATION_KEYS[settings.paletteId].name);
+  const activeLanguageDetail = settings.language === 'system' ? t('commonSystem') : t('settingsPinnedLanguage');
+  const activePaletteLabel = t(PALETTE_TRANSLATION_KEYS[selectedPaletteId].name);
   const activeThemeLabel = settings.themeMode === 'system'
     ? t('settingsThemeSystemShort')
     : settings.themeMode === 'light'
       ? t('settingsThemeLightShort')
       : t('settingsThemeDarkShort');
   const totalFavoriteStops = settings.kojoriFavorites.length + settings.tbilisiFavorites.length;
-  const savedDatasetLabel = formatCount('datasets', offlineStatus.totalDatasets, {
-    available: offlineStatus.availableDatasets,
-    total: offlineStatus.totalDatasets,
+  const lastDataRefreshLabel = t('settingsLastDataRefresh', {
+    value: formatLastSync(offlineStatus.lastSyncAt, t, resolvedLanguage),
   });
+  const selectPalette = (nextPaletteId: AppPaletteId, animated = true) => {
+    const nextIndex = PALETTE_IDS.indexOf(nextPaletteId);
+    if (nextIndex < 0) return;
+
+    paletteDragActiveRef.current = false;
+    paletteDragStartIndexRef.current = nextIndex;
+    palettePreviewIndexRef.current = nextIndex;
+    paletteProgrammaticIndexRef.current = nextIndex;
+    setSelectedPaletteId(nextPaletteId);
+
+    if (nextPaletteId !== settings.paletteId) {
+      update({ paletteId: nextPaletteId });
+    }
+
+    paletteCarouselRef.current?.scrollTo({ index: nextIndex, animated });
+  };
   const sectionTitles: Record<SettingsSection, string> = {
     commute: t('settingsSectionCommute'),
     appearance: t('settingsSectionAppearance'),
@@ -1358,7 +1464,7 @@ export default function SettingsScreen() {
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={t('settingsOpenSectionA11y', { section: title, summary })}
-        onPress={() => setActiveSection(section)}
+        onPress={() => openSection(section)}
         style={({ pressed }) => [
           styles.sectionCard,
           pressed && { backgroundColor: colors.panel },
@@ -1383,6 +1489,7 @@ export default function SettingsScreen() {
     value,
     detail,
     accentColor,
+    onPress,
   }: {
     section: SettingsSection;
     icon: React.ComponentProps<typeof MaterialCommunityIcons>['name'];
@@ -1390,12 +1497,13 @@ export default function SettingsScreen() {
     value: string;
     detail: string;
     accentColor: string;
+    onPress?: () => void;
   }) {
     return (
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={t('settingsOpenSectionA11y', { section: title, summary: `${value}. ${detail}` })}
-        onPress={() => setActiveSection(section)}
+        onPress={onPress ?? (() => openSection(section))}
         style={({ pressed }) => [
           styles.summaryAction,
           {
@@ -1416,6 +1524,10 @@ export default function SettingsScreen() {
     );
   }
 
+  function openLanguageSettings() {
+    openSection('appearance', 'language');
+  }
+
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
       <View style={styles.header}>
@@ -1434,6 +1546,7 @@ export default function SettingsScreen() {
       </View>
 
       <ScrollView
+        ref={settingsScrollRef}
         style={styles.scroll}
         contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + BottomTabInset + 32 }]}
         showsVerticalScrollIndicator={false}>
@@ -1449,19 +1562,20 @@ export default function SettingsScreen() {
                 accentColor: colors.primary,
               })}
               {renderSummaryAction({
-                section: 'commute',
-                icon: 'map-marker-path',
-                title: t('settingsSectionCommute'),
-                value: launchBehaviorStatus.title,
-                detail: formatCount('stops', totalFavoriteStops),
+                section: 'appearance',
+                icon: 'translate',
+                title: t('settingsLanguage'),
+                value: activeLanguageLabel,
+                detail: activeLanguageDetail,
                 accentColor: colors.route380,
+                onPress: openLanguageSettings,
               })}
               {renderSummaryAction({
                 section: 'data',
                 icon: 'database-sync-outline',
                 title: t('settingsSectionData'),
                 value: formatOfflineStatus(offlineStatus, t),
-                detail: savedDatasetLabel,
+                detail: lastDataRefreshLabel,
                 accentColor: colors.warning,
               })}
             </View>
@@ -1503,7 +1617,7 @@ export default function SettingsScreen() {
                 note: t('settingsSectionDataNote'),
                 summary: t('settingsSectionDataSummary', {
                   status: formatOfflineStatus(offlineStatus, t),
-                  datasets: savedDatasetLabel,
+                  refreshed: lastDataRefreshLabel,
                 }),
                 accentColor: colors.warning,
               })}
@@ -1540,15 +1654,81 @@ export default function SettingsScreen() {
             snapEnabled
             overscrollEnabled={false}
             style={styles.paletteCarousel}
+            onConfigurePanGesture={gesture => {
+              gesture.activeOffsetX([-14, 14]);
+            }}
             mode="parallax"
             modeConfig={{
               parallaxScrollingScale: 0.92,
               parallaxScrollingOffset: 84,
               parallaxAdjacentItemScale: 0.8,
             }}
-            onSnapToItem={index => {
-              const nextPaletteId = PALETTE_IDS[index];
+            onScrollStart={() => {
+              if (paletteProgrammaticIndexRef.current !== null) {
+                paletteDragActiveRef.current = false;
+                paletteDragStartIndexRef.current = paletteProgrammaticIndexRef.current;
+                palettePreviewIndexRef.current = paletteProgrammaticIndexRef.current;
+                return;
+              }
+
+              paletteDragActiveRef.current = true;
+              paletteDragStartIndexRef.current = paletteIndex;
+              palettePreviewIndexRef.current = paletteIndex;
+            }}
+            onProgressChange={(_, absoluteProgress) => {
+              if (!paletteDragActiveRef.current) return;
+
+              const startIndex = paletteDragStartIndexRef.current;
+              const delta = absoluteProgress - startIndex;
+              const nextIndex = Math.max(
+                0,
+                Math.min(
+                  PALETTE_IDS.length - 1,
+                  delta >= 0.28
+                    ? startIndex + 1
+                    : delta <= -0.28
+                      ? startIndex - 1
+                      : startIndex,
+                ),
+              );
+
+              if (nextIndex === palettePreviewIndexRef.current) return;
+
+              palettePreviewIndexRef.current = nextIndex;
+              const nextPaletteId = PALETTE_IDS[nextIndex];
+
               if (nextPaletteId && nextPaletteId !== settings.paletteId) {
+                setSelectedPaletteId(nextPaletteId);
+                update({ paletteId: nextPaletteId });
+              }
+            }}
+            onScrollEnd={index => {
+              if (paletteProgrammaticIndexRef.current !== null) {
+                const nextIndex = paletteProgrammaticIndexRef.current;
+                paletteProgrammaticIndexRef.current = null;
+                paletteDragActiveRef.current = false;
+                paletteDragStartIndexRef.current = nextIndex;
+                palettePreviewIndexRef.current = nextIndex;
+
+                const nextPaletteId = PALETTE_IDS[nextIndex];
+                if (nextPaletteId && nextPaletteId !== settings.paletteId) {
+                  setSelectedPaletteId(nextPaletteId);
+                  update({ paletteId: nextPaletteId });
+                }
+                return;
+              }
+
+              const shouldHonorPreview = palettePreviewIndexRef.current !== paletteDragStartIndexRef.current;
+              const nextIndex = shouldHonorPreview ? palettePreviewIndexRef.current : index;
+              paletteDragActiveRef.current = false;
+              paletteDragStartIndexRef.current = nextIndex;
+              palettePreviewIndexRef.current = nextIndex;
+              if (nextIndex !== index) {
+                paletteCarouselRef.current?.scrollTo({ index: nextIndex, animated: true });
+              }
+              const nextPaletteId = PALETTE_IDS[nextIndex];
+              if (nextPaletteId && nextPaletteId !== settings.paletteId) {
+                setSelectedPaletteId(nextPaletteId);
                 update({ paletteId: nextPaletteId });
               }
             }}
@@ -1556,24 +1736,46 @@ export default function SettingsScreen() {
               <View
                 style={[
                   styles.paletteSlide,
-                  index === 0 && styles.paletteSlideFirst,
-                  index === PALETTE_IDS.length - 1 && styles.paletteSlideLast,
+                  { width: paletteCarouselWidth },
                 ]}>
                 <PaletteCard
                   paletteId={paletteId}
-                  selected={settings.paletteId === paletteId}
+                  selected={selectedPaletteId === paletteId}
                   resolvedMode={resolvedThemeMode}
                   onSelect={nextPaletteId => {
-                    update({ paletteId: nextPaletteId });
-                    paletteCarouselRef.current?.scrollTo({
-                      index: PALETTE_IDS.indexOf(nextPaletteId),
-                      animated: true,
-                    });
+                    selectPalette(nextPaletteId);
                   }}
                 />
               </View>
             )}
           />
+          <View style={styles.paletteDots}>
+            {PALETTE_IDS.map((paletteId) => {
+              const selected = paletteId === selectedPaletteId;
+              const dotPalette = getAppColors(paletteId, resolvedThemeMode);
+
+              return (
+                <Pressable
+                  key={paletteId}
+                  accessibilityRole="button"
+                  accessibilityLabel={t(PALETTE_TRANSLATION_KEYS[paletteId].name)}
+                  accessibilityState={{ selected }}
+                  hitSlop={8}
+                  onPress={() => {
+                    selectPalette(paletteId);
+                  }}
+                  style={[
+                    styles.paletteDot,
+                    {
+                      width: selected ? 26 : 8,
+                      backgroundColor: selected ? dotPalette.primary : colors.borderStrong,
+                      opacity: selected ? 1 : 0.62,
+                    },
+                  ]}
+                />
+              );
+            })}
+          </View>
         </View>
 
         <View style={styles.sectionMeta}>
@@ -1607,7 +1809,13 @@ export default function SettingsScreen() {
           </View>
         </View>
 
-        <View style={styles.sectionMeta}>
+        <View
+          style={styles.sectionMeta}
+          onLayout={event => {
+            const y = event.nativeEvent.layout.y;
+            languageSectionYRef.current = y;
+            flushPendingScrollTarget('language', y);
+          }}>
           <Text style={styles.sectionHeader}>{t('settingsLanguage')}</Text>
           <Text style={styles.sectionNote}>{t('settingsLanguageNote')}</Text>
         </View>
@@ -2284,16 +2492,26 @@ function createStyles(C: AppColors) {
     paletteEyebrow: { color: C.primary, fontSize: 10, fontWeight: '800', letterSpacing: 2.8 },
     paletteHeadline: { color: C.text, fontSize: 26, fontWeight: '700', letterSpacing: -0.7 },
     paletteBody: { color: C.textDim, fontSize: 13, lineHeight: 18, maxWidth: 320 },
-    paletteCarouselWrap: { marginHorizontal: -20, marginBottom: 4 },
+    paletteCarouselWrap: { marginHorizontal: -20, marginBottom: 4, alignItems: 'center' },
     paletteCarousel: { overflow: 'visible' },
     paletteSlide: {
-      width: PALETTE_CARD_WIDTH,
       paddingTop: 8,
       paddingBottom: 14,
+      alignItems: 'center',
       justifyContent: 'center',
     },
-    paletteSlideFirst: { paddingLeft: 20 },
-    paletteSlideLast: { paddingRight: 20 },
+    paletteDots: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      marginTop: -2,
+      marginBottom: 6,
+    },
+    paletteDot: {
+      height: 8,
+      borderRadius: 999,
+    },
     paletteCard: {
       width: PALETTE_CARD_WIDTH,
       minHeight: 206,
