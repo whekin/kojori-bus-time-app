@@ -3,6 +3,7 @@ import { describe, expect, it } from 'bun:test';
 
 import type { ArrivalTime, Departure, SchedulePeriod } from './ttc';
 import {
+  computeUpcomingDepartures,
   getDepartureServiceBoundary,
   getLastDepartureToday,
   getNextServiceDeparture,
@@ -127,22 +128,9 @@ describe('mergeArrivalsIntoSchedule', () => {
     expect(result.filter(dep => dep.bus === '316').map(dep => dep.status)).toEqual(['scheduled', 'live']);
   });
 
-  it('keeps just-past scheduled departures through the delay grace window', () => {
+  it('drops scheduled-only departures once their minute has started', () => {
     const departures = [
-      makeDeparture('380', -1, '17:49'),
-      makeDeparture('380', 12, '18:02'),
-    ];
-
-    const result = mergeArrivalsIntoSchedule(departures, [], new Date('2026-04-15T17:50:00Z'));
-
-    expect(result).toHaveLength(2);
-    expect(result[0].time).toBe('17:49');
-    expect(result[0].status).toBe('scheduled');
-  });
-
-  it('drops scheduled departures after the delay grace window', () => {
-    const departures = [
-      makeDeparture('380', -6, '17:44'),
+      makeDeparture('380', 0, '17:50'),
       makeDeparture('380', 12, '18:02'),
     ];
 
@@ -150,6 +138,38 @@ describe('mergeArrivalsIntoSchedule', () => {
 
     expect(result).toHaveLength(1);
     expect(result[0].time).toBe('18:02');
+    expect(result[0].status).toBe('scheduled');
+  });
+
+  it('drops past scheduled-only departures', () => {
+    const departures = [
+      makeDeparture('380', -1, '17:49'),
+      makeDeparture('380', 12, '18:02'),
+    ];
+
+    const result = mergeArrivalsIntoSchedule(departures, [], new Date('2026-04-15T17:50:00Z'));
+
+    expect(result).toHaveLength(1);
+    expect(result[0].time).toBe('18:02');
+  });
+
+  it('drops no-live current-minute scheduled departures at route-start stops', () => {
+    const departures = [
+      makeDeparture('316', 0, '15:00'),
+      makeDeparture('316', 1, '15:01'),
+    ];
+
+    const result = mergeArrivalsIntoSchedule(
+      departures,
+      [],
+      new Date('2026-04-15T15:00:00Z'),
+      undefined,
+      { stopId: '1:3932' },
+    );
+
+    expect(result).toHaveLength(1);
+    expect(result[0].time).toBe('15:01');
+    expect(result[0].status).toBe('scheduled');
   });
 
   it('shows delayed live arrivals whose scheduled departure is already in the past', () => {
@@ -170,6 +190,67 @@ describe('mergeArrivalsIntoSchedule', () => {
     expect(result[0].driftMinutes).toBe(5);
   });
 
+  it('keeps a just-passed schedule anchor for a delayed live trip', () => {
+    const departures = [
+      makeDeparture('316', -1, '22:13'),
+      makeDeparture('316', 26, '22:40'),
+    ];
+
+    const result = mergeArrivalsIntoSchedule(
+      departures,
+      [makeArrival('316', 3, -1)],
+      new Date('2026-04-15T22:14:00Z'),
+      undefined,
+      { stopId: '1:3932' },
+    );
+
+    expect(result[0].status).toBe('live');
+    expect(result[0].time).toBe('22:17');
+    expect(result[0].scheduledTime).toBe('22:13');
+    expect(result[0].driftMinutes).toBe(4);
+    expect(result[1].status).toBe('scheduled');
+  });
+
+  it('falls back to hard timetable matching when TTC scheduled ETA does not identify the trip', () => {
+    const departures = [
+      makeDeparture('316', -1, '22:13'),
+      makeDeparture('316', 26, '22:40'),
+    ];
+
+    const result = mergeArrivalsIntoSchedule(
+      departures,
+      [makeArrival('316', 3, 50)],
+      new Date('2026-04-15T22:14:00Z'),
+      undefined,
+      { stopId: '1:3932' },
+    );
+
+    expect(result[0].status).toBe('live');
+    expect(result[0].time).toBe('22:17');
+    expect(result[0].scheduledTime).toBe('22:13');
+    expect(result[0].driftMinutes).toBe(4);
+    expect(result[1].status).toBe('scheduled');
+  });
+
+  it('can attach an early live bus to a hard timetable row', () => {
+    const departures = [
+      makeDeparture('380', 24, '18:24'),
+      makeDeparture('380', 54, '18:54'),
+    ];
+
+    const result = mergeArrivalsIntoSchedule(
+      departures,
+      [makeArrival('380', 20, 80)],
+      new Date('2026-04-15T18:00:00Z'),
+    );
+
+    expect(result[0].status).toBe('live');
+    expect(result[0].time).toBe('18:20');
+    expect(result[0].scheduledTime).toBe('18:24');
+    expect(result[0].driftMinutes).toBe(-4);
+    expect(result[1].status).toBe('scheduled');
+  });
+
   it('adds unmatched live arrivals instead of requiring an active schedule row', () => {
     const result = mergeArrivalsIntoSchedule(
       [],
@@ -180,7 +261,8 @@ describe('mergeArrivalsIntoSchedule', () => {
     expect(result).toHaveLength(1);
     expect(result[0].status).toBe('live');
     expect(result[0].time).toBe('15:03');
-    expect(result[0].scheduledTime).toBe('14:50');
+    expect(result[0].scheduledTime).toBeUndefined();
+    expect(result[0].driftMinutes).toBeUndefined();
   });
 
   it('keeps live arrivals but drops stale TTC schedule anchors with absurd drift', () => {
@@ -427,5 +509,50 @@ describe('service boundary helpers', () => {
     expect(boundary.hasServiceToday).toBe(true);
     expect(boundary.finalDepartureToday?.time).toBe('21:52');
     expect(boundary.nextDepartureIsFinal).toBe(true);
+  });
+});
+
+describe('computeUpcomingDepartures', () => {
+  it('does not keep current-minute scheduled departures at route-start stops', () => {
+    const schedule316 = makeSchedule(['2026-04-15'], { '1:3932': '15:00,15:01,15:10' });
+
+    const result = computeUpcomingDepartures(
+      undefined,
+      schedule316,
+      '1:3932',
+      60,
+      new Date(2026, 3, 15, 15, 0),
+    );
+
+    expect(result.map(dep => dep.time)).toEqual(['15:01', '15:10']);
+  });
+
+  it('can include recent past departures as live matching anchors', () => {
+    const schedule316 = makeSchedule(['2026-04-15'], { '1:3932': '14:59,15:00,15:01,15:10' });
+
+    const result = computeUpcomingDepartures(
+      undefined,
+      schedule316,
+      '1:3932',
+      60,
+      new Date(2026, 3, 15, 15, 0),
+      { includeRecentPast: true },
+    );
+
+    expect(result.map(dep => dep.time)).toEqual(['14:59', '15:00', '15:01', '15:10']);
+  });
+
+  it('does not keep current-minute or past scheduled departures away from route-start stops', () => {
+    const schedule316 = makeSchedule(['2026-04-15'], { '1:2139': '14:58,15:00,15:10' });
+
+    const result = computeUpcomingDepartures(
+      undefined,
+      schedule316,
+      '1:2139',
+      60,
+      new Date(2026, 3, 15, 15, 0),
+    );
+
+    expect(result.map(dep => dep.time)).toEqual(['15:10']);
   });
 });

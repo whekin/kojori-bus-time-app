@@ -455,11 +455,16 @@ export interface DepartureServiceBoundary {
 }
 
 const LIVE_ARRIVAL_MATCH_WINDOW_MINUTES = 8;
+const LIVE_TIMETABLE_FALLBACK_MATCH_WINDOW_MINUTES = 20;
 const MAX_TRUSTED_LIVE_DRIFT_MINUTES = 60;
 const MAX_LIVE_ARRIVAL_AGE_MS = 2 * 60_000;
-const PAST_DEPARTURE_GRACE_MINUTES = 5;
+const MIN_SCHEDULED_DEPARTURE_MINUTES = 1;
 const SUSPICIOUS_ORIGIN_LIVE_MINUTES_MIN = 6;
 const SUSPICIOUS_ORIGIN_LIVE_MINUTES_MAX = 8;
+
+function isEarlyRouteStopId(stopId?: string) {
+  return Boolean(stopId && EARLY_ROUTE_STOP_IDS.has(resolveTtcLookupStopId(stopId)));
+}
 
 function scheduledDeparturesForDate(
   schedule380: SchedulePeriod[] | undefined,
@@ -595,10 +600,14 @@ export function computeUpcomingDepartures(
   stopId: string,
   horizonMins = 23 * 60,
   now = new Date(),
+  options: { includeRecentPast?: boolean } = {},
 ): Departure[] {
   const lookupStopId = resolveTtcLookupStopId(stopId);
   const nowMins = now.getHours() * 60 + now.getMinutes();
   const midnightWrapThresholdMins = 12 * 60;
+  const minMinsUntil = options.includeRecentPast
+    ? -LIVE_ARRIVAL_MATCH_WINDOW_MINUTES
+    : MIN_SCHEDULED_DEPARTURE_MINUTES;
   const result: Departure[] = [];
 
   const entries: [BusLine, SchedulePeriod[] | undefined][] = [
@@ -617,8 +626,9 @@ export function computeUpcomingDepartures(
       // Wrap only clearly next-day trips; slightly past departures should disappear.
       let minsUntil = mins - nowMins;
       if (minsUntil < -midnightWrapThresholdMins) minsUntil += 24 * 60;
-      // Allow up to 5 min past scheduled time — a late bus can still be coming.
-      if (minsUntil < -PAST_DEPARTURE_GRACE_MINUTES || minsUntil > horizonMins) continue;
+      // Scheduled-only rows should not pretend a bus is "Now".
+      // If a bus is still coming after schedule, TTC live data can surface it.
+      if (minsUntil < minMinsUntil || minsUntil > horizonMins) continue;
       result.push({
         key: `${bus}-${mins}`,
         bus,
@@ -667,9 +677,11 @@ export function mergeArrivalsIntoSchedule(
   const merged: Departure[] = [];
 
   for (const bus of ['380', '316'] as const) {
-    const scheduled = (byBus.get(bus) ?? [])
-      .filter(dep => dep.minsUntil >= -PAST_DEPARTURE_GRACE_MINUTES)
+    const scheduleCandidates = (byBus.get(bus) ?? [])
       .sort((a, b) => a.minsUntil - b.minsUntil);
+    const scheduled = scheduleCandidates.filter(
+      dep => dep.minsUntil >= MIN_SCHEDULED_DEPARTURE_MINUTES,
+    );
 
     const realtimeArrivals = useLiveArrivals
       ? arrivals
@@ -681,11 +693,11 @@ export function mergeArrivalsIntoSchedule(
           }))
           .filter(arrival => Number.isFinite(arrival.realtimeMinutes) && Number.isFinite(arrival.scheduledMinutes))
           .filter(arrival => arrival.realtimeMinutes > 0)
-          .filter(arrival => !isSuspiciousEarlyStopLiveArrival(arrival, scheduled, options.stopId))
+          .filter(arrival => !isSuspiciousEarlyStopLiveArrival(arrival, scheduleCandidates, options.stopId))
           .sort((a, b) => a.scheduledMinutes - b.scheduledMinutes)
       : [];
 
-    if (scheduled.length === 0) {
+    if (scheduleCandidates.length === 0) {
       merged.push(...realtimeArrivals.map<Departure>(arrival => liveDepartureFromArrival(bus, arrival, now)));
       continue;
     }
@@ -709,9 +721,9 @@ export function mergeArrivalsIntoSchedule(
       let closestIndex = -1;
       let closestDistance = Number.POSITIVE_INFINITY;
 
-      for (let index = 0; index < scheduled.length; index += 1) {
+      for (let index = 0; index < scheduleCandidates.length; index += 1) {
         if (usedScheduledIndexes.has(index)) continue;
-        const distance = Math.abs(scheduled[index].minsUntil - arrival.scheduledMinutes);
+        const distance = Math.abs(scheduleCandidates[index].minsUntil - arrival.scheduledMinutes);
         if (distance < closestDistance) {
           closestDistance = distance;
           closestIndex = index;
@@ -724,8 +736,31 @@ export function mergeArrivalsIntoSchedule(
       matchedByIndex.set(closestIndex, arrival);
     });
 
-    for (let index = 0; index < scheduled.length; index += 1) {
-      const dep = scheduled[index];
+    realtimeArrivals.forEach((arrival, arrivalIndex) => {
+      if (usedArrivalIndexes.has(arrivalIndex)) return;
+
+      let closestIndex = -1;
+      let closestDistance = Number.POSITIVE_INFINITY;
+
+      for (let index = 0; index < scheduleCandidates.length; index += 1) {
+        if (usedScheduledIndexes.has(index)) continue;
+        const driftMinutes = arrival.realtimeMinutes - scheduleCandidates[index].minsUntil;
+        const distance = Math.abs(driftMinutes);
+        if (distance > LIVE_TIMETABLE_FALLBACK_MATCH_WINDOW_MINUTES) continue;
+        if (distance < closestDistance) {
+          closestDistance = distance;
+          closestIndex = index;
+        }
+      }
+
+      if (closestIndex === -1) return;
+      usedScheduledIndexes.add(closestIndex);
+      usedArrivalIndexes.add(arrivalIndex);
+      matchedByIndex.set(closestIndex, arrival);
+    });
+
+    for (let index = 0; index < scheduleCandidates.length; index += 1) {
+      const dep = scheduleCandidates[index];
       const matchedArrival = matchedByIndex.get(index);
 
       if (matchedArrival != null) {
@@ -746,6 +781,8 @@ export function mergeArrivalsIntoSchedule(
         continue;
       }
 
+      if (dep.minsUntil < MIN_SCHEDULED_DEPARTURE_MINUTES) continue;
+
       merged.push({
         ...dep,
         status: 'scheduled',
@@ -763,7 +800,7 @@ export function mergeArrivalsIntoSchedule(
   }
 
   return merged
-    .filter(dep => dep.live || dep.minsUntil >= -PAST_DEPARTURE_GRACE_MINUTES)
+    .filter(dep => dep.live || dep.minsUntil >= MIN_SCHEDULED_DEPARTURE_MINUTES)
     .sort((a, b) => a.minsUntil - b.minsUntil);
 }
 
@@ -772,7 +809,7 @@ function isSuspiciousEarlyStopLiveArrival(
   scheduled: Departure[],
   stopId?: string,
 ) {
-  if (!stopId || !EARLY_ROUTE_STOP_IDS.has(stopId)) return false;
+  if (!isEarlyRouteStopId(stopId)) return false;
   if (
     arrival.reportedRealtimeMinutes < SUSPICIOUS_ORIGIN_LIVE_MINUTES_MIN ||
     arrival.reportedRealtimeMinutes > SUSPICIOUS_ORIGIN_LIVE_MINUTES_MAX
@@ -794,8 +831,6 @@ function liveDepartureFromArrival(
   arrival: { realtimeMinutes: number; scheduledMinutes: number },
   now: Date,
 ): Departure {
-  const driftMinutes = arrival.realtimeMinutes - arrival.scheduledMinutes;
-  const hasTrustedScheduleAnchor = Math.abs(driftMinutes) <= MAX_TRUSTED_LIVE_DRIFT_MINUTES;
   return {
     key: `${bus}-live-${arrival.scheduledMinutes}-${arrival.realtimeMinutes}`,
     bus,
@@ -804,10 +839,7 @@ function liveDepartureFromArrival(
     cancelled: false,
     time: formatFutureTime(arrival.realtimeMinutes, now),
     minsUntil: arrival.realtimeMinutes,
-    scheduledTime: hasTrustedScheduleAnchor ? formatFutureTime(arrival.scheduledMinutes, now) : undefined,
-    scheduledMinsUntil: hasTrustedScheduleAnchor ? arrival.scheduledMinutes : undefined,
     liveMinutes: arrival.realtimeMinutes,
-    driftMinutes: hasTrustedScheduleAnchor ? driftMinutes : undefined,
   };
 }
 

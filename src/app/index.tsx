@@ -502,7 +502,7 @@ function NextCard({
         backgroundColor: alpha(colors.surfaceHigh, "55"),
         borderColor: alpha(colors.borderStrong, "55"),
       };
-  const scheduledTime = dep.scheduledTime ?? dep.time;
+  const scheduledTime = dep.live ? dep.scheduledTime : dep.scheduledTime ?? dep.time;
   const countdownParts = splitCountdownLabel(minsLabel);
   return (
     <View style={styles.nextBlock}>
@@ -677,7 +677,14 @@ function ToKojoriView({
   );
 
   const rawDepartures = useMemo(
-    () => computeUpcomingDepartures(s380, s316, activeStopId, undefined, now),
+    () => computeUpcomingDepartures(
+      s380,
+      s316,
+      activeStopId,
+      undefined,
+      now,
+      { includeRecentPast: true },
+    ),
     [s380, s316, activeStopId, now],
   );
 
@@ -854,7 +861,14 @@ function ToTbilisiView({
   } = useArrivals(activeStopId, "toTbilisi", isActive);
 
   const rawDepartures = useMemo(
-    () => computeUpcomingDepartures(s380, s316, activeStopId, undefined, now),
+    () => computeUpcomingDepartures(
+      s380,
+      s316,
+      activeStopId,
+      undefined,
+      now,
+      { includeRecentPast: true },
+    ),
     [s380, s316, activeStopId, now],
   );
 

@@ -5,6 +5,7 @@
 
 - App builds can now receive Expo over-the-air updates through the configured EAS production and preview channels.
 - Next departure cards now lead with the time-until-arrival countdown while keeping the scheduled departure time and live/scheduled status visible.
+- Russian next-departure labels are shorter so the card header fits beside the route and live signal.
 - Live status dots now gently pulse while respecting reduced-motion settings.
 - Start screen destination cards now use brighter daytime artwork and higher-contrast overlay details in light mode.
 - Map direction switching now uses the same compact control as Departures and Timetable.
@@ -23,6 +24,7 @@
 - Android now keeps the app window background themed so physical devices do not show a white frame around the app.
 - Android status bar icons now switch between dark and light styles with the selected app theme.
 - Departures no longer infer cancelled buses from TTC live-data gaps, keep delayed live buses visible after their scheduled time, and ignore noisy seven-minute live ETAs at early route stops when the schedule says the bus is sooner.
+- Departures no longer keeps current-minute scheduled buses as "Now" when live data does not confirm them.
 - Elene Akhvlediani now consistently uses Baratashvili for TTC data lookups while staying selectable as the displayed stop.
 - Android widgets now open directly with the direction chooser and timetable, without the extra title and refresh row.
 - Settings subpages now use a proper back icon with a cleaner touch target.
@@ -30,6 +32,7 @@
 - Focused map stop markers now use the active route color consistently and a larger centered bus glyph.
 - Live delay badges in departure rows now get enough room for longer localized text.
 - Live arrivals with stale TTC schedule anchors now stay visible without showing absurd delay badges.
+- Live departures now show hard scheduled times when they can be matched to the timetable, without inventing scheduled times from live ETAs.
 - Map rendering now uses fewer native route overlays and delays ordinary stop markers until close zoom to avoid Android map freezes.
 - Live buses on the map now glide between TTC position updates, face along the route line, use route-aware speed caps, stop before the reported next stop, and stay still at route starts.
 - Live bus positions now refresh every 5 seconds while the Map tab is active.
