@@ -8,6 +8,8 @@
 - Departures no longer infer cancelled buses from TTC live-data gaps, keep delayed live buses visible after their scheduled time, and ignore noisy seven-minute live ETAs at early route stops when the schedule says the bus is sooner.
 - Elene Akhvlediani now consistently uses Baratashvili for TTC data lookups while staying selectable as the displayed stop.
 - Android widgets now open directly with the direction chooser and timetable, without the extra title and refresh row.
+- Map rendering now uses fewer native route overlays and delays ordinary stop markers until close zoom to avoid Android map freezes.
+- Saved map stop markers now use native Google map pins on Android instead of clipped custom marker views.
 
 ## v2026.5.20
 ### Improved

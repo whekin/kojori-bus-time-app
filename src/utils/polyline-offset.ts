@@ -14,6 +14,61 @@ function distanceMeters(a: PolylinePoint, b: PolylinePoint): number {
   return R * 2 * Math.atan2(Math.sqrt(s), Math.sqrt(1 - s));
 }
 
+function perpendicularDistanceMeters(
+  point: PolylinePoint,
+  segmentStart: PolylinePoint,
+  segmentEnd: PolylinePoint,
+): number {
+  const segmentLength = distanceMeters(segmentStart, segmentEnd);
+  if (segmentLength === 0) return distanceMeters(point, segmentStart);
+
+  const latRadians = (segmentStart.latitude * Math.PI) / 180;
+  const metersPerLatitudeDegree = 111_320;
+  const metersPerLongitudeDegree = metersPerLatitudeDegree * Math.cos(latRadians);
+  const pointX = (point.longitude - segmentStart.longitude) * metersPerLongitudeDegree;
+  const pointY = (point.latitude - segmentStart.latitude) * metersPerLatitudeDegree;
+  const endX = (segmentEnd.longitude - segmentStart.longitude) * metersPerLongitudeDegree;
+  const endY = (segmentEnd.latitude - segmentStart.latitude) * metersPerLatitudeDegree;
+  const projection = Math.max(0, Math.min(1, (pointX * endX + pointY * endY) / (endX * endX + endY * endY)));
+  const closestX = endX * projection;
+  const closestY = endY * projection;
+
+  return Math.hypot(pointX - closestX, pointY - closestY);
+}
+
+export function simplifyPolyline(points: PolylinePoint[], toleranceMeters = 10): PolylinePoint[] {
+  if (points.length <= 2) return points;
+
+  const keep = new Uint8Array(points.length);
+  const stack: [number, number][] = [[0, points.length - 1]];
+  keep[0] = 1;
+  keep[points.length - 1] = 1;
+
+  while (stack.length > 0) {
+    const range = stack.pop();
+    if (!range) continue;
+
+    const [startIndex, endIndex] = range;
+    let furthestIndex = -1;
+    let furthestDistance = 0;
+
+    for (let i = startIndex + 1; i < endIndex; i++) {
+      const distance = perpendicularDistanceMeters(points[i], points[startIndex], points[endIndex]);
+      if (distance > furthestDistance) {
+        furthestDistance = distance;
+        furthestIndex = i;
+      }
+    }
+
+    if (furthestIndex !== -1 && furthestDistance > toleranceMeters) {
+      keep[furthestIndex] = 1;
+      stack.push([startIndex, furthestIndex], [furthestIndex, endIndex]);
+    }
+  }
+
+  return points.filter((_, index) => keep[index] === 1);
+}
+
 /**
  * Linearly interpolate between two points at fraction t (0–1).
  */

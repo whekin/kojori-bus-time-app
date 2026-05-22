@@ -19,8 +19,8 @@ import { useRouteStops } from '@/hooks/use-route-stops';
 import { getDemoVehiclePositions, useVehiclePositions } from '@/hooks/use-vehicle-positions';
 import { useSettings } from '@/hooks/use-settings';
 import { useTabNav } from '@/hooks/use-tab-nav';
-import { findStop } from '@/services/ttc';
-import { splitPolylinesByOverlap } from '@/utils/polyline-offset';
+import { findStop, type StopInfo } from '@/services/ttc';
+import { simplifyPolyline, splitPolylinesByOverlap } from '@/utils/polyline-offset';
 
 const DEFAULT_REGION: Region = {
   latitude: 41.639,
@@ -96,52 +96,15 @@ function BusStopGlyph({
   );
 }
 
-function MapStopGlyph({ size, color }: { size: number; color: string }) {
-  const poleWidth = Math.max(1, Math.round(size * 0.1));
-  const dotSize = Math.max(2, Math.round(size * 0.2));
-  const poleHeight = Math.round(size * 0.58);
-  const busSize = Math.round(size * 0.68);
-
-  return (
-    <View style={{ width: size, height: size }}>
-      <View
-        style={{
-          position: 'absolute',
-          left: Math.round(size * 0.1),
-          top: Math.round(size * 0.18),
-          width: dotSize,
-          alignItems: 'center',
-        }}>
-        <View
-          style={{
-            width: dotSize,
-            height: dotSize,
-            borderRadius: dotSize / 2,
-            backgroundColor: color,
-          }}
-        />
-        <View
-          style={{
-            width: poleWidth,
-            height: poleHeight,
-            borderRadius: poleWidth / 2,
-            backgroundColor: color,
-          }}
-        />
-      </View>
-      <View style={{ position: 'absolute', left: Math.round(size * 0.32), top: Math.round(size * 0.14) }}>
-        <MaterialCommunityIcons name="bus" size={busSize} color={color} />
-      </View>
-    </View>
-  );
-}
-
 const VEHICLE_PIN_CANVAS_SIZE = 66;
 const VEHICLE_PIN_ANCHOR = { x: 0.5, y: 0.5 };
 const STOP_MARKER_ANCHOR = { x: 0.5, y: 0.5 };
+const NATIVE_STOP_PIN_ANCHOR = { x: 0.5, y: 1 };
 const MAP_MIN_ZOOM_LEVEL = 11;
 const SHOW_ORDINARY_STOPS_LAT_DELTA = 0.14;
 const FULL_STOP_MARKERS_LAT_DELTA = 0.055;
+const ROUTE_LINE_SIMPLIFY_TOLERANCE_METERS = 12;
+const SHARED_ROUTE_STRIPE_METERS = 260;
 const GOOGLE_DARK_MAP_STYLE = [
   { elementType: 'geometry', stylers: [{ color: '#1d1d1d' }] },
   { elementType: 'labels.text.stroke', stylers: [{ color: '#1d1d1d' }] },
@@ -155,6 +118,139 @@ const GOOGLE_DARK_MAP_STYLE = [
   { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#0f141a' }] },
   { featureType: 'water', elementType: 'labels.text.fill', stylers: [{ color: '#5f7a88' }] },
 ];
+
+type MapDirection = 'toKojori' | 'toTbilisi';
+
+function StopMarkerCallout({
+  stop,
+  iconColor,
+  stopNumberLabel,
+  tapHint,
+  styles,
+}: {
+  stop: StopInfo;
+  iconColor: string;
+  stopNumberLabel: string;
+  tapHint: string;
+  styles: ReturnType<typeof createStyles>;
+}) {
+  return (
+    <Callout tooltip>
+      <View style={styles.stopCallout}>
+        <View style={[styles.stopCalloutIcon, { backgroundColor: iconColor }]}>
+          <BusStopGlyph size={18} color="#FFFFFF" shiftY={0.14} />
+        </View>
+        <View style={styles.stopCalloutCopy}>
+          <Text style={styles.stopCalloutLabel} numberOfLines={2}>
+            {stop.label}
+          </Text>
+          <Text style={styles.stopCalloutCode}>{stopNumberLabel}</Text>
+          <Text style={styles.stopCalloutHint} numberOfLines={1}>
+            {tapHint}
+          </Text>
+        </View>
+      </View>
+    </Callout>
+  );
+}
+
+function StopMapMarker({
+  direction,
+  stop,
+  isPromoted,
+  isSimpleOrdinaryStop,
+  markerColor,
+  calloutIconColor,
+  stopNumberLabel,
+  tapHint,
+  styles,
+  resolvedThemeMode,
+  colors,
+  onPress,
+}: {
+  direction: MapDirection;
+  stop: StopInfo;
+  isPromoted: boolean;
+  isSimpleOrdinaryStop: boolean;
+  markerColor: string;
+  calloutIconColor: string;
+  stopNumberLabel: string;
+  tapHint: string;
+  styles: ReturnType<typeof createStyles>;
+  resolvedThemeMode: ReturnType<typeof useResolvedAppThemeMode>;
+  colors: ReturnType<typeof useAppColors>;
+  onPress: () => void;
+}) {
+  const markerSize = isSimpleOrdinaryStop ? 16 : 24;
+  const hitSize = isSimpleOrdinaryStop ? 32 : markerSize + 6;
+  const stopMarker = (
+    <StopMarkerCallout
+      stop={stop}
+      iconColor={calloutIconColor}
+      stopNumberLabel={stopNumberLabel}
+      tapHint={tapHint}
+      styles={styles}
+    />
+  );
+
+  if (isPromoted) {
+    return (
+      <Marker
+        key={`stop-${direction}-${stop.id}`}
+        coordinate={{ latitude: stop.lat!, longitude: stop.lon! }}
+        anchor={NATIVE_STOP_PIN_ANCHOR}
+        pinColor={markerColor}
+        title={stop.label}
+        description={stopNumberLabel}
+        onPress={onPress}
+        zIndex={6}>
+        {stopMarker}
+      </Marker>
+    );
+  }
+
+  return (
+    <Marker
+      key={`stop-${direction}-${stop.id}`}
+      coordinate={{ latitude: stop.lat!, longitude: stop.lon! }}
+      anchor={STOP_MARKER_ANCHOR}
+      tracksViewChanges={false}
+      title={stop.label}
+      description={stopNumberLabel}
+      onPress={onPress}
+      zIndex={4}>
+      <View
+        collapsable={false}
+        style={[
+          styles.stopMarkerOuter,
+          {
+            width: hitSize,
+            height: hitSize,
+            borderRadius: hitSize / 2,
+            backgroundColor: 'transparent',
+            opacity: isSimpleOrdinaryStop ? 0.78 : 0.82,
+          },
+        ]}>
+        <View
+          style={[
+            styles.stopMarker,
+            isSimpleOrdinaryStop && styles.simpleStopMarker,
+            {
+              width: markerSize,
+              height: markerSize,
+              borderRadius: isSimpleOrdinaryStop ? markerSize / 2 : 8,
+              borderColor: isSimpleOrdinaryStop ? alpha(colors.panel, 'D9') : alpha(colors.panel, 'E6'),
+              backgroundColor: isSimpleOrdinaryStop
+                ? alpha(markerColor, resolvedThemeMode === 'dark' ? 'D9' : 'EE')
+                : alpha(colors.map, resolvedThemeMode === 'dark' ? 'CC' : 'E8'),
+            },
+          ]}
+        />
+      </View>
+      {stopMarker}
+    </Marker>
+  );
+}
 
 export default function ExploreScreen({ isActive = false }: ExploreScreenProps) {
   const colors = useAppColors();
@@ -298,18 +394,23 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
 
     if (polyline380.length < 2 || polyline316.length < 2) {
       return {
-        '380': { exclusive: polyline380 },
-        '316': { exclusive: polyline316 },
+        '380': { exclusive: simplifyPolyline(polyline380, ROUTE_LINE_SIMPLIFY_TOLERANCE_METERS) },
+        '316': { exclusive: simplifyPolyline(polyline316, ROUTE_LINE_SIMPLIFY_TOLERANCE_METERS) },
         sharedZebra: [],
       };
     }
 
-    const split = splitPolylinesByOverlap(polyline380, polyline316, 40);
+    const split = splitPolylinesByOverlap(polyline380, polyline316, SHARED_ROUTE_STRIPE_METERS);
 
     return {
-      '380': { exclusive: split.route1.exclusive },
-      '316': { exclusive: split.route2.exclusive },
-      sharedZebra: split.sharedZebra,
+      '380': { exclusive: simplifyPolyline(split.route1.exclusive, ROUTE_LINE_SIMPLIFY_TOLERANCE_METERS) },
+      '316': { exclusive: simplifyPolyline(split.route2.exclusive, ROUTE_LINE_SIMPLIFY_TOLERANCE_METERS) },
+      sharedZebra: split.sharedZebra
+        .map(segment => ({
+          ...segment,
+          coords: simplifyPolyline(segment.coords, ROUTE_LINE_SIMPLIFY_TOLERANCE_METERS),
+        }))
+        .filter(segment => segment.coords.length >= 2),
     };
   }, [routePolylines]);
 
@@ -326,7 +427,7 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
     : currentRegion.latitudeDelta >= FULL_STOP_MARKERS_LAT_DELTA
       ? 'mid'
       : 'close';
-  const showOrdinaryStopMarkers = stopMarkerZoomTier !== 'overview';
+  const showOrdinaryStopMarkers = stopMarkerZoomTier === 'close';
   const favoriteStopIds = direction === 'toKojori' ? settings.tbilisiFavorites : settings.kojoriFavorites;
   const curatedStopIds = getCuratedStopIds(direction);
 
@@ -601,94 +702,28 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
           )
           : null}
         {showMarkers && stopMarkers.map(({ stop, isPromoted }) => {
-          const isOverviewZoom = stopMarkerZoomTier === 'overview';
           const isMidZoom = stopMarkerZoomTier === 'mid';
           const isSimpleOrdinaryStop = !isPromoted && isMidZoom;
-          const isCompactPromotedStop = isPromoted && (isOverviewZoom || isMidZoom);
-          const markerSize = isPromoted
-            ? isOverviewZoom ? 18 : isMidZoom ? 22 : 30
-            : isSimpleOrdinaryStop ? 16 : 24;
-          const hitSize = isPromoted
-            ? markerSize + (isOverviewZoom ? 10 : isMidZoom ? 8 : 10)
-            : isSimpleOrdinaryStop ? 32 : markerSize + 6;
-          const iconSize = isPromoted
-            ? isOverviewZoom ? 13 : isMidZoom ? 16 : 20
-            : isSimpleOrdinaryStop ? 0 : 17;
           const stopAccent = direction === 'toKojori' ? colors.route380 : colors.route316;
           const markerColor = isPromoted || isSimpleOrdinaryStop ? stopAccent : colors.map;
+          const stopNumberLabel = t('commonStopNumber', { id: stop.id.split(':')[1] ?? stop.id });
 
           return (
-            <Marker
+            <StopMapMarker
               key={`stop-${direction}-${stop.id}`}
-              coordinate={{ latitude: stop.lat!, longitude: stop.lon! }}
-              anchor={STOP_MARKER_ANCHOR}
-              tracksViewChanges={false}
-              title={stop.label}
-              description={t('commonStopNumber', { id: stop.id.split(':')[1] ?? stop.id })}
+              direction={direction}
+              stop={stop}
+              isPromoted={isPromoted}
+              isSimpleOrdinaryStop={isSimpleOrdinaryStop}
+              markerColor={markerColor}
+              calloutIconColor={isPromoted ? markerColor : colors.map}
+              stopNumberLabel={stopNumberLabel}
+              tapHint={t('mapStopTapActions')}
+              styles={styles}
+              resolvedThemeMode={resolvedThemeMode}
+              colors={colors}
               onPress={() => requestStopFocus(stop, direction)}
-              zIndex={isPromoted ? 6 : 4}>
-              <View
-                collapsable={false}
-                style={[
-                  styles.stopMarkerOuter,
-                  {
-                    width: hitSize,
-                    height: hitSize,
-                    borderRadius: hitSize / 2,
-                    backgroundColor: 'transparent',
-                    opacity: isPromoted ? isOverviewZoom ? 0.92 : 1 : isSimpleOrdinaryStop ? 0.78 : 0.82,
-                  },
-                ]}>
-                <View
-                  style={[
-                    styles.stopMarker,
-                    isPromoted && !isCompactPromotedStop && styles.favoriteStopMarker,
-                    isSimpleOrdinaryStop && styles.simpleStopMarker,
-                    {
-                      width: markerSize,
-                      height: markerSize,
-                      borderRadius: isSimpleOrdinaryStop || isCompactPromotedStop ? markerSize / 2 : isPromoted ? 10 : 8,
-                      borderColor: isSimpleOrdinaryStop
-                        ? alpha(colors.panel, 'D9')
-                        : isPromoted ? alpha(markerColor, 'D9') : alpha(colors.panel, 'E6'),
-                      backgroundColor: isSimpleOrdinaryStop
-                        ? alpha(markerColor, resolvedThemeMode === 'dark' ? 'D9' : 'EE')
-                        : isPromoted
-                        ? markerColor
-                        : alpha(colors.map, resolvedThemeMode === 'dark' ? 'CC' : 'E8'),
-                    },
-                  ]}>
-                  {isSimpleOrdinaryStop ? null : (
-                    <MapStopGlyph
-                      size={iconSize}
-                      color="#FFFFFF"
-                    />
-                  )}
-                </View>
-              </View>
-              <Callout tooltip>
-                <View style={styles.stopCallout}>
-                  <View
-                    style={[
-                      styles.stopCalloutIcon,
-                      { backgroundColor: isPromoted ? markerColor : colors.map },
-                    ]}>
-                    <BusStopGlyph size={18} color="#FFFFFF" shiftY={0.14} />
-                  </View>
-                  <View style={styles.stopCalloutCopy}>
-                    <Text style={styles.stopCalloutLabel} numberOfLines={2}>
-                      {stop.label}
-                    </Text>
-                    <Text style={styles.stopCalloutCode}>
-                      {t('commonStopNumber', { id: stop.id.split(':')[1] ?? stop.id })}
-                    </Text>
-                    <Text style={styles.stopCalloutHint} numberOfLines={1}>
-                      {t('mapStopTapActions')}
-                    </Text>
-                  </View>
-                </View>
-              </Callout>
-            </Marker>
+            />
           );
         })}
         {showMarkers && positions.map(position => {
@@ -1189,13 +1224,6 @@ function createStyles(C: ReturnType<typeof useAppColors>) {
     shadowRadius: 4,
     shadowOffset: { width: 0, height: 2 },
     elevation: 2,
-  },
-  favoriteStopMarker: {
-    borderWidth: 2,
-    shadowOpacity: 0,
-    shadowRadius: 0,
-    shadowOffset: { width: 0, height: 0 },
-    elevation: 0,
   },
   simpleStopMarker: {
     borderWidth: 1,
