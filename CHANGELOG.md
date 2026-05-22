@@ -7,6 +7,7 @@
 - Android status bar icons now switch between dark and light styles with the selected app theme.
 - Departures no longer infer cancelled buses from TTC live-data gaps, keep delayed live buses visible after their scheduled time, and ignore noisy seven-minute live ETAs at early route stops when the schedule says the bus is sooner.
 - Elene Akhvlediani now consistently uses Baratashvili for TTC data lookups while staying selectable as the displayed stop.
+- Android widgets now open directly with the direction chooser and timetable, without the extra title and refresh row.
 
 ## v2026.5.20
 ### Improved

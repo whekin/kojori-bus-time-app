@@ -22,7 +22,7 @@ class WidgetListFactory(
   private val context: Context,
   private val appWidgetId: Int,
 ) : RemoteViewsService.RemoteViewsFactory {
-  private enum class RowType { TITLE, TOGGLE, HEADER, DEPARTURE }
+  private enum class RowType { TOGGLE, HEADER, DEPARTURE }
   private data class WidgetRow(
     val id: Long,
     val type: RowType,
@@ -34,7 +34,6 @@ class WidgetListFactory(
   private data class Palette(val text: Int, val textDim: Int, val textFaint: Int, val route380: Int, val route316: Int)
 
   private var direction: String = "kojori"
-  private var isRefreshing: Boolean = false
   private var narrow: Boolean = false
   private var stopLabel: String = ""
   private var stopId: String = ""
@@ -56,7 +55,6 @@ class WidgetListFactory(
     val items = snapshot.optJSONArray("items") ?: return
 
     palette = readPalette(root)
-    isRefreshing = WidgetPrefs.getRefreshingUntil(context) > System.currentTimeMillis()
     narrow = isNarrow()
     val label = snapshot.optString("stopLabel", "")
     stopId = snapshot.optString("stopId", "")
@@ -89,7 +87,6 @@ class WidgetListFactory(
     }
 
     rows = buildList {
-      add(WidgetRow(id = 0L, type = RowType.TITLE))
       add(WidgetRow(id = 1L, type = RowType.TOGGLE))
       add(WidgetRow(id = 2L, type = RowType.HEADER))
       departures.forEachIndexed { index, row ->
@@ -115,7 +112,6 @@ class WidgetListFactory(
   override fun getViewAt(position: Int): RemoteViews {
     val row = rows[position]
     return when (row.type) {
-      RowType.TITLE -> titleRow()
       RowType.TOGGLE -> toggleRow()
       RowType.HEADER -> headerRow()
       RowType.DEPARTURE -> departureRow(row, position == rows.lastIndex)
@@ -126,22 +122,6 @@ class WidgetListFactory(
   override fun getViewTypeCount(): Int = RowType.entries.size
   override fun getItemId(position: Int): Long = rows[position].id
   override fun hasStableIds(): Boolean = true
-
-  private fun titleRow(): RemoteViews {
-    val views = RemoteViews(context.packageName, R.layout.widget_list_title)
-    val baseCity = if (direction == "kojori") localizedString("toKojori", "to Kojori") else localizedString("toTbilisi", "to Tbilisi")
-    val dotColor = if (direction == "kojori") palette.route380 else palette.route316
-    views.setTextViewText(R.id.title_text, baseCity)
-    views.setTextColor(R.id.title_text, palette.text)
-    views.setTextColor(R.id.title_dot, dotColor)
-    views.setTextColor(R.id.title_refresh_text, palette.textDim)
-    views.setViewVisibility(R.id.title_refresh_spinner, if (isRefreshing) View.VISIBLE else View.GONE)
-    views.setOnClickFillInIntent(R.id.title_root, openAppIntent())
-    views.setOnClickFillInIntent(R.id.title_refresh, baseActionIntent(KojoriBusWidgetProvider::class.java.name).apply {
-      action = "expo.modules.kojoriwidget.REFRESH"
-    })
-    return views
-  }
 
   private fun toggleRow(): RemoteViews {
     val views = RemoteViews(context.packageName, R.layout.widget_list_toggle)
