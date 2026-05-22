@@ -10,6 +10,7 @@ import { TtcStatusChip } from '@/components/ttc-status-banner';
 import { getCuratedStopIds } from '@/constants/curated-stops';
 import { alpha, BottomTabInset } from '@/constants/theme';
 import { useActiveDirection } from '@/hooks/use-active-direction';
+import { useArrivals } from '@/hooks/use-arrivals';
 import { useAppColors, useResolvedAppThemeMode } from '@/hooks/use-app-colors';
 import { useI18n } from '@/hooks/use-i18n';
 import { useMapFocus } from '@/hooks/use-map-focus';
@@ -51,6 +52,10 @@ type ExploreScreenProps = {
 
 function routeAccent(bus: '380' | '316', colors: ReturnType<typeof useAppColors>) {
   return bus === '380' ? colors.route380 : colors.route316;
+}
+
+function isTrackedBusLine(value: string): value is '380' | '316' {
+  return value === '380' || value === '316';
 }
 
 function BusStopGlyph({
@@ -752,6 +757,10 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
   const { data: toTbilisiRouteData } = useRoutePolylines('toTbilisi');
   const { stops: routeStops } = useRouteStops(direction);
   const { data: livePositions = [], refetch, isFetching } = useVehiclePositions(direction, isActive);
+  const {
+    arrivals: focusedStopArrivals,
+    isFetching: isFetchingFocusedStopArrivals,
+  } = useArrivals(focusedStop?.id ?? '', focusedStop?.direction, isActive && Boolean(focusedStop));
 
   useEffect(() => {
     if (!settings.cancelledBusDemo || !isActive) return;
@@ -837,6 +846,9 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
     typeof focusedStop?.lat === 'number' && typeof focusedStop.lon === 'number'
       ? { latitude: focusedStop.lat, longitude: focusedStop.lon }
       : null;
+  const focusedLiveArrivals = focusedStopArrivals
+    .filter(arrival => arrival.realtime && isTrackedBusLine(arrival.shortName))
+    .slice(0, 3);
 
   const splitPolylines = useMemo(() => {
     if (!routePolylines) return null;
@@ -1316,7 +1328,7 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
           styles.locateButton,
           {
             bottom: focusedStop
-              ? insets.bottom + BottomTabInset + 158
+              ? insets.bottom + BottomTabInset + 190
               : insets.bottom + BottomTabInset + 24,
           },
           isLocating && styles.locateButtonActive,
@@ -1378,6 +1390,44 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
                   </View>
                 ) : null}
               </View>
+              {focusedLiveArrivals.length > 0 || isFetchingFocusedStopArrivals ? (
+                <View style={styles.focusedStopLiveArrivals}>
+                  {focusedLiveArrivals.length > 0 ? focusedLiveArrivals.map(arrival => {
+                    const bus = arrival.shortName as '380' | '316';
+                    const busAccent = routeAccent(bus, colors);
+                    const minutes = Math.max(0, Math.round(arrival.realtimeArrivalMinutes));
+                    const minutesLabel = minutes < 1
+                      ? t('commonNow')
+                      : t('timePlusMinutes', { minutes });
+
+                    return (
+                      <View
+                        key={`${bus}-${arrival.patternSuffix}-${arrival.realtimeArrivalMinutes}`}
+                        style={[
+                          styles.focusedStopLiveArrivalChip,
+                          {
+                            borderColor: alpha(busAccent, '3D'),
+                            backgroundColor: alpha(busAccent, '16'),
+                          },
+                        ]}>
+                        <View style={[styles.focusedStopLiveBusBadge, { backgroundColor: busAccent }]}>
+                          <Text style={styles.focusedStopLiveBusText}>{bus}</Text>
+                        </View>
+                        <Text style={[styles.focusedStopLiveArrivalText, { color: busAccent }]}>
+                          {minutesLabel}
+                        </Text>
+                      </View>
+                    );
+                  }) : (
+                    <View style={[styles.focusedStopLiveArrivalChip, { borderColor: alpha(focusedStopAccent, '30') }]}>
+                      <MaterialCommunityIcons name="sync" size={13} color={focusedStopAccent} />
+                      <Text style={[styles.focusedStopLiveArrivalText, { color: focusedStopAccent }]}>
+                        {t('liveEstimate')}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              ) : null}
               <View
                 accessibilityLabel={t('mapStopActionsFor', { stop: focusedStop.label })}
                 style={styles.focusedStopTrayActions}>
@@ -1605,6 +1655,40 @@ function createStyles(C: ReturnType<typeof useAppColors>) {
     fontSize: 13,
     lineHeight: 16,
     fontWeight: '700',
+  },
+  focusedStopLiveArrivals: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 7,
+  },
+  focusedStopLiveArrivalChip: {
+    minHeight: 30,
+    borderRadius: 16,
+    borderWidth: 1,
+    paddingLeft: 5,
+    paddingRight: 9,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  focusedStopLiveBusBadge: {
+    minWidth: 34,
+    height: 20,
+    borderRadius: 10,
+    paddingHorizontal: 7,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  focusedStopLiveBusText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    lineHeight: 13,
+    fontWeight: '900',
+  },
+  focusedStopLiveArrivalText: {
+    fontSize: 12,
+    lineHeight: 15,
+    fontWeight: '800',
   },
   focusedStopTrayActions: {
     flexDirection: 'row',

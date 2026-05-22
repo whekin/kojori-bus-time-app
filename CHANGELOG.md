@@ -33,6 +33,7 @@
 - Live buses on the map now glide between TTC position updates, face along the route line, use route-aware speed caps, stop before the reported next stop, and stay still at route starts.
 - Live bus positions now refresh every 5 seconds while the Map tab is active.
 - Live bus markers now use a slightly translucent route pointer while keeping the route number readable.
+- Map stop details now show live arrival chips when a selected stop has realtime buses.
 - Ordinary map stops now use smaller route-colored dots that appear at mid zoom.
 - Saved map stop pins now shrink into compact dots when decluttered at far and upper-mid zooms, with Kojori Center kept visible first.
 - Saved map stop markers now use native Google map pins on Android instead of clipped custom marker views.
