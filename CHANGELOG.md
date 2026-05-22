@@ -5,6 +5,9 @@
 
 - Theme changes now use simpler Settings controls, preview appearance choices locally, and delay app-wide updates until after interactions to reduce freezes on slower devices.
 - The native map now unmounts while inactive, avoiding hidden map restyles during appearance changes.
+- Added Brake Dust, a downhill-rider theme with graphite surfaces, fork-gold route marks, pine green, and trail orange.
+- Sorbet theme colors now use stronger text, route, and status accents for better readability in light and dark mode.
+- Woodland Party light theme now uses slightly stronger pink and route accents for readability.
 
 ### Fixed
 
