@@ -6,6 +6,8 @@ import {
   StyleSheet,
   Text,
   type GestureResponderEvent,
+  type StyleProp,
+  type ViewStyle,
   useWindowDimensions,
   View,
 } from 'react-native';
@@ -79,7 +81,13 @@ function destinationLabel(
   return direction === 'toKojori' ? t('cityKojori') : t('cityTbilisi');
 }
 
-function DirectionSwitch({ accentColor }: { accentColor: string }) {
+export function DirectionSwitch({
+  accentColor,
+  style,
+}: {
+  accentColor: string;
+  style?: StyleProp<ViewStyle>;
+}) {
   const colors = useAppColors();
   const styles = useStopSelectorStyles();
   const { activeDirection, selectDirection } = useActiveDirection();
@@ -105,6 +113,7 @@ function DirectionSwitch({ accentColor }: { accentColor: string }) {
           borderColor: pressed ? alpha(accentColor, '55') : colors.border,
           backgroundColor: pressed ? colors.surfaceHigh : colors.surface,
         },
+        style,
       ]}>
       <View style={[styles.directionRouteSegment, { backgroundColor: accentColor }]}>
         <Text
@@ -279,12 +288,12 @@ export function StopSelector({
                 style={({ pressed }) => [
                   styles.changeStopButton,
                   {
-                    borderColor: pressed ? accentColor + '40' : colors.border,
-                    backgroundColor: pressed ? accentColor + '10' : colors.surfaceHigh,
+                    borderColor: accentColor + '30',
+                    backgroundColor: pressed ? accentColor + '18' : accentColor + '10',
                   },
                 ]}>
-                <MaterialCommunityIcons name="map-marker-outline" size={14} color={colors.textDim} />
-                <Text style={styles.changeStopButtonText} numberOfLines={1}>
+                <MaterialCommunityIcons name="swap-horizontal" size={14} color={accentColor} />
+                <Text style={[styles.changeStopButtonText, { color: accentColor }]} numberOfLines={1}>
                   {t('stopChange')}
                 </Text>
               </Pressable>
@@ -297,12 +306,12 @@ export function StopSelector({
                 style={({ pressed }) => [
                   styles.changeStopButton,
                   {
-                    borderColor: pressed ? accentColor + '40' : colors.border,
-                    backgroundColor: pressed ? accentColor + '10' : colors.surfaceHigh,
+                    borderColor: accentColor + '30',
+                    backgroundColor: pressed ? accentColor + '18' : accentColor + '10',
                   },
                 ]}>
-                <MaterialCommunityIcons name="plus" size={14} color={colors.textDim} />
-                <Text style={styles.changeStopButtonText} numberOfLines={1}>
+                <MaterialCommunityIcons name="plus" size={14} color={accentColor} />
+                <Text style={[styles.changeStopButtonText, { color: accentColor }]} numberOfLines={1}>
                   {t('commonAdd')}
                 </Text>
               </Pressable>

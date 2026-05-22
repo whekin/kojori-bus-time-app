@@ -26,8 +26,14 @@ import { useSettings, type SharedDirection } from '@/hooks/use-settings';
 
 const DISPLAY = Platform.select({ android: 'serif', ios: 'Georgia', default: 'serif' });
 const CARD_BACKGROUNDS = {
-  kojori: require('@/assets/images/start-kojori-card.png'),
-  tbilisi: require('@/assets/images/start-tbilisi-card.png'),
+  dark: {
+    kojori: require('@/assets/images/start-kojori-card.png'),
+    tbilisi: require('@/assets/images/start-tbilisi-card.png'),
+  },
+  light: {
+    kojori: require('@/assets/images/start-kojori-card-light.png'),
+    tbilisi: require('@/assets/images/start-tbilisi-card-light.png'),
+  },
 } as const;
 const APP_ICON = require('@/assets/images/icon.png');
 
@@ -124,10 +130,13 @@ export function StartScreen({ onDone }: { onDone: () => void }) {
             const sub = mode === 'kojori' ? t('startKojoriSub') : t('startTbilisiSub');
             const accent = mode === 'kojori' ? kojoriAccent : tbilisiAccent;
             const borderColor = alpha(accent, colors.mode === 'dark' ? '55' : '35');
-            const arrowColor = '#FFFFFF';
-            const arrowFill = colors.mode === 'dark' ? alpha(accent, '3D') : alpha('#05070B', '36');
-            const arrowBorder = colors.mode === 'dark' ? alpha('#FFFFFF', '54') : alpha(accent, '8A');
+            const arrowColor = colors.mode === 'light' ? colors.text : '#FFFFFF';
+            const arrowFill = colors.mode === 'dark' ? alpha(accent, '3D') : alpha('#FFFFFF', 'A8');
+            const arrowBorder = colors.mode === 'dark' ? alpha('#FFFFFF', '54') : alpha('#FFFFFF', 'E0');
+            const arrowShadowColor = colors.mode === 'light' ? '#FFFFFF' : '#000000';
+            const arrowShadowOpacity = colors.mode === 'light' ? 0.34 : 0.22;
             const cardShadow = alpha('#000000', colors.mode === 'dark' ? 'CC' : '9F');
+            const cardToColor = colors.mode === 'light' ? '#FFFFFF' : accent;
             return (
               <Pressable
                 key={mode}
@@ -142,7 +151,7 @@ export function StartScreen({ onDone }: { onDone: () => void }) {
                   },
                 ]}>
                 <ImageBackground
-                  source={CARD_BACKGROUNDS[mode]}
+                  source={CARD_BACKGROUNDS[colors.mode][mode]}
                   resizeMode="cover"
                   style={styles.cardImageBackground}
                   imageStyle={styles.cardImage}
@@ -150,7 +159,7 @@ export function StartScreen({ onDone }: { onDone: () => void }) {
                 <CardScrim mode={mode} colors={colors} accent={accent} />
                 <View style={styles.cardContent}>
                   <View style={styles.cardCopy}>
-                    <Text style={[styles.cardTo, resolvedLanguage === 'ka' && styles.cardToGeorgian, { color: accent, fontFamily: DISPLAY, textShadowColor: cardShadow }]}>{t('directionTo').trim()}</Text>
+                    <Text style={[styles.cardTo, resolvedLanguage === 'ka' && styles.cardToGeorgian, { color: cardToColor, fontFamily: DISPLAY, textShadowColor: cardShadow }]}>{t('directionTo').trim()}</Text>
                     <Text style={[styles.cardLabel, resolvedLanguage === 'ka' && styles.cardLabelGeorgian, { fontFamily: DISPLAY, textShadowColor: cardShadow }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.78}>{label}</Text>
                     <Text style={[styles.cardSub, { textShadowColor: cardShadow }]}>{sub}</Text>
                     {mode === 'kojori' ? (
@@ -163,7 +172,7 @@ export function StartScreen({ onDone }: { onDone: () => void }) {
                       </View>
                     ) : null}
                   </View>
-                  <View style={[styles.arrowButton, { backgroundColor: arrowFill, borderColor: arrowBorder }]}>
+                  <View style={[styles.arrowButton, { backgroundColor: arrowFill, borderColor: arrowBorder, shadowColor: arrowShadowColor, shadowOpacity: arrowShadowOpacity }]}>
                     <MaterialCommunityIcons name="arrow-right" size={29} color={arrowColor} />
                   </View>
                 </View>
@@ -278,6 +287,7 @@ function createStyles(C: AppColors) {
       width: 34,
       height: 34,
       borderRadius: 9,
+      tintColor: C.text,
     },
     brandName: {
       flex: 1,
@@ -372,10 +382,10 @@ function createStyles(C: AppColors) {
       borderBottomWidth: 15,
       borderLeftColor: 'transparent',
       borderRightColor: 'transparent',
-      borderBottomColor: alpha(C.route380, C.mode === 'dark' ? '66' : '55'),
+      borderBottomColor: C.mode === 'light' ? alpha('#FFFFFF', 'B8') : alpha(C.route380, '66'),
     },
     mountainPeakLeft: { left: 0 },
-    mountainPeakRight: { left: 11, borderBottomColor: alpha(C.route380, C.mode === 'dark' ? '99' : '85') },
+    mountainPeakRight: { left: 11, borderBottomColor: C.mode === 'light' ? alpha('#FFFFFF', 'E6') : alpha(C.route380, '99') },
     elevationText: {
       color: alpha('#FFFFFF', 'D6'),
       fontSize: 14,

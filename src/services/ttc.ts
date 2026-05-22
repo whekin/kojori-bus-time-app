@@ -438,7 +438,6 @@ export interface Departure {
   scheduledMinsUntil?: number;
   liveMinutes?: number; // realtime ETA in mins (only when live=true)
   driftMinutes?: number;
-  replacedCancelledDeparture?: DepartureSummary;
 }
 
 export interface ServiceDeparture extends DepartureSummary {
@@ -456,6 +455,7 @@ export interface DepartureServiceBoundary {
 }
 
 const LIVE_ARRIVAL_MATCH_WINDOW_MINUTES = 8;
+const MAX_TRUSTED_LIVE_DRIFT_MINUTES = 60;
 const MAX_LIVE_ARRIVAL_AGE_MS = 2 * 60_000;
 const PAST_DEPARTURE_GRACE_MINUTES = 5;
 const SUSPICIOUS_ORIGIN_LIVE_MINUTES_MIN = 6;
@@ -728,16 +728,18 @@ export function mergeArrivalsIntoSchedule(
       const matchedArrival = matchedByIndex.get(index);
 
       if (matchedArrival != null) {
+        const driftMinutes = matchedArrival.realtimeMinutes - dep.minsUntil;
+        const hasTrustedScheduleAnchor = Math.abs(driftMinutes) <= MAX_TRUSTED_LIVE_DRIFT_MINUTES;
         merged.push({
           ...dep,
           status: 'live',
           live: true,
           cancelled: false,
           time: formatFutureTime(matchedArrival.realtimeMinutes, now),
-          scheduledTime: dep.scheduledTime ?? dep.time,
-          scheduledMinsUntil: dep.minsUntil,
+          scheduledTime: hasTrustedScheduleAnchor ? (dep.scheduledTime ?? dep.time) : undefined,
+          scheduledMinsUntil: hasTrustedScheduleAnchor ? dep.minsUntil : undefined,
           liveMinutes: matchedArrival.realtimeMinutes,
-          driftMinutes: matchedArrival.realtimeMinutes - matchedArrival.scheduledMinutes,
+          driftMinutes: hasTrustedScheduleAnchor ? driftMinutes : undefined,
           minsUntil: matchedArrival.realtimeMinutes,
         });
         continue;
@@ -791,6 +793,8 @@ function liveDepartureFromArrival(
   arrival: { realtimeMinutes: number; scheduledMinutes: number },
   now: Date,
 ): Departure {
+  const driftMinutes = arrival.realtimeMinutes - arrival.scheduledMinutes;
+  const hasTrustedScheduleAnchor = Math.abs(driftMinutes) <= MAX_TRUSTED_LIVE_DRIFT_MINUTES;
   return {
     key: `${bus}-live-${arrival.scheduledMinutes}-${arrival.realtimeMinutes}`,
     bus,
@@ -799,14 +803,14 @@ function liveDepartureFromArrival(
     cancelled: false,
     time: formatFutureTime(arrival.realtimeMinutes, now),
     minsUntil: arrival.realtimeMinutes,
-    scheduledTime: formatFutureTime(arrival.scheduledMinutes, now),
-    scheduledMinsUntil: arrival.scheduledMinutes,
+    scheduledTime: hasTrustedScheduleAnchor ? formatFutureTime(arrival.scheduledMinutes, now) : undefined,
+    scheduledMinsUntil: hasTrustedScheduleAnchor ? arrival.scheduledMinutes : undefined,
     liveMinutes: arrival.realtimeMinutes,
-    driftMinutes: arrival.realtimeMinutes - arrival.scheduledMinutes,
+    driftMinutes: hasTrustedScheduleAnchor ? driftMinutes : undefined,
   };
 }
 
-export function injectCancelledDemo(
+export function injectLiveDelayDemo(
   departures: Departure[],
   now = new Date(),
 ): Departure[] {
@@ -838,24 +842,10 @@ export function injectCancelledDemo(
     liveMinutes: demoDelay,
     driftMinutes: demoDelay - scheduledSummary.minsUntil,
     minsUntil: demoDelay,
-    replacedCancelledDeparture: scheduledSummary,
-  };
-
-  const demoCancelled: Departure = {
-    ...demoTarget,
-    status: 'cancelled',
-    live: false,
-    cancelled: true,
-    scheduledTime: scheduledSummary.time,
-    scheduledMinsUntil: scheduledSummary.minsUntil,
   };
 
   const rest = base.filter(dep => dep.key !== demoTarget.key);
-  return [demoCancelled, demoLive, ...rest]
+  return [demoLive, ...rest]
     .filter(dep => dep.minsUntil >= 0)
-    .sort((a, b) => {
-      if (a.status === 'cancelled' && b.status !== 'cancelled' && a.key === demoTarget.key) return -1;
-      if (b.status === 'cancelled' && a.status !== 'cancelled' && b.key === demoTarget.key) return 1;
-      return a.minsUntil - b.minsUntil;
-    });
+    .sort((a, b) => a.minsUntil - b.minsUntil);
 }

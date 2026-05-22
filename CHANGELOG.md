@@ -1,6 +1,14 @@
 # Changelog
 
 ## [UNRELEASED]
+### Improved
+
+- Start screen destination cards now use brighter daytime artwork and higher-contrast overlay details in light mode.
+- Map direction switching now uses the same compact control as Departures and Timetable.
+- Stop selector rows now reserve route accent colors for selected states and use consistent action-button tinting, making unselected stops easier to scan.
+- Settings overview now uses tappable status cards instead of a cramped three-column summary strip.
+- The bottom navigation now uses a compact rounded floating bar with a softer active tab highlight.
+
 ### Fixed
 
 - Android now keeps the app window background themed so physical devices do not show a white frame around the app.
@@ -8,8 +16,13 @@
 - Departures no longer infer cancelled buses from TTC live-data gaps, keep delayed live buses visible after their scheduled time, and ignore noisy seven-minute live ETAs at early route stops when the schedule says the bus is sooner.
 - Elene Akhvlediani now consistently uses Baratashvili for TTC data lookups while staying selectable as the displayed stop.
 - Android widgets now open directly with the direction chooser and timetable, without the extra title and refresh row.
+- Settings subpages now use a proper back icon with a cleaner touch target.
+- Demo mode no longer creates fake cancelled departures.
+- Live delay badges in departure rows now get enough room for longer localized text.
+- Live arrivals with stale TTC schedule anchors now stay visible without showing absurd delay badges.
 - Map rendering now uses fewer native route overlays and delays ordinary stop markers until close zoom to avoid Android map freezes.
 - Saved map stop markers now use native Google map pins on Android instead of clipped custom marker views.
+- The start screen app icon now stays visible in light mode.
 
 ## v2026.5.20
 ### Improved

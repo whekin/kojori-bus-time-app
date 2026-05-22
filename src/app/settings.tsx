@@ -1376,6 +1376,46 @@ export default function SettingsScreen() {
     );
   }
 
+  function renderSummaryAction({
+    section,
+    icon,
+    title,
+    value,
+    detail,
+    accentColor,
+  }: {
+    section: SettingsSection;
+    icon: React.ComponentProps<typeof MaterialCommunityIcons>['name'];
+    title: string;
+    value: string;
+    detail: string;
+    accentColor: string;
+  }) {
+    return (
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={t('settingsOpenSectionA11y', { section: title, summary: `${value}. ${detail}` })}
+        onPress={() => setActiveSection(section)}
+        style={({ pressed }) => [
+          styles.summaryAction,
+          {
+            borderColor: pressed ? alpha(accentColor, '42') : colors.border,
+            backgroundColor: pressed ? alpha(accentColor, '10') : colors.panel,
+          },
+        ]}>
+        <View style={[styles.summaryActionIcon, { backgroundColor: alpha(accentColor, '12') }]}>
+          <MaterialCommunityIcons name={icon} size={18} color={accentColor} />
+        </View>
+        <View style={styles.summaryActionCopy}>
+          <Text style={styles.summaryActionLabel}>{title}</Text>
+          <Text style={styles.summaryActionValue}>{value}</Text>
+          <Text style={styles.summaryActionDetail}>{detail}</Text>
+        </View>
+        <MaterialCommunityIcons name="chevron-right" size={18} color={colors.textFaint} />
+      </Pressable>
+    );
+  }
+
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
       <View style={styles.header}>
@@ -1384,8 +1424,9 @@ export default function SettingsScreen() {
             accessibilityRole="button"
             accessibilityLabel={t('settingsBackToSections')}
             onPress={() => setActiveSection(null)}
+            hitSlop={8}
             style={({ pressed }) => [styles.headerBackButton, pressed && { backgroundColor: colors.panel }]}>
-            <Text style={styles.headerBackText}>←</Text>
+            <MaterialCommunityIcons name="arrow-left" size={24} color={colors.text} />
           </Pressable>
         ) : null}
         <Text style={styles.headerTitle}>{headerTitle}</Text>
@@ -1398,21 +1439,31 @@ export default function SettingsScreen() {
         showsVerticalScrollIndicator={false}>
         {activeSection === null ? (
           <>
-            <View style={styles.summaryStrip}>
-              <View style={styles.summaryItem}>
-                <Text style={styles.summaryLabel}>{t('settingsSectionAppearance')}</Text>
-                <Text style={styles.summaryValue} numberOfLines={1}>{activePaletteLabel}</Text>
-              </View>
-              <View style={styles.summaryDivider} />
-              <View style={styles.summaryItem}>
-                <Text style={styles.summaryLabel}>{t('settingsSectionCommute')}</Text>
-                <Text style={styles.summaryValue} numberOfLines={1}>{launchBehaviorStatus.title}</Text>
-              </View>
-              <View style={styles.summaryDivider} />
-              <View style={styles.summaryItem}>
-                <Text style={styles.summaryLabel}>{t('settingsSectionData')}</Text>
-                <Text style={styles.summaryValue} numberOfLines={1}>{formatOfflineStatus(offlineStatus, t)}</Text>
-              </View>
+            <View style={styles.summaryActionStack}>
+              {renderSummaryAction({
+                section: 'appearance',
+                icon: 'palette-outline',
+                title: t('settingsSectionAppearance'),
+                value: activePaletteLabel,
+                detail: activeThemeLabel,
+                accentColor: colors.primary,
+              })}
+              {renderSummaryAction({
+                section: 'commute',
+                icon: 'map-marker-path',
+                title: t('settingsSectionCommute'),
+                value: launchBehaviorStatus.title,
+                detail: formatCount('stops', totalFavoriteStops),
+                accentColor: colors.route380,
+              })}
+              {renderSummaryAction({
+                section: 'data',
+                icon: 'database-sync-outline',
+                title: t('settingsSectionData'),
+                value: formatOfflineStatus(offlineStatus, t),
+                detail: savedDatasetLabel,
+                accentColor: colors.warning,
+              })}
             </View>
             <View style={styles.sectionCardStack}>
               {renderSectionCard({
@@ -2152,26 +2203,57 @@ function createStyles(C: AppColors) {
       alignItems: 'center',
       justifyContent: 'center',
     },
-    headerBackText: { color: C.text, fontSize: 24, lineHeight: 28, fontWeight: '600' },
     headerSpacer: { width: 36 },
     scroll: { flex: 1 },
     scrollContent: { paddingHorizontal: 20 },
 
-    summaryStrip: {
+    summaryActionStack: {
       marginTop: 18,
+      gap: 10,
+    },
+    summaryAction: {
       flexDirection: 'row',
-      alignItems: 'stretch',
-      minHeight: 74,
+      alignItems: 'center',
+      minHeight: 76,
       borderRadius: 16,
       borderWidth: 1,
-      borderColor: C.border,
-      backgroundColor: C.panel,
-      overflow: 'hidden',
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      gap: 12,
     },
-    summaryItem: { flex: 1, minWidth: 0, paddingHorizontal: 12, paddingVertical: 12, justifyContent: 'space-between', gap: 6 },
-    summaryLabel: { color: C.textFaint, fontSize: 9, fontWeight: '800', letterSpacing: 1.2, textTransform: 'uppercase' },
-    summaryValue: { color: C.text, fontSize: 12, fontWeight: '700', lineHeight: 16 },
-    summaryDivider: { width: 1, backgroundColor: C.border },
+    summaryActionIcon: {
+      width: 38,
+      height: 38,
+      borderRadius: 19,
+      alignItems: 'center',
+      justifyContent: 'center',
+      flexShrink: 0,
+    },
+    summaryActionCopy: {
+      flex: 1,
+      minWidth: 0,
+      gap: 3,
+    },
+    summaryActionLabel: {
+      color: C.textFaint,
+      fontSize: 10,
+      fontWeight: '800',
+      letterSpacing: 1.5,
+      textTransform: 'uppercase',
+    },
+    summaryActionValue: {
+      color: C.text,
+      fontSize: 17,
+      lineHeight: 21,
+      fontWeight: '800',
+      letterSpacing: -0.2,
+    },
+    summaryActionDetail: {
+      color: C.textDim,
+      fontSize: 12,
+      lineHeight: 16,
+      fontWeight: '600',
+    },
     sectionCardStack: { marginTop: 18, gap: 12 },
     sectionCard: {
       minHeight: 94,

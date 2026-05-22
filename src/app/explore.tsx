@@ -5,7 +5,7 @@ import { Animated, BackHandler, Easing, Pressable, StyleSheet, Text, View } from
 import MapView, { Callout, Marker, Polyline, type MapMarker, type MapPressEvent, type Region } from 'react-native-maps';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { DirectionPill } from '@/components/direction-picker';
+import { DirectionSwitch } from '@/components/stop-selector';
 import { TtcStatusChip } from '@/components/ttc-status-banner';
 import { getCuratedStopIds } from '@/constants/curated-stops';
 import { alpha, BottomTabInset } from '@/constants/theme';
@@ -837,9 +837,9 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
 
       {/* Top controls */}
       <View style={[styles.topPanel, { top: insets.top + 12 }]}>
-        <DirectionPill
+        <DirectionSwitch
           accentColor={direction === 'toKojori' ? colors.route380 : colors.route316}
-          style={styles.directionPill}
+          style={styles.directionSwitch}
         />
 
         <View style={styles.legendRow}>
@@ -1038,9 +1038,8 @@ function createStyles(C: ReturnType<typeof useAppColors>) {
     right: 16,
     gap: 8,
   },
-  directionPill: {
+  directionSwitch: {
     alignSelf: 'flex-start',
-    backgroundColor: `${C.panel}E6`,
   },
   legendRow: {
     flexDirection: 'row',

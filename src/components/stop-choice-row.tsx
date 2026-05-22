@@ -66,7 +66,12 @@ export function StopChoiceRow({
     onRemove?.();
   }
 
+  const quietControlColor = colors.mode === 'light' ? colors.textFaint : colors.textDim;
+  const quietBackground = colors.mode === 'light' ? colors.surface : colors.surfaceRaised;
+  const selectedBackground = alpha(accentColor, colors.mode === 'light' ? '0B' : '14');
   const stateColor = selected ? accentColor : colors.borderStrong;
+  const actionColor = selected ? accentColor : quietControlColor;
+  const hintColor = selected ? colors.textDim : quietControlColor;
 
   const rowContent = (
     <>
@@ -75,13 +80,13 @@ export function StopChoiceRow({
           styles.state,
           {
             borderColor: stateColor,
-            backgroundColor: selected ? alpha(accentColor, '22') : colors.panel,
+            backgroundColor: selected ? alpha(accentColor, '22') : colors.surface,
           },
         ]}>
         {selected && showCheck ? (
           <MaterialCommunityIcons name="check" size={14} color={accentColor} />
         ) : (
-          <View style={[styles.stateDot, { backgroundColor: selected ? accentColor : colors.borderStrong }]} />
+          <View style={[styles.stateDot, { backgroundColor: selected ? accentColor : alpha(colors.borderStrong, '66') }]} />
         )}
       </View>
 
@@ -92,15 +97,22 @@ export function StopChoiceRow({
             {stop.label}
           </Text>
           {curation?.badge ? (
-            <View style={[styles.badge, { borderColor: alpha(accentColor, '45'), backgroundColor: alpha(accentColor, '10') }]}>
-              <Text style={[styles.badgeText, { color: accentColor }]} numberOfLines={1}>
+            <View
+              style={[
+                styles.badge,
+                {
+                  borderColor: selected ? alpha(accentColor, '45') : colors.border,
+                  backgroundColor: selected ? alpha(accentColor, '10') : colors.surfaceHigh,
+                },
+              ]}>
+              <Text style={[styles.badgeText, { color: selected ? accentColor : quietControlColor }]} numberOfLines={1}>
                 {curation.badge}
               </Text>
             </View>
           ) : null}
         </View>
         {curation?.hint ? (
-          <Text style={styles.hint} numberOfLines={2}>
+          <Text style={[styles.hint, { color: hintColor }]} numberOfLines={2}>
             {curation.hint}
           </Text>
         ) : null}
@@ -113,8 +125,14 @@ export function StopChoiceRow({
           accessibilityLabel={t('stopShowOnMap', { stop: stop.label })}
           hitSlop={8}
           onPress={handleMapPress}
-          style={[styles.iconButton, { borderColor: alpha(accentColor, '35'), backgroundColor: alpha(accentColor, '0D') }]}>
-          <MaterialCommunityIcons name="map-marker-radius" size={17} color={accentColor} />
+          style={[
+            styles.iconButton,
+            {
+              borderColor: selected ? alpha(accentColor, '35') : colors.border,
+              backgroundColor: selected ? alpha(accentColor, '0D') : colors.surface,
+            },
+          ]}>
+          <MaterialCommunityIcons name="map-marker-radius" size={17} color={actionColor} />
         </Pressable>
         {onRemove ? (
           <Pressable
@@ -123,7 +141,7 @@ export function StopChoiceRow({
             hitSlop={8}
             onPress={handleRemovePress}
             style={[styles.iconButton, removeDisabled && styles.disabled]}>
-            <MaterialCommunityIcons name="close" size={17} color={accentColor} />
+            <MaterialCommunityIcons name="close" size={17} color={actionColor} />
           </Pressable>
         ) : null}
       </View>
@@ -134,7 +152,7 @@ export function StopChoiceRow({
     styles.row,
     {
       borderColor: selected ? alpha(accentColor, '55') : colors.border,
-      backgroundColor: selected ? alpha(accentColor, '10') : colors.surfaceRaised,
+      backgroundColor: selected ? selectedBackground : quietBackground,
     },
     disabled && styles.disabled,
   ];
@@ -154,10 +172,10 @@ export function StopChoiceRow({
         {
           borderColor: selected ? alpha(accentColor, '55') : colors.border,
           backgroundColor: selected
-            ? alpha(accentColor, '10')
+            ? selectedBackground
             : pressed
               ? colors.surfaceHigh
-              : colors.surfaceRaised,
+              : quietBackground,
         },
         disabled && styles.disabled,
       ]}>

@@ -34,7 +34,7 @@ import {
   Departure,
   findStop,
   getDepartureServiceBoundary,
-  injectCancelledDemo,
+  injectLiveDelayDemo,
   mergeArrivalsIntoSchedule,
   ROUTES,
   type DepartureServiceBoundary,
@@ -77,7 +77,16 @@ function getRealtimeStatus(
 ) {
   if (!dep.live) return null;
 
-  const drift = dep.driftMinutes ?? 0;
+  if (dep.driftMinutes == null) {
+    return {
+      label: t("liveEstimate"),
+      textColor: colors.live,
+      backgroundColor: alpha(colors.live, "14"),
+      borderColor: alpha(colors.live, "38"),
+    };
+  }
+
+  const drift = dep.driftMinutes;
   if (drift > 0) {
     return {
       label: t("liveLate", { minutes: drift }),
@@ -109,16 +118,17 @@ function routeColor(bus: BusLine, colors: ReturnType<typeof useAppColors>) {
 }
 
 function getDisplayedDepartures(departures: Departure[]) {
-  const next = departures.find((dep) => dep.status !== "cancelled");
+  const visibleDepartures = departures.filter(
+    (dep) => dep.status !== "cancelled" && !dep.cancelled,
+  );
+  const next = visibleDepartures[0];
   const hiddenKeys = new Set<string>();
 
   if (next) hiddenKeys.add(`${next.key}:${next.status}`);
-  if (next?.replacedCancelledDeparture)
-    hiddenKeys.add(`${next.replacedCancelledDeparture.key}:cancelled`);
 
   return {
     next,
-    upcoming: departures.filter(
+    upcoming: visibleDepartures.filter(
       (dep) => !hiddenKeys.has(`${dep.key}:${dep.status}`),
     ),
   };
@@ -281,22 +291,14 @@ function DepartureRow({ dep, isLast }: { dep: Departure; isLast: boolean }) {
   const { t } = useI18n();
   const countdown = formatMins(dep.minsUntil, t);
   const realtimeStatus = getRealtimeStatus(dep, colors, t);
-  const isCancelled = dep.status === "cancelled";
 
   return (
-    <View
-      style={[
-        styles.row,
-        isCancelled && styles.rowCancelled,
-        !isLast && styles.rowDivider,
-      ]}
-    >
+    <View style={[styles.row, !isLast && styles.rowDivider]}>
       <BusTag bus={dep.bus} />
       <View style={styles.rowMain}>
         <Text
           style={[
             styles.rowTime,
-            isCancelled && styles.rowTimeCancelled,
             { fontFamily: MONO },
           ]}
           numberOfLines={1}
@@ -330,99 +332,16 @@ function DepartureRow({ dep, isLast }: { dep: Departure; isLast: boolean }) {
               {realtimeStatus.label}
             </Text>
           </View>
-        ) : isCancelled ? (
-          <View
-            style={[
-              styles.cancelledBadgeSmall,
-              styles.rowMetaBadge,
-              {
-                backgroundColor: alpha(colors.warning, "12"),
-                borderColor: alpha(colors.warning, "30"),
-              },
-            ]}
-          >
-            <Text
-              style={[
-                styles.cancelledBadgeSmallText,
-                { color: colors.warning },
-              ]}
-              numberOfLines={1}
-            >
-              {t("homeLikelyCancelled")}
-            </Text>
-          </View>
         ) : null}
         <Text
           style={[
             styles.rowCountdown,
-            isCancelled && styles.rowCountdownCancelled,
-            isCancelled && { color: colors.warning },
             { fontFamily: MONO },
           ]}
           numberOfLines={1}
         >
-          {isCancelled ? t("homeSkip") : countdown}
+          {countdown}
         </Text>
-      </View>
-    </View>
-  );
-}
-
-function CancelledDepartureSlab({
-  dep,
-}: {
-  dep: NonNullable<Departure["replacedCancelledDeparture"]>;
-}) {
-  const colors = useAppColors();
-  const styles = useHomeStyles();
-  const { t } = useI18n();
-  return (
-    <View
-      style={[
-        styles.cancelledSlab,
-        {
-          borderColor: alpha(colors.warning, "30"),
-          backgroundColor: alpha(colors.warning, "10"),
-        },
-      ]}
-    >
-      <View style={styles.cancelledSlabHeader}>
-        <BusTag bus={dep.bus} />
-        <View style={styles.cancelledSlabCopy}>
-          <Text
-            style={[
-              styles.cancelledEyebrow,
-              { color: alpha(colors.warning, "CC") },
-            ]}
-          >
-            {t("homeScheduledBeforeLive")}
-          </Text>
-          <Text
-            style={[
-              styles.cancelledTime,
-              {
-                color: alpha(colors.warning, "F0"),
-                textDecorationColor: alpha(colors.warning, "C0"),
-                fontFamily: MONO,
-              },
-            ]}
-          >
-            {dep.time}
-          </Text>
-        </View>
-        <View
-          style={[
-            styles.cancelledPill,
-            {
-              backgroundColor: alpha(colors.warning, "18"),
-              borderColor: alpha(colors.warning, "38"),
-            },
-          ]}
-        >
-          <Text style={[styles.cancelledPillText, { color: colors.warning }]}>
-            {t("homeLikelyCancelled")}
-          </Text>
-        </View>
       </View>
     </View>
   );
@@ -596,9 +515,6 @@ function NextCard({
           </View>
         </View>
       </View>
-      {dep.replacedCancelledDeparture ? (
-        <CancelledDepartureSlab dep={dep.replacedCancelledDeparture} />
-      ) : null}
     </View>
   );
 }
@@ -694,7 +610,7 @@ function ToKojoriView({
       dataUpdatedAt,
       { stopId: activeStopId },
     );
-    return demoEnabled ? injectCancelledDemo(merged, now) : merged;
+    return demoEnabled ? injectLiveDelayDemo(merged, now) : merged;
   }, [rawDepartures, arrivals, now, dataUpdatedAt, activeStopId, demoEnabled]);
 
   const isLoading = l380 || l316;
@@ -871,7 +787,7 @@ function ToTbilisiView({
       dataUpdatedAt,
       { stopId: activeStopId },
     );
-    return demoEnabled ? injectCancelledDemo(merged, now) : merged;
+    return demoEnabled ? injectLiveDelayDemo(merged, now) : merged;
   }, [rawDepartures, arrivals, now, dataUpdatedAt, activeStopId, demoEnabled]);
 
   const isLoading = l380 || l316;
@@ -1273,47 +1189,6 @@ function createStyles(C: AppColors) {
       fontWeight: "800",
       letterSpacing: -0.2,
     },
-    cancelledSlab: {
-      borderRadius: 18,
-      borderWidth: 1,
-      borderColor: alpha(C.warning, "30"),
-      backgroundColor: alpha(C.warning, "10"),
-      paddingHorizontal: 14,
-      paddingVertical: 13,
-    },
-    cancelledSlabHeader: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 12,
-    },
-    cancelledSlabCopy: { flex: 1, minWidth: 0, gap: 2 },
-    cancelledEyebrow: {
-      color: alpha(C.warning, "CC"),
-      fontSize: 10,
-      fontWeight: "800",
-      letterSpacing: 1.5,
-    },
-    cancelledTime: {
-      color: alpha(C.text, "A8"),
-      fontSize: 20,
-      fontWeight: "700",
-      textDecorationLine: "line-through",
-      textDecorationColor: alpha(C.warning, "C0"),
-    },
-    cancelledPill: {
-      borderRadius: 999,
-      paddingHorizontal: 10,
-      paddingVertical: 6,
-      backgroundColor: alpha(C.warning, "18"),
-      borderWidth: 1,
-      borderColor: alpha(C.warning, "38"),
-    },
-    cancelledPillText: {
-      color: C.warning,
-      fontSize: 11,
-      fontWeight: "800",
-      letterSpacing: 0.5,
-    },
     badge: {
       paddingHorizontal: 12,
       paddingVertical: 7,
@@ -1347,9 +1222,8 @@ function createStyles(C: AppColors) {
       paddingVertical: 15,
       gap: 14,
     },
-    rowCancelled: { opacity: 0.86 },
     rowDivider: { borderBottomWidth: 1, borderBottomColor: C.border },
-    rowMain: { flex: 1, minWidth: 0, gap: 3 },
+    rowMain: { flex: 1, minWidth: 74, gap: 3 },
     rowTime: {
       color: C.text,
       fontSize: 22,
@@ -1357,14 +1231,9 @@ function createStyles(C: AppColors) {
       letterSpacing: -0.3,
       minWidth: 0,
     },
-    rowTimeCancelled: {
-      color: alpha(C.text, "8F"),
-      textDecorationLine: "line-through",
-      textDecorationColor: alpha(C.warning, "B0"),
-    },
     rowMeta: {
-      width: 142,
-      flexShrink: 0,
+      maxWidth: "62%",
+      flexShrink: 1,
       alignItems: "flex-end",
       justifyContent: "center",
       gap: 7,
@@ -1376,7 +1245,6 @@ function createStyles(C: AppColors) {
       fontWeight: "500",
       textAlign: "right",
     },
-    rowCountdownCancelled: { color: C.warning },
 
     liveBadge: {
       flexDirection: "row",
@@ -1397,7 +1265,12 @@ function createStyles(C: AppColors) {
       borderRadius: 999,
       borderWidth: 1,
     },
-    liveBadgeSmallText: { fontSize: 11, fontWeight: "700", letterSpacing: 0.2 },
+    liveBadgeSmallText: {
+      flexShrink: 1,
+      fontSize: 11,
+      fontWeight: "700",
+      letterSpacing: 0.2,
+    },
     scheduledHint: {
       flexDirection: "row",
       alignItems: "center",
@@ -1414,20 +1287,6 @@ function createStyles(C: AppColors) {
     },
     scheduledHintTextCompact: {
       color: C.textFaint,
-      fontSize: 11,
-      fontWeight: "700",
-      letterSpacing: 0.2,
-    },
-    cancelledBadgeSmall: {
-      borderRadius: 999,
-      paddingHorizontal: 9,
-      paddingVertical: 5,
-      backgroundColor: alpha(C.warning, "12"),
-      borderWidth: 1,
-      borderColor: alpha(C.warning, "30"),
-    },
-    cancelledBadgeSmallText: {
-      color: C.warning,
       fontSize: 11,
       fontWeight: "700",
       letterSpacing: 0.2,

@@ -6,7 +6,7 @@ import {
   getDepartureServiceBoundary,
   getLastDepartureToday,
   getNextServiceDeparture,
-  injectCancelledDemo,
+  injectLiveDelayDemo,
   isFinalDepartureToday,
   mergeArrivalsIntoSchedule,
   resolveTtcLookupStopId,
@@ -183,6 +183,39 @@ describe('mergeArrivalsIntoSchedule', () => {
     expect(result[0].scheduledTime).toBe('14:50');
   });
 
+  it('keeps live arrivals but drops stale TTC schedule anchors with absurd drift', () => {
+    const result = mergeArrivalsIntoSchedule(
+      [],
+      [makeArrival('380', 71, -109)],
+      new Date(2026, 4, 22, 18, 15),
+    );
+
+    expect(result).toHaveLength(1);
+    expect(result[0].status).toBe('live');
+    expect(result[0].time).toBe('19:26');
+    expect(result[0].scheduledTime).toBeUndefined();
+    expect(result[0].scheduledMinsUntil).toBeUndefined();
+    expect(result[0].driftMinutes).toBeUndefined();
+  });
+
+  it('drops absurd drift metadata from matched live arrivals too', () => {
+    const departures = [
+      makeDeparture('380', -4, '18:11'),
+    ];
+
+    const result = mergeArrivalsIntoSchedule(
+      departures,
+      [makeArrival('380', 71, -4)],
+      new Date(2026, 4, 22, 18, 15),
+    );
+
+    expect(result).toHaveLength(1);
+    expect(result[0].status).toBe('live');
+    expect(result[0].time).toBe('19:26');
+    expect(result[0].scheduledTime).toBeUndefined();
+    expect(result[0].driftMinutes).toBeUndefined();
+  });
+
   it('suppresses suspicious seven-minute live arrivals at early route stops when schedule is sooner', () => {
     const departures = [
       makeDeparture('316', 1, '15:01'),
@@ -295,18 +328,20 @@ describe('mergeArrivalsIntoSchedule', () => {
   });
 });
 
-describe('injectCancelledDemo', () => {
-  it('injects one cancelled/live pair for first eligible scheduled departure', () => {
+describe('injectLiveDelayDemo', () => {
+  it('injects one delayed live departure without creating cancellations', () => {
     const departures = [
       makeDeparture('380', 6, '18:00'),
       makeDeparture('380', 21, '18:15'),
     ];
 
-    const result = injectCancelledDemo(departures, new Date('2026-04-15T17:54:00Z'));
+    const result = injectLiveDelayDemo(departures, new Date('2026-04-15T17:54:00Z'));
 
-    expect(result[0].status).toBe('cancelled');
-    expect(result[1].status).toBe('live');
-    expect(result[1].replacedCancelledDeparture?.time).toBe('18:00');
+    expect(result.some(dep => dep.status === 'cancelled')).toBe(false);
+    expect(result.some(dep => dep.cancelled)).toBe(false);
+    expect(result[0].status).toBe('live');
+    expect(result[0].scheduledTime).toBe('18:00');
+    expect(result[0].minsUntil).toBe(17);
   });
 });
 
