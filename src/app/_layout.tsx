@@ -2,6 +2,7 @@ import { DefaultTheme, ThemeProvider, type Theme } from '@react-navigation/nativ
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useGlobalSearchParams } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
+import { StatusBar } from 'expo-status-bar';
 import * as SystemUI from 'expo-system-ui';
 import React, { useEffect, useRef, useState } from 'react';
 import { BackHandler, StyleSheet, View } from 'react-native';
@@ -191,6 +192,11 @@ function AppThemeShell() {
 
   return (
     <ThemeProvider value={navigationTheme}>
+      <StatusBar
+        style={resolvedMode === 'light' ? 'dark' : 'light'}
+        translucent
+        backgroundColor="transparent"
+      />
       <View style={[styles.appSurface, { backgroundColor: colors.bg }]}>
         <AppReady />
       </View>
