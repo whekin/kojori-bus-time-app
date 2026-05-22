@@ -30,6 +30,7 @@
         "backgroundColor": "#09090B",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
+      "backgroundColor": "#0F0B10",
       "versionCode": 2026052000,
       "predictiveBackGestureEnabled": false
     },

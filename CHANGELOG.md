@@ -1,5 +1,10 @@
 # Changelog
 
+## [UNRELEASED]
+### Fixed
+
+- Android now keeps the app window background themed so physical devices do not show a white frame around the app.
+
 ## v2026.5.20
 ### Improved
 

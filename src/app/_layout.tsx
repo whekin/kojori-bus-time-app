@@ -2,6 +2,7 @@ import { DefaultTheme, ThemeProvider, type Theme } from '@react-navigation/nativ
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useGlobalSearchParams } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
+import * as SystemUI from 'expo-system-ui';
 import React, { useEffect, useRef, useState } from 'react';
 import { BackHandler, StyleSheet, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -152,6 +153,13 @@ function AppReady() {
 }
 
 const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+    backgroundColor: '#0F0B10',
+  },
+  appSurface: {
+    flex: 1,
+  },
   startOverlay: {
     ...StyleSheet.absoluteFill,
     zIndex: 10,
@@ -162,6 +170,10 @@ const styles = StyleSheet.create({
 function AppThemeShell() {
   const colors = useAppColors();
   const resolvedMode = useResolvedAppThemeMode();
+
+  useEffect(() => {
+    void SystemUI.setBackgroundColorAsync(colors.bg);
+  }, [colors.bg]);
 
   const navigationTheme: Theme = {
     dark: resolvedMode === 'dark',
@@ -179,14 +191,16 @@ function AppThemeShell() {
 
   return (
     <ThemeProvider value={navigationTheme}>
-      <AppReady />
+      <View style={[styles.appSurface, { backgroundColor: colors.bg }]}>
+        <AppReady />
+      </View>
     </ThemeProvider>
   );
 }
 
 export default function RootLayout() {
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
+    <GestureHandlerRootView style={styles.root}>
       <QueryClientProvider client={queryClient}>
         <SettingsProvider>
           <DirectionProvider>
