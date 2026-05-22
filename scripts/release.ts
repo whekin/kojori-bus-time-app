@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * Full release pipeline: preflight → changelog → bake TTC data → stamp version → prebuild → build APK → commit → tag → push → GitHub release.
+ * Full release pipeline: preflight → changelog → bake TTC data → stamp version → prebuild → build APK → commit → tag → push → GitHub release → EAS update.
  * Release notes are pulled from CHANGELOG.md. During normal development,
  * add notes under "## [UNRELEASED]"; release renames that heading to the
  * concrete version tag.
@@ -34,7 +34,8 @@ type Phase =
   | 'prebuild'
   | 'build'
   | 'commit_push'
-  | 'github_release';
+  | 'github_release'
+  | 'eas_update';
 
 type ReleaseState = {
   version: string;
@@ -91,6 +92,35 @@ function isDone(state: ReleaseState, phase: Phase) {
 
 function escapeRegExp(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function shellQuote(value: string) {
+  return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
+function stripMarkdown(value: string) {
+  return value
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    .replace(/[*_`#]/g, '')
+    .trim();
+}
+
+function releaseNoteBullets(notes: string) {
+  return notes
+    .split('\n')
+    .map(line => line.trim())
+    .filter(line => line.startsWith('- '))
+    .map(line => stripMarkdown(line.slice(2)))
+    .filter(Boolean);
+}
+
+function createUpdateMessage(version: string, notes: string) {
+  const bullets = releaseNoteBullets(notes);
+  const first = bullets[0];
+  if (!first) return `Kojoring Time v${version}`;
+
+  const suffix = bullets.length > 1 ? ` (+${bullets.length - 1} more)` : '';
+  return `Kojoring Time v${version}: ${first}${suffix}`;
 }
 
 function findChangelogSection(heading: string): string | null {
@@ -202,7 +232,7 @@ console.log(`Continue:    ${continueMode ? 'yes' : 'no'}`);
 
 // ── 1. Preflight ────────────────────────────────────────────────────────────
 
-step('1/7  Preflight');
+step('1/9  Preflight');
 
 if (!isDone(state, 'preflight')) {
   const status = String(run('git status --porcelain', { stdio: 'pipe' }) ?? '').trim();
@@ -250,7 +280,7 @@ if (!isDone(state, 'changelog')) {
 
 // ── 3. Bake TTC data ────────────────────────────────────────────────────────
 
-step('3/8  Bake TTC data');
+step('3/9  Bake TTC data');
 
 if (!isDone(state, 'bake_ttc')) {
   run('bun run bake:ttc');
@@ -262,7 +292,7 @@ if (!isDone(state, 'bake_ttc')) {
 
 // ── 4. Stamp version ────────────────────────────────────────────────────────
 
-step('4/8  Stamp version');
+step('4/9  Stamp version');
 
 if (!isDone(state, 'stamp')) {
   const appJson = JSON.parse(readFileSync(appJsonPath, 'utf-8'));
@@ -285,10 +315,10 @@ if (!isDone(state, 'stamp')) {
 
 // ── 5. Prebuild ─────────────────────────────────────────────────────────────
 
-step('5/8  Prebuild');
+step('5/9  Prebuild');
 
 if (!isDone(state, 'prebuild')) {
-  run('bunx --env-file=.env.local expo prebuild --platform android');
+  run('NODE_ENV=production EXPO_UPDATE_CHANNEL=production bunx --env-file=.env.local expo prebuild --platform android');
   console.log('Fresh native project ✓');
   markDone(state, 'prebuild');
 } else {
@@ -297,7 +327,7 @@ if (!isDone(state, 'prebuild')) {
 
 // ── 6. Build APK ────────────────────────────────────────────────────────────
 
-step('6/8  Build APK');
+step('6/9  Build APK');
 
 if (!isDone(state, 'build')) {
   run('cd android && ./gradlew --stop', { allowFailure: true });
@@ -317,7 +347,7 @@ if (!isDone(state, 'build')) {
 
 // ── 7. Commit, tag, push ────────────────────────────────────────────────────
 
-step('7/8  Commit & push');
+step('7/9  Commit & push');
 
 if (!isDone(state, 'commit_push')) {
   run('git add app.json package.json CHANGELOG.md assets/ttc-baked.ts');
@@ -344,7 +374,7 @@ if (!isDone(state, 'commit_push')) {
 
 // ── 8. GitHub release ───────────────────────────────────────────────────────
 
-step('8/8  GitHub release');
+step('8/9  GitHub release');
 
 if (!isDone(state, 'github_release')) {
   const apkName = `kojoring-time-${tag}.apk`;
@@ -366,6 +396,22 @@ if (!isDone(state, 'github_release')) {
 
   console.log(`\n🎉 Release ${tag} published!`);
   markDone(state, 'github_release');
+}
+
+// ── 9. EAS update ──────────────────────────────────────────────────────────
+
+step('9/9  EAS update');
+
+if (!isDone(state, 'eas_update')) {
+  const updateMessage = createUpdateMessage(version, releaseNotes);
+  run(
+    `NODE_ENV=production bunx eas update --channel production --environment production --message ${shellQuote(updateMessage)} --non-interactive`
+  );
+
+  console.log(`EAS production update published: ${updateMessage}`);
+  markDone(state, 'eas_update');
+} else {
+  console.log('Already completed ✓');
 }
 
 clearState();

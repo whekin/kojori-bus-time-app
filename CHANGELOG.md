@@ -3,6 +3,7 @@
 ## [UNRELEASED]
 ### Improved
 
+- App builds can now receive Expo over-the-air updates through the configured EAS production and preview channels.
 - Next departure cards now lead with the time-until-arrival countdown while keeping the scheduled departure time and live/scheduled status visible.
 - Live status dots now gently pulse while respecting reduced-motion settings.
 - Start screen destination cards now use brighter daytime artwork and higher-contrast overlay details in light mode.
@@ -39,6 +40,10 @@
 - Saved map stop markers now use native Google map pins on Android instead of clipped custom marker views.
 - Saved map stop markers now use route-colored bus-stop icons instead of Google's brighter native pin tint.
 - The start screen app icon now stays visible in light mode.
+
+### Infra
+
+- Release automation now embeds the production update channel and publishes the matching EAS update after the GitHub release is created.
 
 ## v2026.5.20
 ### Improved

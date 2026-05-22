@@ -7,6 +7,15 @@
     "icon": "./assets/images/icon.png",
     "scheme": "kojoribs",
     "userInterfaceStyle": "automatic",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "enabled": true,
+      "url": "https://u.expo.dev/b3dd5ad4-f12e-4c00-a17e-33f830ee23c2",
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0
+    },
     "ios": {
       "bundleIdentifier": "com.whekin.kojoribus",
       "buildNumber": "2026052000",

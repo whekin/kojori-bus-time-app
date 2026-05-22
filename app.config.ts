@@ -18,6 +18,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
 
   const androidGoogleMapsApiKey = process.env.GOOGLE_MAPS_API_KEY_ANDROID;
   const iosGoogleMapsApiKey = process.env.GOOGLE_MAPS_API_KEY_IOS;
+  const updateChannel = process.env.EXPO_UPDATE_CHANNEL;
 
   const legalBaseUrl = 'https://github.com/whekin/kojori-bus-time-app/blob/main/release/google-play';
 
@@ -26,6 +27,17 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     name: config.name!,
     slug: config.slug!,
     version: v?.version ?? config.version,
+    updates: {
+      ...config.updates,
+      ...(updateChannel
+        ? {
+            requestHeaders: {
+              ...config.updates?.requestHeaders,
+              'expo-channel-name': updateChannel,
+            },
+          }
+        : {}),
+    },
     ios: {
       ...config.ios,
       buildNumber: v?.buildNumber ?? config.ios?.buildNumber,
