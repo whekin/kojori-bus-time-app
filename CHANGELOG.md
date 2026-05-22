@@ -1,10 +1,18 @@
 # Changelog
 
+## [UNRELEASED]
+### Fixed
+
+- Scheduled-only next departure labels now use the themed muted text color instead of falling back to black.
+- Russian next-departure relative times now use "через ..." wording instead of compact plus notation.
+- Georgian live and relative departure labels now use words instead of compact plus/minus notation.
+
 ## v2026.5.22
 ### Improved
 
 - App builds can now receive Expo over-the-air updates through the configured EAS production and preview channels.
 - Next departure cards now lead with the time-until-arrival countdown while keeping the scheduled departure time and live/scheduled status visible.
+- Scheduled-only next departure cards now emphasize the timetable time first and move the relative countdown into smaller supporting text.
 - Russian next-departure labels are shorter so the card header fits beside the route and live signal.
 - Live status dots now gently pulse while respecting reduced-motion settings.
 - Start screen destination cards now use brighter daytime artwork and higher-contrast overlay details in light mode.

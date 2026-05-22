@@ -492,6 +492,7 @@ function NextCard({
   const realtimeStatus = getRealtimeStatus(dep, colors, t);
   const busColor = routeColor(dep.bus, colors);
   const highlightColor = busColor;
+  const isLiveDeparture = dep.live === true;
   const statusColor = realtimeStatus?.textColor ?? colors.textDim;
   const statusPillStyle = realtimeStatus
     ? {
@@ -502,7 +503,7 @@ function NextCard({
         backgroundColor: alpha(colors.surfaceHigh, "55"),
         borderColor: alpha(colors.borderStrong, "55"),
       };
-  const scheduledTime = dep.live ? dep.scheduledTime : dep.scheduledTime ?? dep.time;
+  const scheduledTime = isLiveDeparture ? dep.scheduledTime : dep.scheduledTime ?? dep.time;
   const countdownParts = splitCountdownLabel(minsLabel);
   return (
     <View style={styles.nextBlock}>
@@ -556,41 +557,81 @@ function NextCard({
           </View>
 
           <View style={styles.nextHero}>
-            <Text
-              style={styles.nextCountdownHero}
-              numberOfLines={1}
-              adjustsFontSizeToFit
-              minimumFontScale={0.62}
-            >
-              {countdownParts.before}
-              <Text style={[styles.nextCountdownNumber, { color: busColor }]}>
-                {countdownParts.value}
+            {isLiveDeparture ? (
+              <Text
+                style={styles.nextCountdownHero}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.62}
+              >
+                {countdownParts.before}
+                <Text style={[styles.nextCountdownNumber, { color: busColor }]}>
+                  {countdownParts.value}
+                </Text>
+                {countdownParts.after}
               </Text>
-              {countdownParts.after}
-            </Text>
+            ) : (
+              <Text
+                style={[
+                  styles.nextScheduleHeroTime,
+                  { color: busColor, fontFamily: MONO },
+                ]}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.76}
+              >
+                {scheduledTime}
+              </Text>
+            )}
           </View>
 
           <View style={styles.nextMetaRow}>
-            <ScheduledTimeHint
-              time={scheduledTime}
-              showLabel
-              prominent
-              highlightColor={busColor}
-            />
-            {realtimeStatus ? (
+            {isLiveDeparture ? (
               <>
+                <ScheduledTimeHint
+                  time={scheduledTime}
+                  showLabel
+                  prominent
+                  highlightColor={busColor}
+                />
+                {realtimeStatus ? (
+                  <>
+                    <Text style={styles.nextMetaDot}>•</Text>
+                    <Text
+                      style={[
+                        styles.nextMetaStatus,
+                        { color: realtimeStatus.textColor },
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {realtimeStatus.label}
+                    </Text>
+                  </>
+                ) : null}
+              </>
+            ) : (
+              <>
+                <MaterialCommunityIcons
+                  name="calendar-clock"
+                  size={16}
+                  color={colors.textDim}
+                />
+                <Text style={styles.nextMetaStatus} numberOfLines={1}>
+                  {t("homeScheduledDeparture")}
+                </Text>
                 <Text style={styles.nextMetaDot}>•</Text>
                 <Text
                   style={[
                     styles.nextMetaStatus,
-                    { color: realtimeStatus.textColor },
+                    styles.nextMetaCountdown,
+                    { color: busColor },
                   ]}
                   numberOfLines={1}
                 >
-                  {realtimeStatus.label}
+                  {minsLabel}
                 </Text>
               </>
-            ) : null}
+            )}
           </View>
         </View>
       </View>
@@ -1241,6 +1282,13 @@ function createStyles(C: AppColors) {
       fontWeight: "800",
       lineHeight: 52,
     },
+    nextScheduleHeroTime: {
+      fontSize: 46,
+      fontWeight: "800",
+      lineHeight: 52,
+      letterSpacing: 0,
+      textAlign: "center",
+    },
     nextRouteBadge: {
       minWidth: 62,
       height: 36,
@@ -1286,10 +1334,14 @@ function createStyles(C: AppColors) {
       marginHorizontal: 2,
     },
     nextMetaStatus: {
+      color: C.textDim,
       flexShrink: 1,
       fontSize: 13,
       fontWeight: "700",
       letterSpacing: 0.2,
+    },
+    nextMetaCountdown: {
+      fontWeight: "800",
     },
     serviceTitle: {
       color: C.text,
