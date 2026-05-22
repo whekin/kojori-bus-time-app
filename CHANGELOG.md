@@ -21,6 +21,8 @@
 - Live delay badges in departure rows now get enough room for longer localized text.
 - Live arrivals with stale TTC schedule anchors now stay visible without showing absurd delay badges.
 - Map rendering now uses fewer native route overlays and delays ordinary stop markers until close zoom to avoid Android map freezes.
+- Ordinary map stops now use smaller route-colored dots that appear at mid zoom.
+- Saved map stop pins now shrink into compact dots when decluttered at far and upper-mid zooms, with Kojori Center kept visible first.
 - Saved map stop markers now use native Google map pins on Android instead of clipped custom marker views.
 - The start screen app icon now stays visible in light mode.
 

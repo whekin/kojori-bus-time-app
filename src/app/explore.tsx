@@ -1,7 +1,7 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import * as Location from 'expo-location';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, BackHandler, Easing, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Animated, BackHandler, Easing, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import MapView, { Callout, Marker, Polyline, type MapMarker, type MapPressEvent, type Region } from 'react-native-maps';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -103,6 +103,12 @@ const NATIVE_STOP_PIN_ANCHOR = { x: 0.5, y: 1 };
 const MAP_MIN_ZOOM_LEVEL = 11;
 const SHOW_ORDINARY_STOPS_LAT_DELTA = 0.14;
 const FULL_STOP_MARKERS_LAT_DELTA = 0.055;
+const PROMOTED_STOP_DECLUTTER_MIN_LAT_DELTA = 0.085;
+const PROMOTED_STOP_DECLUTTER_PX = {
+  overview: 46,
+  mid: 34,
+};
+const KOJORI_CENTER_STOP_ID = '1:3078';
 const ROUTE_LINE_SIMPLIFY_TOLERANCE_METERS = 12;
 const SHARED_ROUTE_STRIPE_METERS = 260;
 const GOOGLE_DARK_MAP_STYLE = [
@@ -120,6 +126,16 @@ const GOOGLE_DARK_MAP_STYLE = [
 ];
 
 type MapDirection = 'toKojori' | 'toTbilisi';
+type StopMarkerZoomTier = 'overview' | 'mid' | 'close';
+type StopMarkerData = {
+  stop: StopInfo;
+  isPromoted: boolean;
+  priority: number;
+};
+type DeclutteredStopMarkers = {
+  visible: StopMarkerData[];
+  compact: StopMarkerData[];
+};
 
 function StopMarkerCallout({
   stop,
@@ -181,8 +197,8 @@ function StopMapMarker({
   colors: ReturnType<typeof useAppColors>;
   onPress: () => void;
 }) {
-  const markerSize = isSimpleOrdinaryStop ? 16 : 24;
-  const hitSize = isSimpleOrdinaryStop ? 32 : markerSize + 6;
+  const markerSize = isSimpleOrdinaryStop ? 12 : 20;
+  const hitSize = isSimpleOrdinaryStop ? 28 : markerSize + 8;
   const stopMarker = (
     <StopMarkerCallout
       stop={stop}
@@ -238,11 +254,9 @@ function StopMapMarker({
             {
               width: markerSize,
               height: markerSize,
-              borderRadius: isSimpleOrdinaryStop ? markerSize / 2 : 8,
+              borderRadius: markerSize / 2,
               borderColor: isSimpleOrdinaryStop ? alpha(colors.panel, 'D9') : alpha(colors.panel, 'E6'),
-              backgroundColor: isSimpleOrdinaryStop
-                ? alpha(markerColor, resolvedThemeMode === 'dark' ? 'D9' : 'EE')
-                : alpha(colors.map, resolvedThemeMode === 'dark' ? 'CC' : 'E8'),
+              backgroundColor: alpha(markerColor, resolvedThemeMode === 'dark' ? 'D9' : 'EE'),
             },
           ]}
         />
@@ -252,12 +266,79 @@ function StopMapMarker({
   );
 }
 
+function declutterPromotedStopMarkers(
+  markers: StopMarkerData[],
+  region: Region,
+  zoomTier: StopMarkerZoomTier,
+  mapWidth: number,
+  mapHeight: number,
+): DeclutteredStopMarkers {
+  if (
+    zoomTier === 'close' ||
+    region.latitudeDelta < PROMOTED_STOP_DECLUTTER_MIN_LAT_DELTA ||
+    mapWidth <= 0 ||
+    mapHeight <= 0
+  ) {
+    return { visible: markers, compact: [] };
+  }
+
+  const threshold = zoomTier === 'overview'
+    ? PROMOTED_STOP_DECLUTTER_PX.overview
+    : PROMOTED_STOP_DECLUTTER_PX.mid;
+  const thresholdSquared = threshold * threshold;
+  const acceptedPromoted: { x: number; y: number }[] = [];
+  const sorted = [...markers].sort((a, b) => b.priority - a.priority);
+  const visible = new Set<string>();
+  const compact = new Set<string>();
+
+  sorted.forEach(marker => {
+    if (!marker.isPromoted) {
+      visible.add(marker.stop.id);
+      return;
+    }
+
+    const x = ((marker.stop.lon! - region.longitude) / region.longitudeDelta + 0.5) * mapWidth;
+    const y = ((region.latitude - marker.stop.lat!) / region.latitudeDelta + 0.5) * mapHeight;
+    const overlaps = acceptedPromoted.some(point => {
+      const dx = point.x - x;
+      const dy = point.y - y;
+      return dx * dx + dy * dy < thresholdSquared;
+    });
+
+    if (!overlaps) {
+      acceptedPromoted.push({ x, y });
+      visible.add(marker.stop.id);
+    } else {
+      compact.add(marker.stop.id);
+    }
+  });
+
+  return {
+    visible: markers.filter(marker => visible.has(marker.stop.id)),
+    compact: markers.filter(marker => compact.has(marker.stop.id)),
+  };
+}
+
+function stopMarkerPriority(
+  stopId: string,
+  firstRouteStopId: string | undefined,
+  favoriteStopSet: Set<string>,
+  curatedStopSet: Set<string>,
+) {
+  if (stopId === KOJORI_CENTER_STOP_ID) return 5;
+  if (stopId === firstRouteStopId) return 4;
+  if (favoriteStopSet.has(stopId)) return 3;
+  if (curatedStopSet.has(stopId)) return 2;
+  return 1;
+}
+
 export default function ExploreScreen({ isActive = false }: ExploreScreenProps) {
   const colors = useAppColors();
   const { t } = useI18n();
   const reduceMotion = useReducedMotion();
   const resolvedThemeMode = useResolvedAppThemeMode();
   const styles = useMemo(() => createStyles(colors), [colors]);
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const mapRef = useRef<MapView>(null);
   const focusedStopMarkerRef = useRef<MapMarker | null>(null);
@@ -427,7 +508,7 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
     : currentRegion.latitudeDelta >= FULL_STOP_MARKERS_LAT_DELTA
       ? 'mid'
       : 'close';
-  const showOrdinaryStopMarkers = stopMarkerZoomTier === 'close';
+  const showOrdinaryStopMarkers = stopMarkerZoomTier !== 'overview';
   const favoriteStopIds = direction === 'toKojori' ? settings.tbilisiFavorites : settings.kojoriFavorites;
   const curatedStopIds = getCuratedStopIds(direction);
 
@@ -435,6 +516,7 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
     const favoriteStopSet = new Set(favoriteStopIds);
     const curatedStopSet = new Set(curatedStopIds);
     const promotedStopSet = new Set([...favoriteStopIds, ...curatedStopIds]);
+    const firstRouteStopId = routeStops[0]?.id;
     const routeStopMap = new Map(routeStops.map(stop => [stop.id, stop]));
     const stopsWithPromotedFallbacks = [
       ...routeStops,
@@ -451,9 +533,22 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
       .map(stop => ({
         stop,
         isPromoted: favoriteStopSet.has(stop.id) || curatedStopSet.has(stop.id),
+        priority: stopMarkerPriority(stop.id, firstRouteStopId, favoriteStopSet, curatedStopSet),
       }))
-      .sort((a, b) => Number(a.isPromoted) - Number(b.isPromoted));
+      .sort((a, b) => a.priority - b.priority);
   }, [curatedStopIds, favoriteStopIds, focusedStop?.id, routeStops, showOrdinaryStopMarkers]);
+
+  const visibleStopMarkers = useMemo(() => {
+    return declutterPromotedStopMarkers(
+      stopMarkers,
+      currentRegion,
+      stopMarkerZoomTier,
+      windowWidth,
+      windowHeight,
+    );
+  }, [currentRegion, stopMarkerZoomTier, stopMarkers, windowHeight, windowWidth]);
+  const fullStopMarkers = visibleStopMarkers.visible;
+  const compactStopMarkers = visibleStopMarkers.compact;
 
   function handleCenterOnBus(bus: '380' | '316') {
     const busPositions = positions.filter(p => p.bus === bus);
@@ -701,7 +796,7 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
             </>
           )
           : null}
-        {showMarkers && stopMarkers.map(({ stop, isPromoted }) => {
+        {showMarkers && fullStopMarkers.map(({ stop, isPromoted }) => {
           const isMidZoom = stopMarkerZoomTier === 'mid';
           const isSimpleOrdinaryStop = !isPromoted && isMidZoom;
           const stopAccent = direction === 'toKojori' ? colors.route380 : colors.route316;
@@ -715,8 +810,30 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
               stop={stop}
               isPromoted={isPromoted}
               isSimpleOrdinaryStop={isSimpleOrdinaryStop}
-              markerColor={markerColor}
+              markerColor={isPromoted ? markerColor : stopAccent}
               calloutIconColor={isPromoted ? markerColor : colors.map}
+              stopNumberLabel={stopNumberLabel}
+              tapHint={t('mapStopTapActions')}
+              styles={styles}
+              resolvedThemeMode={resolvedThemeMode}
+              colors={colors}
+              onPress={() => requestStopFocus(stop, direction)}
+            />
+          );
+        })}
+        {showMarkers && compactStopMarkers.map(({ stop }) => {
+          const stopAccent = direction === 'toKojori' ? colors.route380 : colors.route316;
+          const stopNumberLabel = t('commonStopNumber', { id: stop.id.split(':')[1] ?? stop.id });
+
+          return (
+            <StopMapMarker
+              key={`stop-compact-${direction}-${stop.id}`}
+              direction={direction}
+              stop={stop}
+              isPromoted={false}
+              isSimpleOrdinaryStop
+              markerColor={stopAccent}
+              calloutIconColor={stopAccent}
               stopNumberLabel={stopNumberLabel}
               tapHint={t('mapStopTapActions')}
               styles={styles}
