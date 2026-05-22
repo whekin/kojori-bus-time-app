@@ -4,7 +4,9 @@ import { useLocalSearchParams } from "expo-router";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Animated,
   AppState,
+  Easing,
   Platform,
   Pressable,
   RefreshControl,
@@ -26,6 +28,7 @@ import { useClosestStop } from "@/hooks/use-closest-stop";
 import { useI18n } from "@/hooks/use-i18n";
 import { useRouteStops } from "@/hooks/use-route-stops";
 import { useSchedule } from "@/hooks/use-schedule";
+import { useReducedMotion } from "@/hooks/use-reduced-motion";
 import { useSettings } from "@/hooks/use-settings";
 import { useStopNames } from "@/hooks/use-stop-names";
 import {
@@ -62,6 +65,7 @@ function directionToMode(direction: "toKojori" | "toTbilisi"): SharedMode {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function formatMins(mins: number, t: ReturnType<typeof useI18n>["t"]) {
   if (mins < 1) return t("commonNow");
+  if (mins === 1) return t("relativeInMinuteOne");
   if (mins < 60) return t("timePlusMinutes", { minutes: mins });
   const h = Math.floor(mins / 60);
   const m = mins % 60;
@@ -156,6 +160,20 @@ function formatNextServiceWhen(
   return t("homeNextServiceDate", { date: label, time: departure.time });
 }
 
+function splitCountdownLabel(label: string) {
+  const displayLabel = label.charAt(0).toLocaleUpperCase() + label.slice(1);
+  const match = displayLabel.match(/(\d+)/);
+  if (!match || match.index == null) {
+    return { before: "", value: displayLabel, after: "" };
+  }
+
+  return {
+    before: displayLabel.slice(0, match.index),
+    value: match[0],
+    after: displayLabel.slice(match.index + match[0].length),
+  };
+}
+
 function buildStopSelectorStops({
   favoriteIds,
   activeStopId,
@@ -198,22 +216,67 @@ function BusTag({ bus }: { bus: BusLine }) {
 function LiveDot({ color }: { color?: string }) {
   const colors = useAppColors();
   const styles = useHomeStyles();
+  const reduceMotion = useReducedMotion();
+  const opacity = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    if (reduceMotion) {
+      opacity.setValue(1);
+      return undefined;
+    }
+
+    const pulse = Animated.loop(
+      Animated.sequence([
+        Animated.timing(opacity, {
+          toValue: 0.42,
+          duration: 780,
+          easing: Easing.inOut(Easing.quad),
+          useNativeDriver: true,
+        }),
+        Animated.timing(opacity, {
+          toValue: 1,
+          duration: 780,
+          easing: Easing.inOut(Easing.quad),
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+
+    pulse.start();
+    return () => pulse.stop();
+  }, [opacity, reduceMotion]);
+
   return (
-    <View style={[styles.liveDot, { backgroundColor: color ?? colors.live }]} />
+    <Animated.View
+      style={[
+        styles.liveDot,
+        { backgroundColor: color ?? colors.live, opacity },
+      ]}
+    />
   );
 }
 
 function ScheduledTimeHint({
   time,
   compact = false,
+  showLabel = false,
+  prominent = false,
+  highlightColor,
 }: {
   time?: string;
   compact?: boolean;
+  showLabel?: boolean;
+  prominent?: boolean;
+  highlightColor?: string;
 }) {
   const colors = useAppColors();
   const styles = useHomeStyles();
   const { t } = useI18n();
   if (!time) return null;
+  const label = showLabel ? t("homeScheduledTime", { time }) : time;
+  const timeIndex = showLabel ? label.indexOf(time) : -1;
+  const labelBeforeTime = timeIndex >= 0 ? label.slice(0, timeIndex) : "";
+  const labelAfterTime = timeIndex >= 0 ? label.slice(timeIndex + time.length) : "";
 
   return (
     <View
@@ -223,18 +286,34 @@ function ScheduledTimeHint({
     >
       <MaterialCommunityIcons
         name="calendar-clock"
-        size={compact ? 12 : 14}
-        color={compact ? colors.textFaint : colors.textDim}
+        size={compact ? 12 : prominent ? 16 : 14}
+        color={compact ? colors.textFaint : prominent ? highlightColor ?? colors.live : colors.textDim}
       />
       <Text
         style={[
           styles.scheduledHintText,
           compact && styles.scheduledHintTextCompact,
-          { fontFamily: MONO },
+          prominent && styles.scheduledHintTextProminent,
+          !prominent && { fontFamily: MONO },
         ]}
         numberOfLines={1}
       >
-        {time}
+        {timeIndex >= 0 ? (
+          <>
+            {labelBeforeTime}
+            <Text
+              style={[
+                styles.scheduledHintTime,
+                { color: highlightColor ?? colors.live },
+              ]}
+            >
+              {time}
+            </Text>
+            {labelAfterTime}
+          </>
+        ) : (
+          label
+        )}
       </Text>
     </View>
   );
@@ -413,8 +492,8 @@ function NextCard({
   const realtimeStatus = getRealtimeStatus(dep, colors, t);
   const busColor = routeColor(dep.bus, colors);
   const highlightColor = busColor;
-  const arrivalStatusColor = realtimeStatus?.textColor ?? colors.textDim;
-  const arrivalPanelStyle = realtimeStatus
+  const statusColor = realtimeStatus?.textColor ?? colors.textDim;
+  const statusPillStyle = realtimeStatus
     ? {
         backgroundColor: realtimeStatus.backgroundColor,
         borderColor: realtimeStatus.borderColor,
@@ -423,6 +502,8 @@ function NextCard({
         backgroundColor: alpha(colors.surfaceHigh, "55"),
         borderColor: alpha(colors.borderStrong, "55"),
       };
+  const scheduledTime = dep.scheduledTime ?? dep.time;
+  const countdownParts = splitCountdownLabel(minsLabel);
   return (
     <View style={styles.nextBlock}>
       <View
@@ -434,84 +515,82 @@ function NextCard({
         <View style={styles.nextContent}>
           <View style={styles.nextHeaderRow}>
             <View style={styles.nextHeaderLeft}>
-              <View style={[styles.nextRouteBadge, { borderColor: busColor }]}>
+              <View
+                style={[
+                  styles.nextRouteBadge,
+                  {
+                    backgroundColor: busColor,
+                    borderColor: alpha(busColor, "A8"),
+                  },
+                ]}
+              >
                 <Text
                   style={[
                     styles.nextRouteBadgeText,
-                    { color: busColor, fontFamily: MONO },
+                    { color: colors.bg, fontFamily: MONO },
                   ]}
                 >
                   {dep.bus}
                 </Text>
               </View>
-              <Text style={styles.nextEyebrow}>
-                {serviceBoundary.nextDepartureIsFinal ? t("homeLastDeparture") : t("homeNextDeparture")}
-              </Text>
+              <View style={styles.nextHeaderCopy}>
+                <Text style={styles.nextTitle} numberOfLines={1}>
+                  {serviceBoundary.nextDepartureIsFinal ? t("homeLastDeparture") : t("homeNextDeparture")}
+                </Text>
+                <Text style={styles.nextSubtitle} numberOfLines={1}>
+                  {t("commonRoute")}
+                </Text>
+              </View>
             </View>
+            {realtimeStatus ? (
+              <View style={[styles.nextStatusPill, statusPillStyle]}>
+                <LiveDot color={realtimeStatus.textColor} />
+                <Text
+                  style={[styles.nextStatusText, { color: statusColor }]}
+                  numberOfLines={1}
+                >
+                  {t("homeArrivalSignal")}
+                </Text>
+              </View>
+            ) : null}
           </View>
 
-          <View style={styles.nextBodyRow}>
-            <View style={styles.nextMain}>
-              <Text
-                style={[styles.nextTime, { fontFamily: MONO }]}
-                numberOfLines={1}
-                adjustsFontSizeToFit
-                minimumFontScale={0.72}
-              >
-                {dep.time}
+          <View style={styles.nextHero}>
+            <Text
+              style={styles.nextCountdownHero}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.62}
+            >
+              {countdownParts.before}
+              <Text style={[styles.nextCountdownNumber, { color: busColor }]}>
+                {countdownParts.value}
               </Text>
-              {dep.live ? <ScheduledTimeHint time={dep.scheduledTime} /> : null}
-            </View>
-            <View style={[styles.nextArrivalPanel, arrivalPanelStyle]}>
-              <View style={styles.nextArrivalHeader}>
+              {countdownParts.after}
+            </Text>
+          </View>
+
+          <View style={styles.nextMetaRow}>
+            <ScheduledTimeHint
+              time={scheduledTime}
+              showLabel
+              prominent
+              highlightColor={busColor}
+            />
+            {realtimeStatus ? (
+              <>
+                <Text style={styles.nextMetaDot}>•</Text>
                 <Text
                   style={[
-                    styles.nextCountdownLabel,
-                    { color: arrivalStatusColor },
+                    styles.nextMetaStatus,
+                    { color: realtimeStatus.textColor },
                   ]}
+                  numberOfLines={1}
                 >
-                  {realtimeStatus
-                    ? t("homeArrivalSignal")
-                    : t("homeScheduleSignal")}
+                  {realtimeStatus.label}
                 </Text>
-                {realtimeStatus ? (
-                  <View
-                    style={[
-                      styles.nextSignalDot,
-                      { backgroundColor: realtimeStatus.textColor },
-                    ]}
-                  />
-                ) : null}
-              </View>
-              <Text
-                style={[
-                  styles.nextCountdownValue,
-                  { color: arrivalStatusColor, fontFamily: MONO },
-                ]}
-                numberOfLines={1}
-                adjustsFontSizeToFit
-                minimumFontScale={0.8}
-              >
-                {minsLabel}
-              </Text>
-              <Text
-                style={[
-                  styles.nextArrivalMeta,
-                  {
-                    color: realtimeStatus
-                      ? realtimeStatus.textColor
-                      : colors.textDim,
-                  },
-                ]}
-                numberOfLines={1}
-              >
-                {realtimeStatus
-                  ? realtimeStatus.label
-                  : serviceBoundary.nextDepartureIsFinal
-                    ? t("homeLastDepartureNote")
-                    : t("homeScheduledEstimate")}
-              </Text>
-            </View>
+              </>
+            ) : null}
           </View>
         </View>
       </View>
@@ -1083,7 +1162,7 @@ function createStyles(C: AppColors) {
       borderRadius: 18,
       borderWidth: 1,
       overflow: "hidden",
-      minHeight: 96,
+      minHeight: 136,
     },
     centered: { justifyContent: "center" },
     nextAccentBar: { width: 4, alignSelf: "stretch" },
@@ -1091,20 +1170,38 @@ function createStyles(C: AppColors) {
       flex: 1,
       paddingHorizontal: 16,
       paddingVertical: 14,
-      gap: 12,
+      gap: 13,
     },
     nextHeaderRow: {
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
-      gap: 10,
+      gap: 8,
     },
     nextHeaderLeft: {
       flexDirection: "row",
       alignItems: "center",
-      gap: 10,
+      gap: 12,
       minWidth: 0,
       flexShrink: 1,
+    },
+    nextHeaderCopy: {
+      flexShrink: 1,
+      minWidth: 0,
+      gap: 3,
+    },
+    nextTitle: {
+      color: C.text,
+      fontSize: 16,
+      lineHeight: 20,
+      fontWeight: "700",
+      letterSpacing: 0,
+    },
+    nextSubtitle: {
+      color: C.textDim,
+      fontSize: 12,
+      lineHeight: 15,
+      fontWeight: "600",
     },
     nextEyebrow: {
       color: alpha(C.text, "B8"),
@@ -1112,54 +1209,73 @@ function createStyles(C: AppColors) {
       fontWeight: "700",
       letterSpacing: 1.8,
     },
-    nextBodyRow: { flexDirection: "row", alignItems: "flex-end", gap: 12 },
-    nextMain: { flex: 1, minWidth: 0, justifyContent: "flex-end", gap: 5 },
-    nextTime: {
+    nextHero: {
+      justifyContent: "center",
+      minHeight: 46,
+    },
+    nextCountdownHero: {
       color: C.text,
-      fontSize: 46,
-      fontWeight: "700",
-      letterSpacing: -1.6,
+      fontSize: 42,
+      fontWeight: "800",
+      letterSpacing: 0,
       lineHeight: 48,
       flexShrink: 1,
+      textAlign: "center",
+    },
+    nextCountdownNumber: {
+      fontSize: 48,
+      fontWeight: "800",
+      lineHeight: 52,
     },
     nextRouteBadge: {
-      minWidth: 54,
-      paddingHorizontal: 9,
-      paddingVertical: 6,
-      borderRadius: 6,
+      minWidth: 62,
+      height: 36,
+      borderRadius: 11,
       borderWidth: 1.5,
+      paddingHorizontal: 10,
       alignItems: "center",
-    },
-    nextRouteBadgeText: { fontSize: 14, fontWeight: "800", letterSpacing: 0.8 },
-    nextArrivalPanel: {
-      minWidth: 118,
-      maxWidth: 148,
-      paddingHorizontal: 12,
-      paddingVertical: 10,
-      borderRadius: 16,
-      borderWidth: 1,
-      alignItems: "flex-end",
-      justifyContent: "space-between",
-      gap: 5,
+      justifyContent: "center",
       shadowColor: C.bg,
-      shadowOpacity: 0.14,
+      shadowOpacity: 0.2,
       shadowRadius: 12,
       shadowOffset: { width: 0, height: 6 },
     },
-    nextArrivalHeader: { flexDirection: "row", alignItems: "center", gap: 6 },
-    nextSignalDot: { width: 7, height: 7, borderRadius: 3.5 },
-    nextCountdownLabel: {
-      color: alpha(C.text, "C4"),
-      fontSize: 9,
-      fontWeight: "700",
-      letterSpacing: 1.4,
+    nextRouteBadgeText: { fontSize: 25, fontWeight: "800", letterSpacing: 0 },
+    nextStatusPill: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      maxWidth: 104,
+      paddingHorizontal: 10,
+      paddingVertical: 7,
+      borderRadius: 999,
+      borderWidth: 1,
+      flexShrink: 0,
     },
-    nextCountdownValue: { fontSize: 16, fontWeight: "800", marginTop: 1 },
-    nextArrivalMeta: {
+    nextStatusText: {
+      flexShrink: 1,
       fontSize: 11,
+      fontWeight: "800",
+      letterSpacing: 0.5,
+    },
+    nextMetaRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      justifyContent: "center",
+      minHeight: 22,
+    },
+    nextMetaDot: {
+      color: C.textFaint,
+      fontSize: 12,
+      fontWeight: "800",
+      marginHorizontal: 2,
+    },
+    nextMetaStatus: {
+      flexShrink: 1,
+      fontSize: 13,
       fontWeight: "700",
       letterSpacing: 0.2,
-      textAlign: "right",
     },
     serviceTitle: {
       color: C.text,
@@ -1274,9 +1390,9 @@ function createStyles(C: AppColors) {
     scheduledHint: {
       flexDirection: "row",
       alignItems: "center",
-      alignSelf: "flex-start",
       gap: 5,
       maxWidth: "100%",
+      flexShrink: 1,
     },
     scheduledHintCompact: { gap: 4 },
     scheduledHintText: {
@@ -1290,6 +1406,15 @@ function createStyles(C: AppColors) {
       fontSize: 11,
       fontWeight: "700",
       letterSpacing: 0.2,
+    },
+    scheduledHintTextProminent: {
+      color: C.text,
+      fontSize: 13,
+      fontWeight: "700",
+      letterSpacing: 0,
+    },
+    scheduledHintTime: {
+      fontWeight: "800",
     },
     liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: C.live },
 

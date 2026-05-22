@@ -675,11 +675,12 @@ export function mergeArrivalsIntoSchedule(
       ? arrivals
           .filter(arrival => arrival.shortName === bus && arrival.realtime)
           .map(arrival => ({
-            realtimeMinutes: Math.max(0, arrival.realtimeArrivalMinutes - elapsedLiveMinutes),
+            realtimeMinutes: arrival.realtimeArrivalMinutes - elapsedLiveMinutes,
             reportedRealtimeMinutes: arrival.realtimeArrivalMinutes,
             scheduledMinutes: arrival.scheduledArrivalMinutes - elapsedLiveMinutes,
           }))
           .filter(arrival => Number.isFinite(arrival.realtimeMinutes) && Number.isFinite(arrival.scheduledMinutes))
+          .filter(arrival => arrival.realtimeMinutes > 0)
           .filter(arrival => !isSuspiciousEarlyStopLiveArrival(arrival, scheduled, options.stopId))
           .sort((a, b) => a.scheduledMinutes - b.scheduledMinutes)
       : [];

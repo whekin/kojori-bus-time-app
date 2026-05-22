@@ -3,6 +3,8 @@
 ## [UNRELEASED]
 ### Improved
 
+- Next departure cards now lead with the time-until-arrival countdown while keeping the scheduled departure time and live/scheduled status visible.
+- Live status dots now gently pulse while respecting reduced-motion settings.
 - Start screen destination cards now use brighter daytime artwork and higher-contrast overlay details in light mode.
 - Map direction switching now uses the same compact control as Departures and Timetable.
 - Stop selector rows now reserve route accent colors for selected states and use consistent action-button tinting, making unselected stops easier to scan.

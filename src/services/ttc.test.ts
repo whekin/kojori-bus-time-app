@@ -308,6 +308,26 @@ describe('mergeArrivalsIntoSchedule', () => {
     expect(result.some(dep => dep.live)).toBe(false);
   });
 
+  it('drops locally expired live arrivals instead of pinning them at now', () => {
+    const departures = [
+      makeDeparture('316', 30, '21:52'),
+    ];
+    const now = new Date('2026-04-15T21:21:00Z');
+
+    const result = mergeArrivalsIntoSchedule(
+      departures,
+      [makeArrival('316', 1, 30)],
+      now,
+      now.getTime() - 60_000,
+      { stopId: '1:3932' },
+    );
+
+    expect(result).toHaveLength(1);
+    expect(result[0].status).toBe('scheduled');
+    expect(result[0].minsUntil).toBe(30);
+    expect(result.some(dep => dep.live)).toBe(false);
+  });
+
   it('matches delayed live arrivals by TTC scheduled ETA, not nearest live ETA', () => {
     const departures = [
       makeDeparture('380', 1, '18:00'),
