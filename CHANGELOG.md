@@ -1,6 +1,6 @@
 # Changelog
 
-## [UNRELEASED]
+## v2026.5.22
 ### Improved
 
 - App builds can now receive Expo over-the-air updates through the configured EAS production and preview channels.
