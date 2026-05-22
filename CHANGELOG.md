@@ -28,6 +28,7 @@
 - Ordinary map stops now use smaller route-colored dots that appear at mid zoom.
 - Saved map stop pins now shrink into compact dots when decluttered at far and upper-mid zooms, with Kojori Center kept visible first.
 - Saved map stop markers now use native Google map pins on Android instead of clipped custom marker views.
+- Saved map stop markers now use route-colored bus-stop icons instead of Google's brighter native pin tint.
 - The start screen app icon now stays visible in light mode.
 
 ## v2026.5.20

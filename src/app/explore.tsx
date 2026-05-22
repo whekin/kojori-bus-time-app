@@ -108,7 +108,6 @@ function BusStopGlyph({
 const VEHICLE_PIN_CANVAS_SIZE = 66;
 const VEHICLE_PIN_ANCHOR = { x: 0.5, y: 0.5 };
 const STOP_MARKER_ANCHOR = { x: 0.5, y: 0.5 };
-const NATIVE_STOP_PIN_ANCHOR = { x: 0.5, y: 1 };
 const MAP_MIN_ZOOM_LEVEL = 11;
 const SHOW_ORDINARY_STOPS_LAT_DELTA = 0.14;
 const FULL_STOP_MARKERS_LAT_DELTA = 0.055;
@@ -234,6 +233,8 @@ function StopMapMarker({
 }) {
   const markerSize = isSimpleOrdinaryStop ? 12 : 20;
   const hitSize = isSimpleOrdinaryStop ? 28 : markerSize + 8;
+  const promotedHitSize = 44;
+  const promotedMarkerSize = 30;
   const stopMarker = (
     <StopMarkerCallout
       stop={stop}
@@ -249,12 +250,36 @@ function StopMapMarker({
       <Marker
         key={`stop-${direction}-${stop.id}`}
         coordinate={{ latitude: stop.lat!, longitude: stop.lon! }}
-        anchor={NATIVE_STOP_PIN_ANCHOR}
-        pinColor={markerColor}
+        anchor={STOP_MARKER_ANCHOR}
+        tracksViewChanges={false}
         title={stop.label}
         description={stopNumberLabel}
         onPress={onPress}
         zIndex={6}>
+        <View
+          collapsable={false}
+          style={[
+            styles.promotedStopMarkerOuter,
+            {
+              width: promotedHitSize,
+              height: promotedHitSize,
+              borderRadius: promotedHitSize / 2,
+            },
+          ]}>
+          <View
+            style={[
+              styles.promotedStopMarker,
+              {
+                width: promotedMarkerSize,
+                height: promotedMarkerSize,
+                borderRadius: promotedMarkerSize / 2,
+                backgroundColor: markerColor,
+                borderColor: alpha(colors.panel, resolvedThemeMode === 'dark' ? 'E8' : 'F2'),
+              },
+            ]}>
+            <BusStopGlyph size={20} color="#FFFFFF" shiftX={0.02} shiftY={0.06} />
+          </View>
+        </View>
         {stopMarker}
       </Marker>
     );
@@ -1683,6 +1708,22 @@ function createStyles(C: ReturnType<typeof useAppColors>) {
     fontSize: 12,
     lineHeight: 15,
     fontWeight: '600',
+  },
+  promotedStopMarkerOuter: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'visible',
+    backgroundColor: 'transparent',
+    shadowColor: '#000',
+    shadowOpacity: 0.18,
+    shadowRadius: 5,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 4,
+  },
+  promotedStopMarker: {
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   vehiclePin: {
     alignItems: 'center',
