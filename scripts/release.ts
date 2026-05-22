@@ -10,6 +10,10 @@
  *   bun scripts/release.ts 2026.5.1
  *   bun scripts/release.ts --continue
  *   bun scripts/release.ts 2026.5.1 --continue
+ *
+ * If the requested date tag already exists, the script re-releases that version:
+ * it bumps the Android build suffix, force-updates the tag, replaces the GitHub
+ * release asset/notes, and publishes a fresh EAS update.
  */
 
 import { execSync } from 'child_process';
@@ -42,6 +46,7 @@ type ReleaseState = {
   buildNumber: string;
   versionCode: number;
   tag: string;
+  rerelease?: boolean;
   completed: Phase[];
 };
 
@@ -146,13 +151,30 @@ function extractChangelog(version: string): string | null {
 }
 
 function extractReleaseNotes(version: string): string | null {
-  return extractChangelog(version) ?? findChangelogSection(unreleasedHeading);
+  return findChangelogSection(unreleasedHeading) ?? extractChangelog(version);
 }
 
 function finalizeChangelog(version: string) {
-  if (!existsSync(changelogPath) || extractChangelog(version)) return;
+  if (!existsSync(changelogPath)) return;
 
   const content = readFileSync(changelogPath, 'utf-8');
+  const existingReleaseNotes = extractChangelog(version);
+  const unreleasedNotes = findChangelogSection(unreleasedHeading);
+
+  if (existingReleaseNotes && unreleasedNotes) {
+    const withoutUnreleased = removeChangelogSection(content, unreleasedHeading);
+    const versionHeading = `## v${version}`;
+    const headingMatch = new RegExp(`^${escapeRegExp(versionHeading)}\\s*$`, 'm').exec(withoutUnreleased);
+    if (!headingMatch || headingMatch.index === undefined) return;
+
+    const insertAt = headingMatch.index + headingMatch[0].length;
+    const next = `${withoutUnreleased.slice(0, insertAt)}\n${unreleasedNotes}\n\n${withoutUnreleased.slice(insertAt).trimStart()}`;
+    writeFileSync(changelogPath, next);
+    return;
+  }
+
+  if (existingReleaseNotes) return;
+
   const next = content.replace(
     new RegExp(`^${escapeRegExp(unreleasedHeading)}\\s*$`, 'm'),
     `## v${version}`,
@@ -164,6 +186,22 @@ function finalizeChangelog(version: string) {
   }
 
   writeFileSync(changelogPath, next);
+}
+
+function removeChangelogSection(content: string, heading: string) {
+  const headingMatch = new RegExp(`^${escapeRegExp(heading)}\\s*$`, 'm').exec(content);
+  if (!headingMatch || headingMatch.index === undefined) return content;
+
+  const start = headingMatch.index;
+  const afterHeading = headingMatch.index + headingMatch[0].length;
+  const remaining = content.slice(afterHeading);
+  const nextHeading = /^## /m.exec(remaining);
+  const end =
+    !nextHeading || nextHeading.index === undefined
+      ? content.length
+      : afterHeading + nextHeading.index;
+
+  return `${content.slice(0, start)}${content.slice(end).replace(/^\n+/, '\n')}`;
 }
 
 function getReleaseArtifactsStatus(tag: string) {
@@ -193,6 +231,40 @@ function getRuntimeCheckBase() {
   ).trim();
 }
 
+function getTagExists(tag: string) {
+  const existingTags = String(run(`git tag --list ${shellQuote(tag)}`, { stdio: 'pipe' }) ?? '').trim();
+  return existingTags.split('\n').includes(tag);
+}
+
+function createBuildMetadata(version: string, rerelease: boolean) {
+  const [y, m, d] = version.split('.').map(Number);
+  const base = `${y}${String(m).padStart(2, '0')}${String(d).padStart(2, '0')}`;
+  let suffix = 0;
+
+  if (rerelease && existsSync(appJsonPath)) {
+    const appJson = JSON.parse(readFileSync(appJsonPath, 'utf-8'));
+    const currentVersionCode = Number(appJson.expo?.android?.versionCode);
+    const currentVersion = appJson.expo?.version;
+    if (currentVersion === version && Number.isInteger(currentVersionCode)) {
+      const currentBuild = String(currentVersionCode);
+      if (currentBuild.startsWith(base)) {
+        suffix = Number(currentBuild.slice(base.length) || '0') + 1;
+      }
+    }
+  }
+
+  if (suffix > 99) {
+    console.error(`Build suffix overflow for ${version}. Expected suffix <= 99, got ${suffix}.`);
+    process.exit(1);
+  }
+
+  const buildNumber = `${base}${String(suffix).padStart(2, '0')}`;
+  return {
+    buildNumber,
+    versionCode: Number(buildNumber),
+  };
+}
+
 // ── Parse args ──────────────────────────────────────────────────────────────
 
 const args = process.argv.slice(2);
@@ -200,7 +272,7 @@ const continueMode = args.includes('--continue');
 const versionArg = args.find(a => a !== '--continue');
 
 const now = new Date();
-const version = versionArg ?? `${now.getFullYear()}.${now.getMonth() + 1}.${now.getDate()}`;
+let version = versionArg ?? `${now.getFullYear()}.${now.getMonth() + 1}.${now.getDate()}`;
 
 const parts = version.split('.');
 if (parts.length !== 3 || parts.some(p => isNaN(Number(p)))) {
@@ -208,17 +280,16 @@ if (parts.length !== 3 || parts.some(p => isNaN(Number(p)))) {
   process.exit(1);
 }
 
-const [y, m, d] = parts.map(Number);
-const buildSuffix = '00'; // bump manually for same-day re-releases
-const buildNumber = `${y}${String(m).padStart(2, '0')}${String(d).padStart(2, '0')}${buildSuffix}`;
-const versionCode = Number(buildNumber);
-const tag = `v${version}`;
+let tag = `v${version}`;
+const initialRerelease = getTagExists(tag);
+let { buildNumber, versionCode } = createBuildMetadata(version, initialRerelease);
 
 let state: ReleaseState = {
   version,
   buildNumber,
   versionCode,
   tag,
+  rerelease: initialRerelease,
   completed: [],
 };
 
@@ -233,11 +304,16 @@ if (continueMode) {
     process.exit(1);
   }
   state = saved;
+  version = state.version;
+  buildNumber = state.buildNumber;
+  versionCode = state.versionCode;
+  tag = state.tag;
 }
 
 console.log(`Version:     ${version}`);
 console.log(`Build:       ${buildNumber}`);
 console.log(`Tag:         ${tag}`);
+console.log(`Mode:        ${state.rerelease ? 're-release existing tag' : 'new release'}`);
 console.log(`Continue:    ${continueMode ? 'yes' : 'no'}`);
 
 const runtimeCheckBase = continueMode ? null : getRuntimeCheckBase();
@@ -261,12 +337,16 @@ if (!isDone(state, 'preflight')) {
     console.log('Clean working tree ✓');
   }
 
-  if (tagExists) {
+  if (tagExists && !state.rerelease) {
     console.error(`Tag ${tag} already exists.`);
     process.exit(1);
   }
 
-  console.log(`Tag ${tag} available ✓`);
+  if (state.rerelease) {
+    console.log(`Tag ${tag} exists; re-release mode will replace the tag and GitHub asset.`);
+  } else {
+    console.log(`Tag ${tag} available ✓`);
+  }
   if (runtimeCheckBase) checkRuntimeVersion(runtimeCheckBase);
   markDone(state, 'preflight');
 } else {
@@ -275,9 +355,9 @@ if (!isDone(state, 'preflight')) {
 
 // ── 2. Changelog ────────────────────────────────────────────────────────────
 
-step('2/7  Changelog');
+step('2/9  Changelog');
 
-const releaseNotes = extractReleaseNotes(version);
+let releaseNotes = extractReleaseNotes(version);
 if (!releaseNotes) {
   console.error(`No entry for "## v${version}" or "${unreleasedHeading}" found in CHANGELOG.md.`);
   console.error(`Add release notes under "${unreleasedHeading}" before running this script.`);
@@ -319,6 +399,7 @@ if (!isDone(state, 'stamp')) {
   writeFileSync(pkgJsonPath, JSON.stringify(pkgJson, null, 2) + '\n');
 
   finalizeChangelog(version);
+  releaseNotes = extractChangelog(version) ?? releaseNotes;
 
   console.log(`app.json + package.json + CHANGELOG.md → ${version}`);
   markDone(state, 'stamp');
@@ -375,11 +456,11 @@ if (!isDone(state, 'commit_push')) {
     console.log('Nothing new to commit, skipping commit.');
   }
 
-  run(`git tag -a ${tag} -m "Release ${tag}"`);
+  run(`git tag ${state.rerelease ? '-fa' : '-a'} ${tag} -m "Release ${tag}"`);
   run('git push');
-  run(`git push origin ${tag}`);
+  run(`git push ${state.rerelease ? '--force ' : ''}origin ${tag}`);
 
-  console.log(`Pushed ${tag} ✓`);
+  console.log(`Pushed ${tag}${state.rerelease ? ' replacement' : ''} ✓`);
   markDone(state, 'commit_push');
 } else {
   console.log('Already completed ✓');
@@ -399,15 +480,27 @@ if (!isDone(state, 'github_release')) {
     // Copy APK with proper name to avoid browser download issues
     run(`cp "${apkPath}" "${renamedApkPath}"`);
 
-    run(
-      `gh release create ${tag} "${renamedApkPath}" --title "Kojoring Time ${tag}" --notes-file "${notesFile}"`
-    );
+    if (state.rerelease) {
+      const releaseExists = run(`gh release view ${tag}`, { stdio: 'pipe', allowFailure: true }) !== null;
+      if (!releaseExists) {
+        run(
+          `gh release create ${tag} "${renamedApkPath}" --title "Kojoring Time ${tag}" --notes-file "${notesFile}"`
+        );
+      } else {
+        run(`gh release edit ${tag} --title "Kojoring Time ${tag}" --notes-file "${notesFile}"`);
+        run(`gh release upload ${tag} "${renamedApkPath}" --clobber`);
+      }
+    } else {
+      run(
+        `gh release create ${tag} "${renamedApkPath}" --title "Kojoring Time ${tag}" --notes-file "${notesFile}"`
+      );
+    }
   } finally {
     if (existsSync(notesFile)) unlinkSync(notesFile);
     if (existsSync(renamedApkPath)) unlinkSync(renamedApkPath);
   }
 
-  console.log(`\n🎉 Release ${tag} published!`);
+  console.log(`\n🎉 Release ${tag} ${state.rerelease ? 're-published' : 'published'}!`);
   markDone(state, 'github_release');
 }
 

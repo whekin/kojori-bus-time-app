@@ -91,6 +91,8 @@ What they do:
 - `bun run release:android:build`: builds the Android production AAB with EAS
 - `bun run release:android:submit`: submits the latest production build to Play Console
 
+`bun run release` creates the date-based release for today. If that date tag already exists, it treats the run as a re-release: the visible app version stays the same, the Android build suffix/versionCode increments, the existing GitHub release APK and notes are replaced, and a new EAS update is published.
+
 ## Updates
 
 EAS Updates use the manual runtime in `app.json` (`kojori-android-1`) instead of the date-based app version. This lets daily releases and JS-only fixes update existing compatible installs automatically.
