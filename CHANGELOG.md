@@ -11,6 +11,7 @@
 
 ### Fixed
 
+- English countdown labels now use consistent pluralized hour/minute wording across Departures, Timetable, status, and Settings diagnostics.
 - Scheduled-only next departure labels now use the themed muted text color instead of falling back to black.
 - Russian next-departure relative times now use "через ..." wording instead of compact plus notation.
 - Georgian live and relative departure labels now use words instead of compact plus/minus notation.

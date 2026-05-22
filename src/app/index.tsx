@@ -63,15 +63,23 @@ function directionToMode(direction: "toKojori" | "toTbilisi"): SharedMode {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-function formatMins(mins: number, t: ReturnType<typeof useI18n>["t"]) {
+function formatMins(
+  mins: number,
+  t: ReturnType<typeof useI18n>["t"],
+  formatDuration: ReturnType<typeof useI18n>["formatDuration"],
+  formatRelativeDuration: ReturnType<typeof useI18n>["formatRelativeDuration"],
+) {
   if (mins < 1) return t("commonNow");
-  if (mins === 1) return t("relativeInMinuteOne");
-  if (mins < 60) return t("timePlusMinutes", { minutes: mins });
-  const h = Math.floor(mins / 60);
-  const m = mins % 60;
-  return m > 0
-    ? t("timePlusHours", { hours: h, minutes: m })
-    : t("timePlusHour", { hours: h });
+  if (mins < 60) return formatRelativeDuration("future", "minute", mins);
+
+  const hours = Math.floor(mins / 60);
+  const minutes = mins % 60;
+  if (minutes === 0) return formatRelativeDuration("future", "hour", hours);
+
+  return t("timeInHours", {
+    hours: formatDuration("hour", hours),
+    minutes: formatDuration("minute", minutes),
+  });
 }
 
 function getRealtimeStatus(
@@ -367,8 +375,8 @@ function ErrorBanner({ message }: { message: string }) {
 function DepartureRow({ dep, isLast }: { dep: Departure; isLast: boolean }) {
   const colors = useAppColors();
   const styles = useHomeStyles();
-  const { t } = useI18n();
-  const countdown = formatMins(dep.minsUntil, t);
+  const { t, formatDuration, formatRelativeDuration } = useI18n();
+  const countdown = formatMins(dep.minsUntil, t, formatDuration, formatRelativeDuration);
   const realtimeStatus = getRealtimeStatus(dep, colors, t);
 
   return (

@@ -274,15 +274,18 @@ function formatQueryKind(kind: TtcQueryLogEntry['kind'], t: ReturnType<typeof us
   }
 }
 
-function formatQueryAge(timestamp: number) {
+function formatQueryAge(
+  timestamp: number,
+  t: ReturnType<typeof useI18n>['t'],
+  formatRelativeDuration: ReturnType<typeof useI18n>['formatRelativeDuration'],
+) {
   const diffMs = Math.max(0, Date.now() - timestamp);
   const seconds = Math.floor(diffMs / 1000);
-  if (seconds < 10) return 'just now';
-  if (seconds < 60) return `${seconds}s ago`;
+  if (seconds < 60) return t('ttcJustNow');
   const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
+  if (minutes < 60) return formatRelativeDuration('past', 'minute', minutes);
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
+  if (hours < 24) return formatRelativeDuration('past', 'hour', hours);
   return new Date(timestamp).toLocaleString('en-GB', {
     day: '2-digit',
     month: 'short',
@@ -322,7 +325,7 @@ function TtcQueryLogCard({
   onClear: () => void;
 }) {
   const { styles, colors } = useStyles();
-  const { t } = useI18n();
+  const { t, formatRelativeDuration } = useI18n();
   const visibleEntries = entries.slice(0, 18);
 
   return (
@@ -380,7 +383,7 @@ function TtcQueryLogCard({
                     <View style={styles.queryRowTop}>
                       <View style={styles.queryRowLead}>
                         <Text style={styles.queryKind}>{formatQueryKind(entry.kind, t)}</Text>
-                        <Text style={styles.queryAge}>{formatQueryAge(entry.finishedAt)}</Text>
+                        <Text style={styles.queryAge}>{formatQueryAge(entry.finishedAt, t, formatRelativeDuration)}</Text>
                       </View>
                       <View style={[styles.queryStatusChip, { borderColor: alpha(statusColor, '40'), backgroundColor: alpha(statusColor, '12') }]}>
                         <Text style={[styles.queryStatusText, { color: statusColor }]}>{getQueryStatusLabel(entry)}</Text>
