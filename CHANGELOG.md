@@ -3,6 +3,7 @@
 ## [UNRELEASED]
 ### Fixed
 
+- First route stops now ignore live TTC countdowns that jump more than two minutes away from the timetable, keeping first-stop departures on schedule when live data is noisy.
 - Russian Settings now capitalizes the Documents label consistently.
 
 ## v2026.5.23

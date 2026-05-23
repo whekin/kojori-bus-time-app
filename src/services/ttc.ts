@@ -242,9 +242,13 @@ const EARLY_ROUTE_STOP_IDS = new Set([
   '1:2994',
   '1:3932',
   '1:853',
+  '1:857',
+  '1:4673',
   '1:3078',
   '1:4186',
   '1:2856',
+  '1:2139',
+  '1:3782',
 ]);
 
 export const ALL_KOJORI_STOPS: StopInfo[] = [
@@ -459,8 +463,7 @@ const LIVE_TIMETABLE_FALLBACK_MATCH_WINDOW_MINUTES = 20;
 const MAX_TRUSTED_LIVE_DRIFT_MINUTES = 60;
 const MAX_LIVE_ARRIVAL_AGE_MS = 2 * 60_000;
 const MIN_SCHEDULED_DEPARTURE_MINUTES = 1;
-const SUSPICIOUS_ORIGIN_LIVE_MINUTES_MIN = 6;
-const SUSPICIOUS_ORIGIN_LIVE_MINUTES_MAX = 8;
+const EARLY_ROUTE_STOP_LIVE_DRIFT_TOLERANCE_MINUTES = 2;
 
 function isEarlyRouteStopId(stopId?: string) {
   return Boolean(stopId && EARLY_ROUTE_STOP_IDS.has(resolveTtcLookupStopId(stopId)));
@@ -688,7 +691,6 @@ export function mergeArrivalsIntoSchedule(
           .filter(arrival => arrival.shortName === bus && arrival.realtime)
           .map(arrival => ({
             realtimeMinutes: arrival.realtimeArrivalMinutes - elapsedLiveMinutes,
-            reportedRealtimeMinutes: arrival.realtimeArrivalMinutes,
             scheduledMinutes: arrival.scheduledArrivalMinutes - elapsedLiveMinutes,
           }))
           .filter(arrival => Number.isFinite(arrival.realtimeMinutes) && Number.isFinite(arrival.scheduledMinutes))
@@ -805,17 +807,18 @@ export function mergeArrivalsIntoSchedule(
 }
 
 function isSuspiciousEarlyStopLiveArrival(
-  arrival: { realtimeMinutes: number; reportedRealtimeMinutes: number; scheduledMinutes: number },
+  arrival: { realtimeMinutes: number; scheduledMinutes: number },
   scheduled: Departure[],
   stopId?: string,
 ) {
   if (!isEarlyRouteStopId(stopId)) return false;
-  if (
-    arrival.reportedRealtimeMinutes < SUSPICIOUS_ORIGIN_LIVE_MINUTES_MIN ||
-    arrival.reportedRealtimeMinutes > SUSPICIOUS_ORIGIN_LIVE_MINUTES_MAX
-  ) {
-    return false;
-  }
+
+  const delayedPastSchedule = scheduled.find(dep => (
+    dep.minsUntil < MIN_SCHEDULED_DEPARTURE_MINUTES &&
+    arrival.realtimeMinutes > dep.minsUntil &&
+    Math.abs(arrival.realtimeMinutes - dep.minsUntil) <= LIVE_TIMETABLE_FALLBACK_MATCH_WINDOW_MINUTES
+  ));
+  if (delayedPastSchedule) return false;
 
   const nearestSchedule = scheduled.reduce<Departure | undefined>((nearest, dep) => {
     if (!nearest) return dep;
@@ -823,7 +826,11 @@ function isSuspiciousEarlyStopLiveArrival(
     const nearestDistance = Math.abs(nearest.minsUntil - arrival.scheduledMinutes);
     return depDistance < nearestDistance ? dep : nearest;
   }, undefined);
-  return Boolean(nearestSchedule && nearestSchedule.minsUntil < arrival.realtimeMinutes);
+  if (!nearestSchedule || nearestSchedule.minsUntil < MIN_SCHEDULED_DEPARTURE_MINUTES) {
+    return false;
+  }
+
+  return Math.abs(arrival.realtimeMinutes - nearestSchedule.minsUntil) > EARLY_ROUTE_STOP_LIVE_DRIFT_TOLERANCE_MINUTES;
 }
 
 function liveDepartureFromArrival(

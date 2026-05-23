@@ -298,7 +298,7 @@ describe('mergeArrivalsIntoSchedule', () => {
     expect(result[0].driftMinutes).toBeUndefined();
   });
 
-  it('suppresses suspicious seven-minute live arrivals at early route stops when schedule is sooner', () => {
+  it('suppresses live arrivals that run far later than schedule at early route stops', () => {
     const departures = [
       makeDeparture('316', 1, '15:01'),
       makeDeparture('316', 31, '15:31'),
@@ -316,7 +316,26 @@ describe('mergeArrivalsIntoSchedule', () => {
     expect(result.some(dep => dep.live)).toBe(false);
   });
 
-  it('suppresses cached seven-minute early-stop signals after local countdown adjustment', () => {
+  it('suppresses live arrivals that run far earlier than schedule at early route stops', () => {
+    const departures = [
+      makeDeparture('316', 8, '15:08'),
+      makeDeparture('316', 38, '15:38'),
+    ];
+
+    const result = mergeArrivalsIntoSchedule(
+      departures,
+      [makeArrival('316', 2, 8)],
+      new Date('2026-04-15T15:00:00Z'),
+      undefined,
+      { stopId: '1:3932' },
+    );
+
+    expect(result.map(dep => dep.status)).toEqual(['scheduled', 'scheduled']);
+    expect(result[0].minsUntil).toBe(8);
+    expect(result.some(dep => dep.live)).toBe(false);
+  });
+
+  it('suppresses cached noisy early-stop signals after local countdown adjustment', () => {
     const departures = [
       makeDeparture('316', 1, '15:01'),
       makeDeparture('316', 31, '15:31'),
@@ -335,7 +354,7 @@ describe('mergeArrivalsIntoSchedule', () => {
     expect(result.some(dep => dep.live)).toBe(false);
   });
 
-  it('keeps seven-minute live arrivals away from the early route zone', () => {
+  it('keeps live arrivals away from the early route zone', () => {
     const departures = [
       makeDeparture('316', 1, '15:01'),
       makeDeparture('316', 31, '15:31'),
@@ -346,14 +365,14 @@ describe('mergeArrivalsIntoSchedule', () => {
       [makeArrival('316', 7, 1)],
       new Date('2026-04-15T15:00:00Z'),
       undefined,
-      { stopId: '1:2139' },
+      { stopId: '1:3537' },
     );
 
     expect(result[0].status).toBe('live');
     expect(result[0].time).toBe('15:07');
   });
 
-  it('keeps early-stop seven-minute live arrivals when schedule is not sooner', () => {
+  it('keeps early-stop live arrivals within the schedule tolerance', () => {
     const departures = [
       makeDeparture('316', 10, '15:10'),
       makeDeparture('316', 31, '15:31'),
@@ -361,14 +380,14 @@ describe('mergeArrivalsIntoSchedule', () => {
 
     const result = mergeArrivalsIntoSchedule(
       departures,
-      [makeArrival('316', 7, 10)],
+      [makeArrival('316', 9, 10)],
       new Date('2026-04-15T15:00:00Z'),
       undefined,
       { stopId: '1:3078' },
     );
 
     expect(result[0].status).toBe('live');
-    expect(result[0].time).toBe('15:07');
+    expect(result[0].time).toBe('15:09');
   });
 
   it('ignores stale live arrivals instead of counting them down indefinitely', () => {
