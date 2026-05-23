@@ -910,7 +910,7 @@ export const translations = {
     settingsSectionDataSummary: '{status} · {refreshed}',
     settingsSectionAbout: 'О приложении',
     settingsSectionAboutNote: 'Документы, поддержка и версия приложения.',
-    settingsSectionAboutSummary: 'Версия {version} · документы',
+    settingsSectionAboutSummary: 'Версия {version} · Документы',
     settingsSavedDatasetCount: '{count}',
     settingsPinnedLanguage: 'В приложении',
     settingsLastDataRefresh: 'Обновлено {value}',

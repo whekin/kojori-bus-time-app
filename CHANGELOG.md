@@ -1,5 +1,10 @@
 # Changelog
 
+## [UNRELEASED]
+### Fixed
+
+- Russian Settings now capitalizes the Documents label consistently.
+
 ## v2026.5.23
 ### Infra
 
