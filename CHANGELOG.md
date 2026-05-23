@@ -1,12 +1,11 @@
 # Changelog
 
-## [UNRELEASED]
+## v2026.5.23
 ### Fixed
 
 - First route stops now ignore live TTC countdowns that jump more than two minutes away from the timetable, keeping first-stop departures on schedule when live data is noisy.
 - Russian Settings now capitalizes the Documents label consistently.
 
-## v2026.5.23
 ### Infra
 
 - EAS Updates now use a stable manual runtime so compatible daily releases can receive automatic JS and asset updates.
