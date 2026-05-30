@@ -5,8 +5,10 @@ import {
 import React, { type PropsWithChildren } from 'react';
 import { Modal, Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { ReduceMotion } from 'react-native-reanimated';
 
 import { useAppColors } from '@/hooks/use-app-colors';
+import { useReducedMotion } from '@/hooks/use-reduced-motion';
 
 export { BottomSheetScrollView as ScrollableBottomSheetScrollView };
 
@@ -25,15 +27,18 @@ export function ScrollableBottomSheet({
   contentStyle,
 }: ScrollableBottomSheetProps) {
   const colors = useAppColors();
+  const reduceMotion = useReducedMotion();
   if (!visible) return null;
 
   return (
-    <Modal visible transparent animationType="fade" onRequestClose={onClose} statusBarTranslucent>
+    <Modal visible transparent animationType={reduceMotion ? 'none' : 'fade'} onRequestClose={onClose} statusBarTranslucent>
       <GestureHandlerRootView style={styles.root}>
         <Pressable style={styles.backdrop} onPress={onClose} />
         <BottomSheet
           index={0}
           snapPoints={[snapPoint]}
+          animateOnMount={!reduceMotion}
+          overrideReduceMotion={reduceMotion ? ReduceMotion.Always : ReduceMotion.System}
           enableDynamicSizing={false}
           enablePanDownToClose
           backgroundStyle={[

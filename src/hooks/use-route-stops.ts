@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { useMemo } from 'react';
 
 import { useI18n } from '@/hooks/use-i18n';
 import { StopInfo } from '@/services/ttc';
@@ -19,9 +20,13 @@ export function useRouteStops(direction: Direction) {
     staleTime: Number.POSITIVE_INFINITY,
     retry: 0,
   });
+  const stops = useMemo(
+    () => (query.data ?? []).map(stop => ({ ...stop, label: localizedStopName(stop) })),
+    [localizedStopName, query.data],
+  );
 
   return {
-    stops: (query.data ?? []).map(stop => ({ ...stop, label: localizedStopName(stop) })),
+    stops,
     isLoading: query.isLoading,
     isError: query.isError,
   };

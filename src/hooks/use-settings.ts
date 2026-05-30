@@ -178,7 +178,13 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   };
 
   const update = useCallback((patch: Partial<Settings>) => {
-    setSettings(prev => persist({ ...prev, ...patch }));
+    setSettings(prev => {
+      const hasChanges = (Object.entries(patch) as [keyof Settings, Settings[keyof Settings]][])
+        .some(([key, value]) => prev[key] !== value);
+      if (!hasChanges) return prev;
+
+      return persist({ ...prev, ...patch });
+    });
   }, []);
 
   const setSharedDirection = useCallback((direction: SharedDirection, manual = true) => {

@@ -46,7 +46,7 @@ import { useLocation } from '@/hooks/use-location';
 import { useRouteStops } from '@/hooks/use-route-stops';
 import { useSettings, type LaunchBehavior, type TtcHealthDemo } from '@/hooks/use-settings';
 import { useStopNames } from '@/hooks/use-stop-names';
-import { useTtcQueryLog } from '@/hooks/use-ttc-query-log';
+import { useTtcQueryLogSnapshot } from '@/hooks/use-ttc-query-log';
 import { useTtcOfflineStatus } from '@/hooks/use-ttc-offline';
 import { findStop, StopInfo } from '@/services/ttc';
 import {
@@ -965,7 +965,7 @@ function ThemeModeCard({
   );
 }
 
-export default function SettingsScreen() {
+export default function SettingsScreen({ isActive = true }: { isActive?: boolean }) {
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
   const { colors, styles } = useStyles();
@@ -974,19 +974,20 @@ export default function SettingsScreen() {
   const { t, formatCount, languageOptions, resolvedLanguage, setLanguage } = useI18n();
   const stopNames = useStopNames();
   const offlineStatus = useTtcOfflineStatus();
-  const queryLog = useTtcQueryLog();
-  const [queryMetricsNow, setQueryMetricsNow] = useState(() => Date.now());
   const queryClient = useQueryClient();
+  const [modal, setModal] = useState<'kojori' | 'tbilisi' | 'widget-kojori' | 'widget-tbilisi' | null>(null);
+  const [showPermissionModal, setShowPermissionModal] = useState(false);
+  const [noticeModal, setNoticeModal] = useState<NoticeModalState | null>(null);
+  const [activeSection, setActiveSection] = useState<SettingsSection | null>(null);
+  const shouldTrackQueryLog = isActive && activeSection === 'data' && settings.debugOptionsUnlocked;
+  const queryLog = useTtcQueryLogSnapshot(shouldTrackQueryLog);
+  const [queryMetricsNow, setQueryMetricsNow] = useState(() => Date.now());
   const {
     permission,
     locationError,
     requestLocationAccess,
     isLocating,
-  } = useLocation(settings.launchBehavior === 'smart');
-  const [modal, setModal] = useState<'kojori' | 'tbilisi' | 'widget-kojori' | 'widget-tbilisi' | null>(null);
-  const [showPermissionModal, setShowPermissionModal] = useState(false);
-  const [noticeModal, setNoticeModal] = useState<NoticeModalState | null>(null);
-  const [activeSection, setActiveSection] = useState<SettingsSection | null>(null);
+  } = useLocation(isActive && settings.launchBehavior === 'smart');
   const [easterEggTaps, setEasterEggTaps] = useState(0);
   const [refreshingDataset, setRefreshingDataset] = useState<TtcRefreshTarget | null>(null);
   const [selectedPaletteId, setSelectedPaletteId] = useState(settings.paletteId);
@@ -1047,9 +1048,11 @@ export default function SettingsScreen() {
   }
 
   useEffect(() => {
+    if (!shouldTrackQueryLog) return;
+    setQueryMetricsNow(Date.now());
     const intervalId = setInterval(() => setQueryMetricsNow(Date.now()), 30_000);
     return () => clearInterval(intervalId);
-  }, []);
+  }, [shouldTrackQueryLog]);
 
   useEffect(() => {
     return () => {

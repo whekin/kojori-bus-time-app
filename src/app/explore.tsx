@@ -124,7 +124,7 @@ const PROMOTED_STOP_DECLUTTER_PX = {
 const KOJORI_CENTER_STOP_ID = '1:3078';
 const ROUTE_LINE_SIMPLIFY_TOLERANCE_METERS = 12;
 const SHARED_ROUTE_STRIPE_METERS = 260;
-const LIVE_VEHICLE_CRUISE_MS = 8_500;
+const LIVE_VEHICLE_CRUISE_MS = 3_900;
 const LIVE_VEHICLE_CORRECTION_MS = 900;
 const LIVE_VEHICLE_START_HOLD_METERS = 350;
 const LIVE_VEHICLE_HEADING_LOOKAHEAD_METERS = 24;
@@ -134,6 +134,8 @@ const TBILISI_TRAFFIC_ANCHOR_STOP_ID = '1:845';
 const TBILISI_TRAFFIC_SPEED_KMH = 22;
 const CITY_SPEED_KMH = 25;
 const KOJORI_SPEED_KMH = 45;
+const REGION_CENTER_EPSILON = 0.00035;
+const REGION_DELTA_EPSILON = 0.0015;
 const GOOGLE_DARK_MAP_STYLE = [
   { elementType: 'geometry', stylers: [{ color: '#1d1d1d' }] },
   { elementType: 'labels.text.stroke', stylers: [{ color: '#1d1d1d' }] },
@@ -236,10 +238,25 @@ function StopMapMarker({
   colors: ReturnType<typeof useAppColors>;
   onPress: () => void;
 }) {
+  const [trackMarkerViewChanges, setTrackMarkerViewChanges] = useState(true);
   const markerSize = isSimpleOrdinaryStop ? 12 : 20;
   const hitSize = isSimpleOrdinaryStop ? 28 : markerSize + 8;
   const promotedHitSize = 44;
   const promotedMarkerSize = 30;
+  const markerVisualStateKey = [
+    isPromoted ? 'promoted' : 'ordinary',
+    isSimpleOrdinaryStop ? 'simple' : 'full',
+    markerColor,
+    calloutIconColor,
+    resolvedThemeMode,
+  ].join(':');
+
+  useEffect(() => {
+    setTrackMarkerViewChanges(true);
+    const timeoutId = setTimeout(() => setTrackMarkerViewChanges(false), 180);
+    return () => clearTimeout(timeoutId);
+  }, [markerVisualStateKey]);
+
   const stopMarker = (
     <StopMarkerCallout
       stop={stop}
@@ -256,7 +273,7 @@ function StopMapMarker({
         key={`stop-${direction}-${stop.id}`}
         coordinate={{ latitude: stop.lat!, longitude: stop.lon! }}
         anchor={STOP_MARKER_ANCHOR}
-        tracksViewChanges={false}
+        tracksViewChanges={trackMarkerViewChanges}
         title={stop.label}
         description={stopNumberLabel}
         onPress={onPress}
@@ -295,7 +312,7 @@ function StopMapMarker({
       key={`stop-${direction}-${stop.id}`}
       coordinate={{ latitude: stop.lat!, longitude: stop.lon! }}
       anchor={STOP_MARKER_ANCHOR}
-      tracksViewChanges={false}
+      tracksViewChanges={trackMarkerViewChanges}
       title={stop.label}
       description={stopNumberLabel}
       onPress={onPress}
@@ -382,6 +399,28 @@ function declutterPromotedStopMarkers(
     visible: markers.filter(marker => visible.has(marker.stop.id)),
     compact: markers.filter(marker => compact.has(marker.stop.id)),
   };
+}
+
+function getStopMarkerZoomTier(latitudeDelta: number): StopMarkerZoomTier {
+  return latitudeDelta >= SHOW_ORDINARY_STOPS_LAT_DELTA
+    ? 'overview'
+    : latitudeDelta >= FULL_STOP_MARKERS_LAT_DELTA
+      ? 'mid'
+      : 'close';
+}
+
+function shouldUpdateMapRegion(previous: Region, next: Region) {
+  const previousShowsMarkers = previous.latitudeDelta < 0.5;
+  const nextShowsMarkers = next.latitudeDelta < 0.5;
+  if (previousShowsMarkers !== nextShowsMarkers) return true;
+  if (getStopMarkerZoomTier(previous.latitudeDelta) !== getStopMarkerZoomTier(next.latitudeDelta)) return true;
+
+  return (
+    Math.abs(previous.latitude - next.latitude) > REGION_CENTER_EPSILON ||
+    Math.abs(previous.longitude - next.longitude) > REGION_CENTER_EPSILON ||
+    Math.abs(previous.latitudeDelta - next.latitudeDelta) > REGION_DELTA_EPSILON ||
+    Math.abs(previous.longitudeDelta - next.longitudeDelta) > REGION_DELTA_EPSILON
+  );
 }
 
 function stopMarkerPriority(
@@ -912,11 +951,7 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
   const showMarkers = useMemo(() => {
     return currentRegion.latitudeDelta < 0.5;
   }, [currentRegion.latitudeDelta]);
-  const stopMarkerZoomTier = currentRegion.latitudeDelta >= SHOW_ORDINARY_STOPS_LAT_DELTA
-    ? 'overview'
-    : currentRegion.latitudeDelta >= FULL_STOP_MARKERS_LAT_DELTA
-      ? 'mid'
-      : 'close';
+  const stopMarkerZoomTier = getStopMarkerZoomTier(currentRegion.latitudeDelta);
   const showOrdinaryStopMarkers = stopMarkerZoomTier !== 'overview';
   const favoriteStopIds = direction === 'toKojori' ? settings.tbilisiFavorites : settings.kojoriFavorites;
   const curatedStopIds = getCuratedStopIds(direction);
@@ -1112,7 +1147,11 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
       mapRef.current?.animateToRegion(clampedRegion, 300);
     }
     
-    setCurrentRegion(clampedRegion);
+    setCurrentRegion(previousRegion => (
+      shouldUpdateMapRegion(previousRegion, clampedRegion)
+        ? clampedRegion
+        : previousRegion
+    ));
   }
 
   function handleMapPress(event: MapPressEvent) {
@@ -1218,7 +1257,7 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
 
           return (
             <StopMapMarker
-              key={`stop-${direction}-${stop.id}-${markerColor}`}
+              key={`stop-${direction}-${stop.id}`}
               direction={direction}
               stop={stop}
               isPromoted={isPromoted}
@@ -1240,7 +1279,7 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
 
           return (
             <StopMapMarker
-              key={`stop-compact-${direction}-${stop.id}-${stopAccent}`}
+              key={`stop-${direction}-${stop.id}`}
               direction={direction}
               stop={stop}
               isPromoted={false}

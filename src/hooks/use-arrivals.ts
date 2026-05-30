@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { useMemo } from 'react';
 
 import { useI18n } from '@/hooks/use-i18n';
 import { ArrivalTime, BusLine, fetchArrivalTimes, resolveTtcLookupStopId, ROUTES } from '@/services/ttc';
@@ -19,16 +20,19 @@ export function useArrivals(stopId: string, direction?: 'toKojori' | 'toTbilisi'
     retry: 0,
   });
 
-  const arrivals = (query.data ?? [])
-    .filter(a => {
-      if (!(BUSES as string[]).includes(a.shortName)) return false;
-      if (direction) {
-        const expected = ROUTES[a.shortName as BusLine][direction];
-        return a.patternSuffix === expected;
-      }
-      return true;
-    })
-    .sort((a, b) => a.realtimeArrivalMinutes - b.realtimeArrivalMinutes);
+  const arrivals = useMemo(
+    () => (query.data ?? [])
+      .filter(a => {
+        if (!(BUSES as string[]).includes(a.shortName)) return false;
+        if (direction) {
+          const expected = ROUTES[a.shortName as BusLine][direction];
+          return a.patternSuffix === expected;
+        }
+        return true;
+      })
+      .sort((a, b) => a.realtimeArrivalMinutes - b.realtimeArrivalMinutes),
+    [direction, query.data],
+  );
 
   return { ...query, arrivals };
 }

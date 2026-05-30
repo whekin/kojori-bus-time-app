@@ -1035,6 +1035,8 @@ export default function HomeScreen({
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [now, setNow] = useState(() => new Date());
   const handledWidgetLink = useRef<string | null>(null);
+  const kojoriPaneNowRef = useRef(now);
+  const tbilisiPaneNowRef = useRef(now);
   const mode = directionToMode(activeDirection);
 
   useEffect(() => {
@@ -1076,19 +1078,24 @@ export default function HomeScreen({
   ]);
 
   useEffect(() => {
+    if (!isActive) return undefined;
+
+    function updateClock() {
+      setNow(new Date());
+    }
+
+    updateClock();
     let intervalId: ReturnType<typeof setInterval> | undefined;
     const timeoutId = setTimeout(
       () => {
-        setNow(new Date());
-        intervalId = setInterval(() => {
-          setNow(new Date());
-        }, 60_000);
+        updateClock();
+        intervalId = setInterval(updateClock, 60_000);
       },
       60_000 - (Date.now() % 60_000),
     );
 
     const sub = AppState.addEventListener("change", (state) => {
-      if (state === "active") setNow(new Date());
+      if (state === "active") updateClock();
     });
 
     return () => {
@@ -1096,12 +1103,22 @@ export default function HomeScreen({
       if (intervalId) clearInterval(intervalId);
       sub.remove();
     };
-  }, []);
+  }, [isActive]);
+
+  useEffect(() => {
+    if (mode === "kojori") {
+      kojoriPaneNowRef.current = now;
+    } else {
+      tbilisiPaneNowRef.current = now;
+    }
+  }, [mode, now]);
 
   const activeStopId =
     mode === "kojori"
       ? settings.activeTbilisiStopId
       : settings.activeKojoriStopId;
+  const kojoriPaneNow = mode === "kojori" ? now : kojoriPaneNowRef.current;
+  const tbilisiPaneNow = mode === "tbilisi" ? now : tbilisiPaneNowRef.current;
 
   async function handleRefresh() {
     if (isRefreshing) return;
@@ -1160,7 +1177,7 @@ export default function HomeScreen({
             bottomInset={insets.bottom}
             isRefreshing={isRefreshing}
             onRefresh={handleRefresh}
-            now={now}
+            now={kojoriPaneNow}
             demoEnabled={settings.cancelledBusDemo}
           />
         </View>
@@ -1180,7 +1197,7 @@ export default function HomeScreen({
             bottomInset={insets.bottom}
             isRefreshing={isRefreshing}
             onRefresh={handleRefresh}
-            now={now}
+            now={tbilisiPaneNow}
             demoEnabled={settings.cancelledBusDemo}
           />
         </View>

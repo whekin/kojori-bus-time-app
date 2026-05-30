@@ -1,7 +1,7 @@
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import PagerView from "react-native-pager-view";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { BackHandler, Pressable, StyleSheet, View } from "react-native";
+import { BackHandler, InteractionManager, Pressable, StyleSheet, View } from "react-native";
 import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 import Animated, {
   interpolateColor,
@@ -23,8 +23,8 @@ import TimetableScreen from "@/app/timetable";
 import { useAppColors } from "@/hooks/use-app-colors";
 import { useI18n } from "@/hooks/use-i18n";
 import { MapFocusProvider } from "@/hooks/use-map-focus";
+import { useReducedMotion } from "@/hooks/use-reduced-motion";
 import { TabNavProvider, type TabRoute } from "@/hooks/use-tab-nav";
-import { scheduleIdleTask } from "@/utils/idle-task";
 
 type TabItem = {
   route: TabRoute;
@@ -37,8 +37,11 @@ const NAV_GAP = 6;
 const NAV_PADDING = 5;
 const NAV_HIGHLIGHT_EXTRA = 2;
 const NAV_PROGRESS_TIMING = { duration: 220 };
+const NAV_PROGRESS_REDUCED_TIMING = { duration: 1 };
+const PRELOAD_INACTIVE_TABS_DELAY_MS = 900;
 const TAB_ROUTES: TabRoute[] = ["index", "explore", "timetable", "settings"];
 const ALL_TAB_INDEXES = new Set(TAB_ROUTES.map((_, index) => index));
+const INITIAL_TAB_INDEXES = new Set([0, 1]);
 
 const AnimatedIcon = Animated.createAnimatedComponent(MaterialCommunityIcons);
 const AnimatedPagerView = Animated.createAnimatedComponent(PagerView);
@@ -66,12 +69,14 @@ function TabButton({
   index,
   activeIndex,
   pagerProgress,
+  reduceMotion,
   onPress,
 }: {
   tab: TabItem;
   index: number;
   activeIndex: number;
   pagerProgress: SharedValue<number>;
+  reduceMotion: boolean;
   onPress: () => void;
 }) {
   const C = useAppColors();
@@ -81,13 +86,13 @@ function TabButton({
   const activationPulse = useSharedValue(0);
 
   useEffect(() => {
-    if (index !== activeIndex) return;
+    if (index !== activeIndex || reduceMotion) return;
 
     activationPulse.value = withSequence(
       withTiming(1, { duration: 120 }),
       withTiming(0, { duration: 180 }),
     );
-  }, [activeIndex, activationPulse, index]);
+  }, [activeIndex, activationPulse, index, reduceMotion]);
 
   const iconStyle = useAnimatedStyle(() => {
     const distance = Math.min(Math.abs(pagerProgress.value - index), 1);
@@ -121,10 +126,10 @@ function TabButton({
       accessibilityLabel={tab.title}
       accessibilityState={{ selected: index === activeIndex }}
       onPressIn={() => {
-        pressProgress.value = withTiming(1, { duration: 80 });
+        pressProgress.value = withTiming(1, { duration: reduceMotion ? 1 : 80 });
       }}
       onPressOut={() => {
-        pressProgress.value = withTiming(0, { duration: 140 });
+        pressProgress.value = withTiming(0, { duration: reduceMotion ? 1 : 140 });
       }}
       onPress={() => {
         if (index === activeIndex) return;
@@ -165,11 +170,13 @@ export default function AppTabs({
   const [activeIndex, setActiveIndex] = useState(0);
   const tabHistoryRef = useRef<number[]>([0]);
   const [mountedIndexes, setMountedIndexes] = useState<ReadonlySet<number>>(
-    () => new Set([0]),
+    () => (deferInactiveTabs ? new Set([0]) : INITIAL_TAB_INDEXES),
   );
   const [navWidth, setNavWidth] = useState(0);
   const pagerProgress = useSharedValue(0);
   const { t } = useI18n();
+  const reduceMotion = useReducedMotion();
+  const navProgressTiming = reduceMotion ? NAV_PROGRESS_REDUCED_TIMING : NAV_PROGRESS_TIMING;
   const tabs: TabItem[] = [
     {
       route: "index",
@@ -187,25 +194,48 @@ export default function AppTabs({
       route: "timetable",
       title: t("tabsTimetable"),
       icon: "table-clock",
-      render: () => <TimetableScreen />,
+      render: (isActive) => <TimetableScreen isActive={isActive} />,
     },
     {
       route: "settings",
       title: t("tabsSettings"),
       icon: "cog",
-      render: () => <SettingsScreen />,
+      render: (isActive) => <SettingsScreen isActive={isActive} />,
     },
   ];
 
   useEffect(() => {
     if (deferInactiveTabs) return;
 
-    const handle = scheduleIdleTask(() => {
-      setMountedIndexes(ALL_TAB_INDEXES);
+    let cancelled = false;
+    let preloadTimeout: ReturnType<typeof setTimeout> | null = null;
+    const interactionHandle = InteractionManager.runAfterInteractions(() => {
+      preloadTimeout = setTimeout(() => {
+        if (!cancelled) setMountedIndexes(ALL_TAB_INDEXES);
+      }, PRELOAD_INACTIVE_TABS_DELAY_MS);
     });
 
-    return () => handle.cancel();
+    return () => {
+      cancelled = true;
+      interactionHandle.cancel?.();
+      if (preloadTimeout) clearTimeout(preloadTimeout);
+    };
   }, [deferInactiveTabs]);
+
+  useEffect(() => {
+    if (deferInactiveTabs) return;
+
+    setMountedIndexes((prev) => {
+      let next: Set<number> | null = null;
+      for (const index of [activeIndex - 1, activeIndex, activeIndex + 1]) {
+        if (index < 0 || index >= TAB_ROUTES.length || prev.has(index)) continue;
+        next ??= new Set(prev);
+        next.add(index);
+      }
+
+      return next ?? prev;
+    });
+  }, [activeIndex, deferInactiveTabs]);
 
   const mountTab = useCallback((index: number) => {
     setMountedIndexes((prev) => {
@@ -221,11 +251,11 @@ export default function AppTabs({
       const idx = TAB_ROUTES.indexOf(route);
       if (idx >= 0) {
         mountTab(idx);
-        pagerProgress.value = withTiming(idx, NAV_PROGRESS_TIMING);
+        pagerProgress.value = withTiming(idx, navProgressTiming);
         pagerRef.current?.setPage(idx);
       }
     },
-    [mountTab, pagerProgress],
+    [mountTab, navProgressTiming, pagerProgress],
   );
 
   useEffect(() => {
@@ -240,14 +270,14 @@ export default function AppTabs({
           history.pop();
           const previousIndex = history[history.length - 1] ?? 0;
           mountTab(previousIndex);
-          pagerProgress.value = withTiming(previousIndex, NAV_PROGRESS_TIMING);
+          pagerProgress.value = withTiming(previousIndex, navProgressTiming);
           pagerRef.current?.setPage(previousIndex);
           return true;
         }
 
         if (activeIndex !== 0) {
           mountTab(0);
-          pagerProgress.value = withTiming(0, NAV_PROGRESS_TIMING);
+          pagerProgress.value = withTiming(0, navProgressTiming);
           pagerRef.current?.setPage(0);
           tabHistoryRef.current = [0];
           return true;
@@ -263,7 +293,7 @@ export default function AppTabs({
     );
 
     return () => subscription.remove();
-  }, [activeIndex, backEnabled, mountTab, onRequestDirectionPicker]);
+  }, [activeIndex, backEnabled, mountTab, navProgressTiming, onRequestDirectionPicker, pagerProgress]);
 
   const pageScrollHandler = usePagerScrollHandler((event) => {
     "worklet";
@@ -296,7 +326,7 @@ export default function AppTabs({
       onPageScroll={pageScrollHandler}
       onPageSelected={(event) => {
         const nextIndex = event.nativeEvent.position;
-        pagerProgress.value = withTiming(nextIndex, NAV_PROGRESS_TIMING);
+        pagerProgress.value = withTiming(nextIndex, navProgressTiming);
         mountTab(nextIndex);
         if (nextIndex === activeIndex) return;
         tabHistoryRef.current = [
@@ -379,11 +409,12 @@ export default function AppTabs({
                     index={index}
                     activeIndex={activeIndex}
                     pagerProgress={pagerProgress}
+                    reduceMotion={reduceMotion}
                     onPress={() => {
                       mountTab(index);
                       pagerProgress.value = withTiming(
                         index,
-                        NAV_PROGRESS_TIMING,
+                        navProgressTiming,
                       );
                       pagerRef.current?.setPage(index);
                     }}

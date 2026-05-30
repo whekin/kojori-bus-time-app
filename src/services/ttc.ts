@@ -507,6 +507,14 @@ function scheduledDeparturesForDate(
   return result.sort((a, b) => a.daysUntil - b.daysUntil || a.minsFromMidnight - b.minsFromMidnight);
 }
 
+function withRelativeServiceMinutes(departure: ServiceDeparture, nowMins: number): ServiceDeparture {
+  return {
+    ...departure,
+    minsUntil: departure.daysUntil * 24 * 60 + departure.minsFromMidnight - nowMins,
+    scheduledMinsUntil: departure.daysUntil * 24 * 60 + departure.minsFromMidnight - nowMins,
+  };
+}
+
 export function getLastDepartureToday(
   schedule380: SchedulePeriod[] | undefined,
   schedule316: SchedulePeriod[] | undefined,
@@ -516,13 +524,7 @@ export function getLastDepartureToday(
   const nowMins = now.getHours() * 60 + now.getMinutes();
   const departures = scheduledDeparturesForDate(schedule380, schedule316, stopId, now, 0);
   const finalDeparture = departures.at(-1);
-  return finalDeparture
-    ? {
-        ...finalDeparture,
-        minsUntil: finalDeparture.minsFromMidnight - nowMins,
-        scheduledMinsUntil: finalDeparture.minsFromMidnight - nowMins,
-      }
-    : undefined;
+  return finalDeparture ? withRelativeServiceMinutes(finalDeparture, nowMins) : undefined;
 }
 
 export function isFinalDepartureToday(
@@ -552,12 +554,7 @@ export function getNextServiceDeparture(
     const departures = scheduledDeparturesForDate(schedule380, schedule316, stopId, date, daysUntil)
       .filter(dep => daysUntil > 0 || dep.minsFromMidnight >= nowMins);
     if (departures.length > 0) {
-      const first = departures[0];
-      return {
-        ...first,
-        minsUntil: daysUntil * 24 * 60 + first.minsFromMidnight - nowMins,
-        scheduledMinsUntil: daysUntil * 24 * 60 + first.minsFromMidnight - nowMins,
-      };
+      return withRelativeServiceMinutes(departures[0], nowMins);
     }
   }
 
@@ -574,20 +571,35 @@ export function getDepartureServiceBoundary(
   const nowMins = now.getHours() * 60 + now.getMinutes();
   const todaysDepartures = scheduledDeparturesForDate(schedule380, schedule316, stopId, now, 0);
   const rawFinalDepartureToday = todaysDepartures.at(-1);
-  const finalDepartureToday = rawFinalDepartureToday
-    ? {
-        ...rawFinalDepartureToday,
-        minsUntil: rawFinalDepartureToday.minsFromMidnight - nowMins,
-        scheduledMinsUntil: rawFinalDepartureToday.minsFromMidnight - nowMins,
-      }
+  const finalDepartureToday = rawFinalDepartureToday ? withRelativeServiceMinutes(rawFinalDepartureToday, nowMins) : undefined;
+  const nextServiceDepartureToday = todaysDepartures.find(dep => dep.minsFromMidnight >= nowMins);
+  let nextServiceDeparture = nextServiceDepartureToday
+    ? withRelativeServiceMinutes(nextServiceDepartureToday, nowMins)
     : undefined;
+
+  if (!nextServiceDeparture) {
+    for (let daysUntil = 1; daysUntil <= 14; daysUntil += 1) {
+      const date = addServiceDays(now, daysUntil);
+      const futureDepartures = scheduledDeparturesForDate(schedule380, schedule316, stopId, date, daysUntil);
+      if (futureDepartures.length > 0) {
+        nextServiceDeparture = withRelativeServiceMinutes(futureDepartures[0], nowMins);
+        break;
+      }
+    }
+  }
+
   const serviceEndedToday = Boolean(finalDepartureToday && finalDepartureToday.minsFromMidnight < nowMins);
-  const nextServiceDeparture = getNextServiceDeparture(schedule380, schedule316, stopId, now);
+  const nextDepartureIsFinal = Boolean(
+    nextDeparture &&
+    finalDepartureToday &&
+    nextDeparture.bus === finalDepartureToday.bus &&
+    (nextDeparture.scheduledTime ?? nextDeparture.time) === finalDepartureToday.time,
+  );
 
   return {
     finalDepartureToday,
     nextServiceDeparture,
-    nextDepartureIsFinal: isFinalDepartureToday(nextDeparture, schedule380, schedule316, stopId, now),
+    nextDepartureIsFinal,
     hasServiceToday: todaysDepartures.length > 0,
     serviceEndedToday,
   };

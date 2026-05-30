@@ -1,11 +1,16 @@
 import { useEffect, useState } from 'react';
 import { AccessibilityInfo } from 'react-native';
+import { useReducedMotion as useReanimatedReducedMotion } from 'react-native-reanimated';
 
-export function useReducedMotion(initialValue = false) {
-  const [reduceMotionEnabled, setReduceMotionEnabled] = useState(initialValue);
+export function useReducedMotion(initialValue?: boolean) {
+  const systemReducedMotion = useReanimatedReducedMotion();
+  const [reduceMotionEnabled, setReduceMotionEnabled] = useState(
+    systemReducedMotion ?? initialValue ?? false,
+  );
 
   useEffect(() => {
     let mounted = true;
+    setReduceMotionEnabled(systemReducedMotion);
 
     AccessibilityInfo.isReduceMotionEnabled()
       .then(enabled => {
@@ -24,7 +29,7 @@ export function useReducedMotion(initialValue = false) {
       mounted = false;
       subscription.remove();
     };
-  }, []);
+  }, [systemReducedMotion]);
 
   return reduceMotionEnabled;
 }

@@ -435,7 +435,7 @@ export function loadBakedData(client: QueryClient) {
   for (const direction of ['toKojori', 'toTbilisi'] as Direction[]) {
     const polylines380 = decodeGooglePolyline(BAKED_POLYLINES[`380_${direction}`] ?? '');
     const polylines316 = decodeGooglePolyline(BAKED_POLYLINES[`316_${direction}`] ?? '');
-    client.setQueryData(['route-polylines', direction, 'encoded'], {
+    client.setQueryData(['route-polylines', direction], {
       polylines: { '380': polylines380, '316': polylines316 },
       source: 'google-directions',
     });

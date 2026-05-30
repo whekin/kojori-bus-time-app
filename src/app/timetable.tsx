@@ -132,7 +132,7 @@ function BusTag({ bus }: { bus: BusLine }) {
   );
 }
 
-export default function TimetableScreen() {
+export default function TimetableScreen({ isActive = true }: { isActive?: boolean }) {
   const colors = useAppColors();
   const styles = useTimetableStyles();
   const { t, formatDuration, formatRelativeDuration } = useI18n();
@@ -146,13 +146,27 @@ export default function TimetableScreen() {
   const direction = activeDirection;
 
   useEffect(() => {
-    setNowMins(getCurrentMinsFromMidnight());
-    const intervalId = setInterval(
-      () => setNowMins(getCurrentMinsFromMidnight()),
-      30_000,
+    if (!isActive) return undefined;
+
+    function updateClock() {
+      setNowMins(getCurrentMinsFromMidnight());
+    }
+
+    updateClock();
+    let intervalId: ReturnType<typeof setInterval> | undefined;
+    const timeoutId = setTimeout(
+      () => {
+        updateClock();
+        intervalId = setInterval(updateClock, 60_000);
+      },
+      60_000 - (Date.now() % 60_000),
     );
-    return () => clearInterval(intervalId);
-  }, []);
+
+    return () => {
+      clearTimeout(timeoutId);
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [isActive]);
 
   const favoriteIds =
     direction === "toKojori"
@@ -167,7 +181,7 @@ export default function TimetableScreen() {
     closestStop,
     distanceMeters: closestStopDistance,
     status: closestStopStatus,
-  } = useClosestStop(direction, stopId);
+  } = useClosestStop(direction, stopId, isActive);
   const stops = useMemo(
     () =>
       buildStopSelectorStops({
