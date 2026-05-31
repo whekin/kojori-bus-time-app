@@ -1,6 +1,6 @@
 # Changelog
 
-## [UNRELEASED]
+## v2026.5.31
 ### Improved
 
 - Reduced hidden-screen background work and tuned map/navigation motion for smoother tab switching, timetable updates, and live vehicle movement.
