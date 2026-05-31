@@ -1,7 +1,7 @@
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import PagerView from "react-native-pager-view";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { BackHandler, InteractionManager, Pressable, StyleSheet, View } from "react-native";
+import { BackHandler, Pressable, StyleSheet, View } from "react-native";
 import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 import Animated, {
   interpolateColor,
@@ -38,10 +38,7 @@ const NAV_PADDING = 5;
 const NAV_HIGHLIGHT_EXTRA = 2;
 const NAV_PROGRESS_TIMING = { duration: 220 };
 const NAV_PROGRESS_REDUCED_TIMING = { duration: 1 };
-const PRELOAD_INACTIVE_TABS_DELAY_MS = 900;
 const TAB_ROUTES: TabRoute[] = ["index", "explore", "timetable", "settings"];
-const ALL_TAB_INDEXES = new Set(TAB_ROUTES.map((_, index) => index));
-const INITIAL_TAB_INDEXES = new Set([0, 1]);
 
 const AnimatedIcon = Animated.createAnimatedComponent(MaterialCommunityIcons);
 const AnimatedPagerView = Animated.createAnimatedComponent(PagerView);
@@ -169,8 +166,9 @@ export default function AppTabs({
   const pagerRef = useRef<PagerView>(null);
   const [activeIndex, setActiveIndex] = useState(0);
   const tabHistoryRef = useRef<number[]>([0]);
+  const suppressedPageSelectionRef = useRef<number | null>(null);
   const [mountedIndexes, setMountedIndexes] = useState<ReadonlySet<number>>(
-    () => (deferInactiveTabs ? new Set([0]) : INITIAL_TAB_INDEXES),
+    () => new Set([0]),
   );
   const [navWidth, setNavWidth] = useState(0);
   const pagerProgress = useSharedValue(0);
@@ -204,39 +202,6 @@ export default function AppTabs({
     },
   ];
 
-  useEffect(() => {
-    if (deferInactiveTabs) return;
-
-    let cancelled = false;
-    let preloadTimeout: ReturnType<typeof setTimeout> | null = null;
-    const interactionHandle = InteractionManager.runAfterInteractions(() => {
-      preloadTimeout = setTimeout(() => {
-        if (!cancelled) setMountedIndexes(ALL_TAB_INDEXES);
-      }, PRELOAD_INACTIVE_TABS_DELAY_MS);
-    });
-
-    return () => {
-      cancelled = true;
-      interactionHandle.cancel?.();
-      if (preloadTimeout) clearTimeout(preloadTimeout);
-    };
-  }, [deferInactiveTabs]);
-
-  useEffect(() => {
-    if (deferInactiveTabs) return;
-
-    setMountedIndexes((prev) => {
-      let next: Set<number> | null = null;
-      for (const index of [activeIndex - 1, activeIndex, activeIndex + 1]) {
-        if (index < 0 || index >= TAB_ROUTES.length || prev.has(index)) continue;
-        next ??= new Set(prev);
-        next.add(index);
-      }
-
-      return next ?? prev;
-    });
-  }, [activeIndex, deferInactiveTabs]);
-
   const mountTab = useCallback((index: number) => {
     setMountedIndexes((prev) => {
       if (prev.has(index)) return prev;
@@ -246,16 +211,56 @@ export default function AppTabs({
     });
   }, []);
 
+  const mountSwipeNeighbors = useCallback((index: number) => {
+    if (deferInactiveTabs) return;
+
+    setMountedIndexes((prev) => {
+      let next: Set<number> | null = null;
+      for (const neighbor of [index - 1, index + 1]) {
+        if (neighbor < 0 || neighbor >= TAB_ROUTES.length || prev.has(neighbor)) continue;
+        next ??= new Set(prev);
+        next.add(neighbor);
+      }
+
+      return next ?? prev;
+    });
+  }, [deferInactiveTabs]);
+
+  const switchToTabIndex = useCallback((
+    nextIndex: number,
+    options: { recordHistory?: boolean } = {},
+  ) => {
+    if (nextIndex < 0 || nextIndex >= TAB_ROUTES.length || nextIndex === activeIndex) return;
+
+    const recordHistory = options.recordHistory ?? true;
+    const shouldJumpDirectly = reduceMotion || Math.abs(nextIndex - activeIndex) > 1;
+
+    mountTab(nextIndex);
+    pagerProgress.value = withTiming(nextIndex, navProgressTiming);
+
+    if (recordHistory) {
+      tabHistoryRef.current = [
+        ...tabHistoryRef.current.filter((index) => index !== nextIndex),
+        nextIndex,
+      ];
+    }
+
+    if (shouldJumpDirectly) {
+      suppressedPageSelectionRef.current = nextIndex;
+      pagerRef.current?.setPageWithoutAnimation(nextIndex);
+      setActiveIndex(nextIndex);
+      return;
+    }
+
+    pagerRef.current?.setPage(nextIndex);
+  }, [activeIndex, mountTab, navProgressTiming, pagerProgress, reduceMotion]);
+
   const navigateToTab = useCallback(
     (route: TabRoute) => {
       const idx = TAB_ROUTES.indexOf(route);
-      if (idx >= 0) {
-        mountTab(idx);
-        pagerProgress.value = withTiming(idx, navProgressTiming);
-        pagerRef.current?.setPage(idx);
-      }
+      if (idx >= 0) switchToTabIndex(idx);
     },
-    [mountTab, navProgressTiming, pagerProgress],
+    [switchToTabIndex],
   );
 
   useEffect(() => {
@@ -269,17 +274,13 @@ export default function AppTabs({
         if (history.length > 1) {
           history.pop();
           const previousIndex = history[history.length - 1] ?? 0;
-          mountTab(previousIndex);
-          pagerProgress.value = withTiming(previousIndex, navProgressTiming);
-          pagerRef.current?.setPage(previousIndex);
+          switchToTabIndex(previousIndex, { recordHistory: false });
           return true;
         }
 
         if (activeIndex !== 0) {
-          mountTab(0);
-          pagerProgress.value = withTiming(0, navProgressTiming);
-          pagerRef.current?.setPage(0);
           tabHistoryRef.current = [0];
+          switchToTabIndex(0, { recordHistory: false });
           return true;
         }
 
@@ -293,7 +294,7 @@ export default function AppTabs({
     );
 
     return () => subscription.remove();
-  }, [activeIndex, backEnabled, mountTab, navProgressTiming, onRequestDirectionPicker, pagerProgress]);
+  }, [activeIndex, backEnabled, onRequestDirectionPicker, switchToTabIndex]);
 
   const pageScrollHandler = usePagerScrollHandler((event) => {
     "worklet";
@@ -324,8 +325,18 @@ export default function AppTabs({
       offscreenPageLimit={3}
       overScrollMode="never"
       onPageScroll={pageScrollHandler}
+      onPageScrollStateChanged={(event) => {
+        if (event.nativeEvent.pageScrollState === "dragging") {
+          mountSwipeNeighbors(activeIndex);
+        }
+      }}
       onPageSelected={(event) => {
         const nextIndex = event.nativeEvent.position;
+        if (suppressedPageSelectionRef.current === nextIndex) {
+          suppressedPageSelectionRef.current = null;
+          return;
+        }
+
         pagerProgress.value = withTiming(nextIndex, navProgressTiming);
         mountTab(nextIndex);
         if (nextIndex === activeIndex) return;
@@ -410,14 +421,7 @@ export default function AppTabs({
                     activeIndex={activeIndex}
                     pagerProgress={pagerProgress}
                     reduceMotion={reduceMotion}
-                    onPress={() => {
-                      mountTab(index);
-                      pagerProgress.value = withTiming(
-                        index,
-                        navProgressTiming,
-                      );
-                      pagerRef.current?.setPage(index);
-                    }}
+                    onPress={() => switchToTabIndex(index)}
                   />
                 );
               })}

@@ -4,6 +4,8 @@
 ### Improved
 
 - Reduced hidden-screen background work and tuned map/navigation motion for smoother tab switching, timetable updates, and live vehicle movement.
+- Brake Dust now uses a calmer two-accent palette with brass navigation and muted rust UI elements.
+- Bottom tab buttons now jump directly to distant tabs instead of sliding through Map and Timetable on the way.
 
 ## v2026.5.23
 ### Fixed
