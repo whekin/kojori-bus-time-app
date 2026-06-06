@@ -8,6 +8,7 @@ import { ALL_KOJORI_STOPS, ALL_TBILISI_STOPS, type StopInfo } from '@/services/t
 type Permission = 'unknown' | 'granted' | 'denied';
 type LocationMode = 'kojori' | 'tbilisi' | null; // null = permission denied / not yet known
 type LocationAccessResult = 'granted' | 'denied' | 'blocked' | 'error';
+export type LocationErrorCode = 'timeout' | 'ambiguous' | 'unavailable';
 type ResolvedLocation = {
   latitude: number;
   longitude: number;
@@ -172,7 +173,7 @@ export function useLocation(enabled = true) {
   const [resolvedLocation, setResolvedLocation] = useState<ResolvedLocation | null>(null);
   const [canAskAgain, setCanAskAgain] = useState(true);
   const [isLocating, setIsLocating] = useState(false);
-  const [locationError, setLocationError] = useState<string | null>(null);
+  const [locationError, setLocationError] = useState<LocationErrorCode | null>(null);
   const latestRequestIdRef = useRef(0);
 
   const detectCurrentMode = useCallback(async (options?: { startupDelayMs?: number; forceFresh?: boolean }) => {
@@ -182,7 +183,7 @@ export function useLocation(enabled = true) {
       if (latestRequestIdRef.current !== requestId) return;
       didTimeout = true;
       setIsLocating(false);
-      setLocationError('Location check timed out.');
+      setLocationError('timeout');
     }, LOCATION_TIMEOUT_MS);
 
     const isExpired = () => didTimeout || latestRequestIdRef.current !== requestId;
@@ -209,7 +210,7 @@ export function useLocation(enabled = true) {
 
       if (!forceFresh && cached && shouldCooldownLiveQuery(cached)) {
         if (!cacheFresh) {
-          setLocationError('Location check timed out.');
+          setLocationError('timeout');
           setIsLocating(false);
         }
         return cacheFresh
@@ -305,7 +306,7 @@ export function useLocation(enabled = true) {
 
         setDetectedMode(null);
         setResolvedLocation(null);
-        setLocationError('Location check timed out.');
+        setLocationError('timeout');
         return createLocationResolutionResult(null, null);
       }
 
@@ -338,7 +339,7 @@ export function useLocation(enabled = true) {
 
         setDetectedMode(null);
         setResolvedLocation(null);
-        setLocationError('Could not confidently place you near Kojori or Tbilisi.');
+        setLocationError('ambiguous');
         return createLocationResolutionResult(null, null);
       }
 
@@ -372,7 +373,7 @@ export function useLocation(enabled = true) {
       setDetectedMode(null);
       setResolvedLocation(null);
       const isTimeout = error instanceof Error && error.message === 'Location timeout';
-      setLocationError(isTimeout ? 'Location check timed out.' : 'Could not determine your location.');
+      setLocationError(isTimeout ? 'timeout' : 'unavailable');
       return createLocationResolutionResult(null, null);
     } finally {
       clearTimeout(watchdogId);
@@ -470,7 +471,7 @@ export function useLocation(enabled = true) {
     } catch {
       setDetectedMode(null);
       setResolvedLocation(null);
-      setLocationError('Could not determine your location.');
+      setLocationError('unavailable');
       return 'error';
     }
   }, [detectCurrentMode]);
@@ -543,7 +544,7 @@ export function useLocation(enabled = true) {
     } catch {
       setDetectedMode(null);
       setResolvedLocation(null);
-      setLocationError('Could not determine your location.');
+      setLocationError('unavailable');
       return {
         access: 'error' as const,
         ...createLocationResolutionResult(null, null),

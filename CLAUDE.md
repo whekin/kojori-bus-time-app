@@ -39,7 +39,7 @@ Expo Router (file-based) app targeting Android primarily. Entry point is `expo-r
 
 **Theming** (`src/constants/theme.ts`): Single source of truth. `Colors` (light/dark), `Fonts` (platform-specific), `Spacing` (numeric scale 2–64), `BottomTabInset`, `MaxContentWidth`. Access via `useTheme()` hook which resolves `'unspecified'` → `'light'`.
 
-**Components** (`src/components/`): `ThemedText` / `ThemedView` accept a `themeColor` or `type` prop to apply theme colors without manual `useTheme()` calls. Platform-specific variants use `.web.tsx` suffix (e.g. `app-tabs.web.tsx`, `animated-icon.web.tsx`).
+**Components** (`src/components/`): Shared UI pulls colors, spacing, and typography from the theme constants/hooks. Platform-specific variants use `.web.tsx` suffix (e.g. `app-tabs.web.tsx`, `animated-icon.web.tsx`).
 
 **React Compiler** is enabled (`experiments.reactCompiler: true`) — avoid manual `useMemo`/`useCallback` unless profiling shows a specific need.
 

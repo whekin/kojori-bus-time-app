@@ -8,7 +8,6 @@ import {
   AppState,
   Easing,
   Platform,
-  Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -647,9 +646,10 @@ function NextCard({
   );
 }
 
-// ── To Kojori view ────────────────────────────────────────────────────────────
-function ToKojoriView({
+// ── Direction view ────────────────────────────────────────────────────────────
+function DirectionDeparturesView({
   isActive,
+  direction,
   favoriteIds,
   activeStopId,
   onSelectStop,
@@ -661,6 +661,7 @@ function ToKojoriView({
   demoEnabled,
 }: {
   isActive: boolean;
+  direction: "toKojori" | "toTbilisi";
   favoriteIds: string[];
   activeStopId: string;
   onSelectStop: (id: string) => void;
@@ -675,12 +676,17 @@ function ToKojoriView({
   const styles = useHomeStyles();
   const { t } = useI18n();
   const stopNames = useStopNames();
-  const { stops: routeStops } = useRouteStops("toKojori");
+  const { stops: routeStops } = useRouteStops(direction);
   const {
     closestStop,
     distanceMeters: closestStopDistance,
     status: closestStopStatus,
-  } = useClosestStop("toKojori", activeStopId, isActive);
+  } = useClosestStop(direction, activeStopId, isActive);
+  const accentColor = direction === "toKojori" ? colors.route380 : colors.route316;
+  const stopPickerTitle =
+    direction === "toKojori"
+      ? t("timetableTbilisiStops")
+      : t("timetableKojoriStops");
   const favoriteStops = useMemo(
     () =>
       buildStopSelectorStops({
@@ -713,201 +719,17 @@ function ToKojoriView({
     data: s380,
     isLoading: l380,
     isError: e380,
-  } = useSchedule(ROUTES["380"].id, ROUTES["380"].toKojori);
+  } = useSchedule(ROUTES["380"].id, ROUTES["380"][direction]);
   const {
     data: s316,
     isLoading: l316,
     isError: e316,
-  } = useSchedule(ROUTES["316"].id, ROUTES["316"].toKojori);
-  const { arrivals, dataUpdatedAt } = useArrivals(
-    activeStopId,
-    "toKojori",
-    isActive,
-  );
-
-  const rawDepartures = useMemo(
-    () => computeUpcomingDepartures(
-      s380,
-      s316,
-      activeStopId,
-      undefined,
-      now,
-      { includeRecentPast: true },
-    ),
-    [s380, s316, activeStopId, now],
-  );
-
-  const departures = useMemo(() => {
-    const merged = mergeArrivalsIntoSchedule(
-      rawDepartures,
-      arrivals,
-      now,
-      dataUpdatedAt,
-      { stopId: activeStopId },
-    );
-    return demoEnabled ? injectLiveDelayDemo(merged, now) : merged;
-  }, [rawDepartures, arrivals, now, dataUpdatedAt, activeStopId, demoEnabled]);
-
-  const isLoading = l380 || l316;
-  const isError = (e380 || e316) && !s380 && !s316;
-  const { next, upcoming } = useMemo(
-    () => getDisplayedDepartures(departures),
-    [departures],
-  );
-  const serviceBoundary = useMemo(
-    () => getDepartureServiceBoundary(s380, s316, activeStopId, next, now),
-    [s380, s316, activeStopId, next, now],
-  );
-  const hasNextServiceCard = !next && Boolean(serviceBoundary.nextServiceDeparture);
-  const showUpcomingEmpty = !isLoading && upcoming.length === 0 && !serviceBoundary.nextDepartureIsFinal && !hasNextServiceCard;
-
-  return (
-    <View style={styles.modeContainer}>
-      <ScrollView
-        style={styles.pageScroll}
-        contentContainerStyle={[
-          styles.pageScrollContent,
-          { paddingBottom: bottomInset + BottomTabInset + 24 },
-        ]}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={isRefreshing}
-            onRefresh={onRefresh}
-            tintColor={colors.text}
-            colors={[colors.text]}
-            progressBackgroundColor={colors.surfaceHigh}
-          />
-        }
-      >
-        <View style={styles.fixedSection}>
-          <StopSelector
-            stops={favoriteStops}
-            activeStopId={activeStopId}
-            accentColor={colors.route380}
-            onSelectStop={onSelectStop}
-            mapReturnRoute="index"
-            locationSuggestion={locationSuggestion}
-            showDirectionSwitch
-            addStopModal={{
-              title: t("timetableTbilisiStops"),
-              direction: "toKojori",
-              favoriteIds,
-              onToggle: onToggleFavorite,
-            }}
-          />
-
-          {isError && <ErrorBanner message={t("homeScheduleError")} />}
-
-          <SectionDivider label={t("homeNext")} style={styles.nextDivider} />
-          <NextCard
-            dep={next}
-            accentColor={colors.route380}
-            isLoading={isLoading}
-            serviceBoundary={serviceBoundary}
-          />
-        </View>
-
-        <SectionDivider
-          label={t("homeUpcoming")}
-          style={styles.dividerPadded}
-        />
-
-        {upcoming.length > 0 ? (
-          <View style={[styles.list, styles.listSection]}>
-            {upcoming.map((dep, i) => (
-              <DepartureRow
-                key={`${dep.key}-${dep.status}`}
-                dep={dep}
-                isLast={i === upcoming.length - 1}
-              />
-            ))}
-          </View>
-        ) : showUpcomingEmpty ? (
-          <EmptyState message={t("homeNoDepartures")} />
-        ) : null}
-      </ScrollView>
-    </View>
-  );
-}
-
-// ── To Tbilisi view ───────────────────────────────────────────────────────────
-function ToTbilisiView({
-  isActive,
-  favoriteIds,
-  activeStopId,
-  onSelectStop,
-  onToggleFavorite,
-  bottomInset,
-  isRefreshing,
-  onRefresh,
-  now,
-  demoEnabled,
-}: {
-  isActive: boolean;
-  favoriteIds: string[];
-  activeStopId: string;
-  onSelectStop: (id: string) => void;
-  onToggleFavorite: (id: string) => void;
-  bottomInset: number;
-  isRefreshing: boolean;
-  onRefresh: () => void;
-  now: Date;
-  demoEnabled: boolean;
-}) {
-  const colors = useAppColors();
-  const styles = useHomeStyles();
-  const { t } = useI18n();
-  const stopNames = useStopNames();
-  const { stops: routeStops } = useRouteStops("toTbilisi");
-  const {
-    closestStop,
-    distanceMeters: closestStopDistance,
-    status: closestStopStatus,
-  } = useClosestStop("toTbilisi", activeStopId, isActive);
-  const favoriteStops = useMemo(
-    () =>
-      buildStopSelectorStops({
-        favoriteIds,
-        activeStopId,
-        routeStops,
-        stopNames,
-        stopFallback: (id) =>
-          t("commonStopNumber", { id: id.split(":")[1] ?? id }),
-      }),
-    [activeStopId, favoriteIds, routeStops, stopNames, t],
-  );
-  const locationSuggestion = useMemo(
-    () =>
-      closestStopStatus === "available" &&
-      closestStop &&
-      closestStopDistance != null
-        ? {
-            stop: {
-              ...closestStop,
-              label: stopNames[closestStop.id] ?? closestStop.label,
-            },
-            distanceMeters: closestStopDistance,
-          }
-        : undefined,
-    [closestStop, closestStopDistance, closestStopStatus, stopNames],
-  );
-
-  const {
-    data: s380,
-    isLoading: l380,
-    isError: e380,
-  } = useSchedule(ROUTES["380"].id, ROUTES["380"].toTbilisi);
-  const {
-    data: s316,
-    isLoading: l316,
-    isError: e316,
-  } = useSchedule(ROUTES["316"].id, ROUTES["316"].toTbilisi);
+  } = useSchedule(ROUTES["316"].id, ROUTES["316"][direction]);
   const {
     arrivals,
     dataUpdatedAt,
     isError: eArrival,
-  } = useArrivals(activeStopId, "toTbilisi", isActive);
+  } = useArrivals(activeStopId, direction, isActive);
 
   const rawDepartures = useMemo(
     () => computeUpcomingDepartures(
@@ -968,14 +790,14 @@ function ToTbilisiView({
           <StopSelector
             stops={favoriteStops}
             activeStopId={activeStopId}
-            accentColor={colors.route316}
+            accentColor={accentColor}
             onSelectStop={onSelectStop}
             mapReturnRoute="index"
             locationSuggestion={locationSuggestion}
             showDirectionSwitch
             addStopModal={{
-              title: t("timetableKojoriStops"),
-              direction: "toTbilisi",
+              title: stopPickerTitle,
+              direction,
               favoriteIds,
               onToggle: onToggleFavorite,
             }}
@@ -986,7 +808,7 @@ function ToTbilisiView({
           <SectionDivider label={t("homeNext")} style={styles.nextDivider} />
           <NextCard
             dep={next}
-            accentColor={colors.route316}
+            accentColor={accentColor}
             isLoading={isLoading}
             serviceBoundary={serviceBoundary}
           />
@@ -1168,8 +990,9 @@ export default function HomeScreen({
             mode !== "kojori" && styles.directionPaneHidden,
           ]}
         >
-          <ToKojoriView
+          <DirectionDeparturesView
             isActive={isActive && mode === "kojori"}
+            direction="toKojori"
             favoriteIds={settings.tbilisiFavorites}
             activeStopId={settings.activeTbilisiStopId}
             onSelectStop={(id) => update({ activeTbilisiStopId: id })}
@@ -1188,8 +1011,9 @@ export default function HomeScreen({
             mode !== "tbilisi" && styles.directionPaneHidden,
           ]}
         >
-          <ToTbilisiView
+          <DirectionDeparturesView
             isActive={isActive && mode === "tbilisi"}
+            direction="toTbilisi"
             favoriteIds={settings.kojoriFavorites}
             activeStopId={settings.activeKojoriStopId}
             onSelectStop={(id) => update({ activeKojoriStopId: id })}

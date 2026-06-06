@@ -137,6 +137,8 @@ export function StopChoiceRow({
         {onRemove ? (
           <Pressable
             accessibilityRole="button"
+            accessibilityLabel={t('mapRemoveSavedStopA11y', { stop: stop.label })}
+            accessibilityState={{ disabled: removeDisabled }}
             disabled={removeDisabled}
             hitSlop={8}
             onPress={handleRemovePress}

@@ -2,6 +2,7 @@ import { Asset } from 'expo-asset';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import Constants from 'expo-constants';
 import { File } from 'expo-file-system';
+import * as Updates from 'expo-updates';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -42,7 +43,7 @@ import {
 } from '@/constants/theme';
 import { useAppColors, useResolvedAppThemeMode } from '@/hooks/use-app-colors';
 import { useI18n, type TranslationKey } from '@/hooks/use-i18n';
-import { useLocation } from '@/hooks/use-location';
+import { useLocation, type LocationErrorCode } from '@/hooks/use-location';
 import { useRouteStops } from '@/hooks/use-route-stops';
 import { useSettings, type LaunchBehavior, type TtcHealthDemo } from '@/hooks/use-settings';
 import { useStopNames } from '@/hooks/use-stop-names';
@@ -66,6 +67,8 @@ import {
   type TtcQueryLogEntry,
 } from '@/services/ttc-query-log';
 import { useQueryClient } from '@tanstack/react-query';
+import privacyPolicyAsset from '../../assets/legal/privacy-policy.md';
+import termsOfServiceAsset from '../../assets/legal/terms-of-service.md';
 import KojoriWidget from '../../modules/kojori-widget';
 
 const MONO = Platform.select({ android: 'monospace', ios: 'Menlo', default: 'monospace' });
@@ -114,8 +117,8 @@ const LEGAL_URLS = {
   termsOfService: Constants.expoConfig?.extra?.legal?.termsOfServiceUrl ?? `${LEGAL_BASE_URL}/terms-of-service.md`,
 } as const;
 const LEGAL_DOC_MODULES = {
-  privacy: require('../../assets/legal/privacy-policy.md'),
-  terms: require('../../assets/legal/terms-of-service.md'),
+  privacy: privacyPolicyAsset,
+  terms: termsOfServiceAsset,
 } as const;
 
 type LegalDocument = keyof typeof LEGAL_DOC_MODULES;
@@ -299,6 +302,17 @@ function formatQueryDuration(durationMs: number) {
   return `${(durationMs / 1000).toFixed(1)} s`;
 }
 
+function formatLocationError(error: LocationErrorCode, t: ReturnType<typeof useI18n>['t']) {
+  switch (error) {
+    case 'timeout':
+      return t('locationErrorTimeout');
+    case 'ambiguous':
+      return t('locationErrorAmbiguous');
+    case 'unavailable':
+      return t('locationErrorUnavailable');
+  }
+}
+
 function getQueryStatusLabel(entry: TtcQueryLogEntry) {
   if (entry.ok) {
     return entry.statusCode ? `${entry.statusCode}` : 'OK';
@@ -341,7 +355,11 @@ function TtcQueryLogCard({
             {t('queryRealtimeBody')}
           </Text>
         </View>
-        <Pressable style={[styles.queryClearButton, { borderColor: colors.borderStrong }]} onPress={onClear}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t('queryClearLogs')}
+          style={[styles.queryClearButton, { borderColor: colors.borderStrong }]}
+          onPress={onClear}>
           <Text style={[styles.queryClearButtonText, { color: colors.text }]}>{t('queryClearLogs')}</Text>
         </Pressable>
       </View>
@@ -456,7 +474,11 @@ function FavoritesCard({
         );
       })}
       <View style={styles.itemDivider} />
-      <Pressable style={styles.manageBtn} onPress={onManage}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={t('stopAddAnother')}
+        style={styles.manageBtn}
+        onPress={onManage}>
         <Text style={[styles.manageBtnText, { color: accentColor }]}>{t('stopAddAnother')}</Text>
       </Pressable>
     </View>
@@ -696,7 +718,11 @@ function WidgetStopCard({
         />
       </View>
       <View style={styles.itemDivider} />
-      <Pressable style={styles.manageBtn} onPress={onManage}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={t('commonChange')}
+        style={styles.manageBtn}
+        onPress={onManage}>
         <Text style={[styles.manageBtnText, { color: accentColor }]}>{t('commonChange')}</Text>
       </Pressable>
     </View>
@@ -1056,9 +1082,19 @@ export default function SettingsScreen({ isActive = true }: { isActive?: boolean
 
   useEffect(() => {
     return () => {
-      flushPendingAppearanceUpdate();
+      const patch = pendingAppearancePatchRef.current;
+      pendingAppearancePatchRef.current = {};
+      appearanceUpdateHandleRef.current?.cancel();
+      appearanceUpdateHandleRef.current = null;
+      if (appearanceUpdateTimeoutRef.current) {
+        clearTimeout(appearanceUpdateTimeoutRef.current);
+        appearanceUpdateTimeoutRef.current = null;
+      }
+      if (Object.keys(patch).length > 0) {
+        update(patch);
+      }
     };
-  }, []);
+  }, [update]);
 
   useEffect(() => {
     if (!activeSection) return;
@@ -1190,7 +1226,6 @@ export default function SettingsScreen({ isActive = true }: { isActive?: boolean
               if (Platform.OS === 'web') {
                 window.location.reload();
               } else {
-                const Updates = require('expo-updates');
                 await Updates.reloadAsync();
               }
             } catch {
@@ -1330,6 +1365,7 @@ export default function SettingsScreen({ isActive = true }: { isActive?: boolean
   const lastDataRefreshLabel = t('settingsLastDataRefresh', {
     value: formatLastSync(offlineStatus.lastSyncAt, t, resolvedLanguage),
   });
+  const locationErrorLabel = locationError ? formatLocationError(locationError, t) : null;
   const selectPalette = (nextPaletteId: AppPaletteId, animated = true) => {
     const nextIndex = PALETTE_IDS.indexOf(nextPaletteId);
     if (nextIndex < 0) return;
@@ -1855,7 +1891,7 @@ export default function SettingsScreen({ isActive = true }: { isActive?: boolean
           <View style={styles.launchBehaviorFooter}>
             <Text style={styles.launchBehaviorFooterTitle}>{launchBehaviorStatus.title}</Text>
             <Text style={styles.launchBehaviorFooterNote}>
-              {locationError ?? launchBehaviorStatus.note}
+              {locationErrorLabel ?? launchBehaviorStatus.note}
             </Text>
           </View>
         </View>
@@ -1906,7 +1942,11 @@ export default function SettingsScreen({ isActive = true }: { isActive?: boolean
                   return (
                     <React.Fragment key={size}>
                       {i > 0 ? <View style={styles.itemDivider} /> : null}
-                      <Pressable style={styles.manageBtn} onPress={() => KojoriWidget?.requestPinWidget(size)}>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={label}
+                        style={styles.manageBtn}
+                        onPress={() => KojoriWidget?.requestPinWidget(size)}>
                         <Text style={[styles.manageBtnText, { color: i === 0 ? colors.primary : colors.textDim }]}>{label}</Text>
                       </Pressable>
                     </React.Fragment>
@@ -2134,6 +2174,8 @@ export default function SettingsScreen({ isActive = true }: { isActive?: boolean
                 ) : null}
                 <View style={styles.itemDivider} />
                 <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={t('settingsClearCache')}
                   style={styles.manageBtn}
                   onPress={handleClearCache}>
                   <Text style={[styles.manageBtnText, { color: colors.textDim }]}>{t('settingsClearCache')}</Text>
@@ -2151,17 +2193,29 @@ export default function SettingsScreen({ isActive = true }: { isActive?: boolean
           <Text style={styles.sectionHeader}>{t('settingsLegal')}</Text>
         </View>
         <View style={styles.card}>
-          <Pressable style={styles.infoRow} onPress={() => setLegalModal('privacy')}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t('settingsPrivacyPolicy')}
+            style={styles.infoRow}
+            onPress={() => setLegalModal('privacy')}>
             <Text style={[styles.infoLabel, { color: colors.text }]}>{t('settingsPrivacyPolicy')}</Text>
             <Text style={[styles.infoValue, { color: colors.textFaint }]}>→</Text>
           </Pressable>
           <View style={styles.itemDivider} />
-          <Pressable style={styles.infoRow} onPress={() => setLegalModal('terms')}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t('settingsTermsOfService')}
+            style={styles.infoRow}
+            onPress={() => setLegalModal('terms')}>
             <Text style={[styles.infoLabel, { color: colors.text }]}>{t('settingsTermsOfService')}</Text>
             <Text style={[styles.infoValue, { color: colors.textFaint }]}>→</Text>
           </Pressable>
           <View style={styles.itemDivider} />
-          <Pressable style={styles.infoRow} onPress={() => Linking.openURL(LEGAL_URLS.support)}>
+          <Pressable
+            accessibilityRole="link"
+            accessibilityLabel={t('settingsSupport')}
+            style={styles.infoRow}
+            onPress={() => Linking.openURL(LEGAL_URLS.support)}>
             <Text style={[styles.infoLabel, { color: colors.text }]}>{t('settingsSupport')}</Text>
             <Text style={[styles.infoValue, { color: colors.textFaint }]}>GitHub ↗</Text>
           </Pressable>
@@ -2169,11 +2223,19 @@ export default function SettingsScreen({ isActive = true }: { isActive?: boolean
 
         <View style={styles.buildFooter}>
           <View style={styles.buildDivider} />
-          <Pressable onPress={handleBuildTap} style={styles.buildTapArea}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Kojoring Time v${APP_VERSION}, build ${BUILD_NUMBER}`}
+            onPress={handleBuildTap}
+            style={styles.buildTapArea}>
             <Text style={styles.buildAppName}>Kojoring Time</Text>
             <Text style={styles.buildVersion}>v{APP_VERSION} · build {BUILD_NUMBER}</Text>
           </Pressable>
-          <Pressable onPress={() => Linking.openURL('https://github.com/whekin')} hitSlop={8}>
+          <Pressable
+            accessibilityRole="link"
+            accessibilityLabel="Open whekin on GitHub"
+            onPress={() => Linking.openURL('https://github.com/whekin')}
+            hitSlop={8}>
             <Text style={styles.buildAuthor}>
               vibecoded with ♥ by <Text style={styles.buildLink}>whekin</Text>
             </Text>
@@ -2269,13 +2331,18 @@ function LegalModal({
   onClose: () => void;
 }) {
   const insets = useSafeAreaInsets();
+  const { t } = useI18n();
   const modalStyles = createModalStyles(colors);
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
       <View style={[modalStyles.screen, { paddingTop: insets.top }]}>
         <View style={modalStyles.header}>
-          <Pressable style={modalStyles.backBtn} onPress={onClose}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={title ? `${t('commonDismiss')}: ${title}` : t('commonDismiss')}
+            style={modalStyles.backBtn}
+            onPress={onClose}>
             <Text style={modalStyles.backText}>←</Text>
           </Pressable>
           <Text style={modalStyles.headerTitle}>{title}</Text>
@@ -2807,6 +2874,8 @@ function PermissionModal({
         </Text>
         <View style={styles.permissionButtons}>
           <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t('commonCancel')}
             style={[styles.permissionButton, styles.permissionButtonSecondary, { borderColor: colors.border }]}
             onPress={onClose}>
             <Text style={[styles.permissionButtonText, { color: colors.textDim }]}>
@@ -2814,6 +2883,8 @@ function PermissionModal({
             </Text>
           </Pressable>
           <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t('commonOpenSettings')}
             style={[styles.permissionButton, styles.permissionButtonPrimary, { backgroundColor: colors.primary }]}
             onPress={onOpenSettings}>
             <Text style={[styles.permissionButtonText, styles.permissionButtonTextPrimary, { color: colors.bg }]}>
@@ -2862,6 +2933,8 @@ function NoticeModal({
         </Text>
         <View style={styles.permissionButtons}>
           <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t('commonNice')}
             style={[styles.permissionButton, styles.permissionButtonPrimary, { backgroundColor: colors.primary }]}
             onPress={onClose}>
             <Text style={[styles.permissionButtonText, styles.permissionButtonTextPrimary, { color: colors.bg }]}>

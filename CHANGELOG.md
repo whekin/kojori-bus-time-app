@@ -1,5 +1,20 @@
 # Changelog
 
+## [UNRELEASED]
+### Improved
+
+- Simplified Departures direction handling so Kojori and Tbilisi panes stay behaviorally consistent.
+- Improved accessibility labels for saved-stop, Settings, legal, and modal controls.
+
+### Fixed
+
+- Location errors in Settings now use localized app copy instead of English-only hook messages.
+
+### Infra
+
+- Removed unused starter/helper components from the app bundle and updated architecture notes to match.
+- Restored Expo lint compatibility by disabling plugin checks that are already covered by TypeScript or incompatible with the current Expo lint stack.
+
 ## v2026.5.31
 ### Improved
 

@@ -20,7 +20,7 @@ Guidelines for AI agents working on this codebase.
 ```
 src/
   app/           # Expo Router file-based routes (index, timetable, explore, settings)
-  components/    # Reusable UI (ThemedText, ThemedView, AppTabs, etc.)
+  components/    # Reusable UI (AppTabs, stop pickers, banners, settings controls)
   constants/     # Theme, route configs
   hooks/         # useTheme, useSettings, useAppColors, TTC data hooks
   services/      # TTC API client, offline data, widget sync

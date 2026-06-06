@@ -33,7 +33,12 @@ export function ScrollableBottomSheet({
   return (
     <Modal visible transparent animationType={reduceMotion ? 'none' : 'fade'} onRequestClose={onClose} statusBarTranslucent>
       <GestureHandlerRootView style={styles.root}>
-        <Pressable style={styles.backdrop} onPress={onClose} />
+        <Pressable
+          accessible={false}
+          importantForAccessibility="no"
+          style={styles.backdrop}
+          onPress={onClose}
+        />
         <BottomSheet
           index={0}
           snapPoints={[snapPoint]}
