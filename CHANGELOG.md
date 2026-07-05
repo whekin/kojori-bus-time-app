@@ -1,6 +1,6 @@
 # Changelog
 
-## [UNRELEASED]
+## v2026.7.5
 ### Improved
 
 - Simplified Departures direction handling so Kojori and Tbilisi panes stay behaviorally consistent.
