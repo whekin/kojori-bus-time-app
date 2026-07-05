@@ -13,6 +13,8 @@
 - Departures now trusts TTC live arrival times only when a matching active bus is visible in vehicle-position data, reducing noisy live badges for buses that have not started.
 - Live buses whose TTC scheduled time points at a trip hours away now anchor to the nearest timetable slot by realtime ETA, so the next-bus card shows the scheduled time and drift instead of a bare "live" label alongside a duplicate scheduled row.
 - The next-bus card no longer shows an orphaned dot separator when a live departure has no timetable anchor.
+- Kojori stops now treat bus 316 as mid-route, so its live arrivals running several minutes ahead of the timetable are shown instead of being suppressed by the strict route-start filter (which still applies to 380 there).
+- Route-start stops now accept live buses running up to 5 minutes late (buses still cannot depart more than 2 minutes ahead of the timetable there).
 
 ### Infra
 

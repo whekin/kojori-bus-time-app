@@ -337,6 +337,25 @@ describe('mergeArrivalsIntoSchedule', () => {
     expect(result.some(dep => dep.live)).toBe(false);
   });
 
+  it('keeps slightly delayed live arrivals at route-start stops', () => {
+    const departures = [
+      makeDeparture('316', 1, '15:01'),
+      makeDeparture('316', 31, '15:31'),
+    ];
+
+    const result = mergeArrivalsIntoSchedule(
+      departures,
+      [makeArrival('316', 5, 1)],
+      new Date('2026-04-15T15:00:00Z'),
+      undefined,
+      { stopId: '1:3932' },
+    );
+
+    expect(result[0].status).toBe('live');
+    expect(result[0].time).toBe('15:05');
+    expect(result[0].driftMinutes).toBe(4);
+  });
+
   it('suppresses live arrivals that run far earlier than schedule at early route stops', () => {
     const departures = [
       makeDeparture('316', 8, '15:08'),
@@ -365,14 +384,50 @@ describe('mergeArrivalsIntoSchedule', () => {
 
     const result = mergeArrivalsIntoSchedule(
       departures,
-      [makeArrival('316', 7, 1)],
+      [makeArrival('316', 8, 1)],
       now,
       now.getTime() - 60_000,
-      { stopId: '1:4186' },
+      { stopId: '1:3932' },
     );
 
     expect(result.map(dep => dep.status)).toEqual(['scheduled', 'scheduled']);
     expect(result.some(dep => dep.live)).toBe(false);
+  });
+
+  it('keeps mid-route 316 live arrivals that run early at Kojori stops', () => {
+    const departures = [
+      makeDeparture('316', 11, '20:52'),
+    ];
+
+    const result = mergeArrivalsIntoSchedule(
+      departures,
+      [makeArrival('316', 2, 166)],
+      new Date(2026, 6, 5, 20, 41),
+      undefined,
+      { stopId: '1:3782' },
+    );
+
+    expect(result[0].status).toBe('live');
+    expect(result[0].minsUntil).toBe(2);
+    expect(result[0].scheduledTime).toBe('20:52');
+    expect(result[0].driftMinutes).toBe(-9);
+  });
+
+  it('still suppresses off-schedule 380 live arrivals at Kojori route-start stops', () => {
+    const departures = [
+      makeDeparture('380', 11, '20:52'),
+    ];
+
+    const result = mergeArrivalsIntoSchedule(
+      departures,
+      [makeArrival('380', 2, 11)],
+      new Date(2026, 6, 5, 20, 41),
+      undefined,
+      { stopId: '1:3782' },
+    );
+
+    expect(result.some(dep => dep.live)).toBe(false);
+    expect(result[0].status).toBe('scheduled');
   });
 
   it('keeps live arrivals away from the early route zone', () => {

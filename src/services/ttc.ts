@@ -240,18 +240,29 @@ export function resolveTtcLookupStopId(stopId: string) {
   return TTC_STOP_LOOKUP_PROXY[stopId] ?? stopId;
 }
 
-const EARLY_ROUTE_STOP_IDS = new Set([
+const TBILISI_EARLY_ROUTE_STOP_IDS = [
   '1:2994',
   '1:3932',
   '1:853',
   '1:857',
   '1:4673',
+];
+
+const KOJORI_EARLY_ROUTE_STOP_IDS = [
   '1:3078',
   '1:4186',
   '1:2856',
   '1:2139',
   '1:3782',
-]);
+];
+
+// 380 terminates in Kojori, so both ends are route starts for it. 316 runs
+// Kiketi–Tbilisi: Kojori is mid-route, where buses legitimately arrive
+// several minutes off schedule.
+const EARLY_ROUTE_STOP_IDS_BY_BUS: Record<BusLine, Set<string>> = {
+  '380': new Set([...TBILISI_EARLY_ROUTE_STOP_IDS, ...KOJORI_EARLY_ROUTE_STOP_IDS]),
+  '316': new Set(TBILISI_EARLY_ROUTE_STOP_IDS),
+};
 
 export const ALL_KOJORI_STOPS: StopInfo[] = [
   { id: '1:3078', label: 'Kojori Center', lat: 41.663244, lon: 44.707207 },
@@ -466,11 +477,14 @@ const MAX_TRUSTED_LIVE_DRIFT_MINUTES = 60;
 const MAX_LIVE_ARRIVAL_AGE_MS = 2 * 60_000;
 const MIN_SCHEDULED_DEPARTURE_MINUTES = 1;
 const MAX_GENERAL_EARLY_LIVE_DRIFT_MINUTES = 10;
-const EARLY_ROUTE_STOP_LIVE_DRIFT_TOLERANCE_MINUTES = 2;
+// At a route start a bus must not leave ahead of the timetable, but it can
+// be held up a few minutes before departing.
+const ROUTE_START_MAX_EARLY_DRIFT_MINUTES = 2;
+const ROUTE_START_MAX_LATE_DRIFT_MINUTES = 5;
 const LIVE_ON_TIME_DRIFT_TOLERANCE_MINUTES = 2;
 
-function isEarlyRouteStopId(stopId?: string) {
-  return Boolean(stopId && EARLY_ROUTE_STOP_IDS.has(resolveTtcLookupStopId(stopId)));
+function isEarlyRouteStop(bus: BusLine, stopId?: string) {
+  return Boolean(stopId && EARLY_ROUTE_STOP_IDS_BY_BUS[bus].has(resolveTtcLookupStopId(stopId)));
 }
 
 function scheduledDeparturesForDate(
@@ -755,7 +769,7 @@ export function mergeArrivalsIntoSchedule(
             }))
             .filter(arrival => Number.isFinite(arrival.realtimeMinutes) && Number.isFinite(arrival.scheduledMinutes))
             .filter(arrival => arrival.realtimeMinutes > 0)
-            .filter(arrival => !isSuspiciousLiveArrival(arrival, scheduleCandidates, options.stopId)),
+            .filter(arrival => !isSuspiciousLiveArrival(bus, arrival, scheduleCandidates, options.stopId)),
           bus,
           options.liveVehicleCounts,
         )
@@ -895,6 +909,7 @@ function gateRealtimeArrivalsByLiveVehicles(
 }
 
 function isSuspiciousLiveArrival(
+  bus: BusLine,
   arrival: { realtimeMinutes: number; scheduledMinutes: number },
   scheduled: Departure[],
   stopId?: string,
@@ -917,8 +932,11 @@ function isSuspiciousLiveArrival(
   }
 
   const driftMinutes = arrival.realtimeMinutes - nearestScheduleByRealtime.minsUntil;
-  if (isEarlyRouteStopId(stopId)) {
-    return Math.abs(driftMinutes) > EARLY_ROUTE_STOP_LIVE_DRIFT_TOLERANCE_MINUTES;
+  if (isEarlyRouteStop(bus, stopId)) {
+    return (
+      driftMinutes < -ROUTE_START_MAX_EARLY_DRIFT_MINUTES ||
+      driftMinutes > ROUTE_START_MAX_LATE_DRIFT_MINUTES
+    );
   }
 
   return driftMinutes < -MAX_GENERAL_EARLY_LIVE_DRIFT_MINUTES;
