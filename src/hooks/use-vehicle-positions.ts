@@ -17,6 +17,11 @@ export interface LiveVehiclePosition extends VehiclePosition {
   bus: BusLine;
 }
 
+interface UseVehiclePositionsOptions {
+  refetchIntervalMs?: number;
+  staleTimeMs?: number;
+}
+
 function demoPolylinePoint(bus: BusLine, direction: Direction, progress: number) {
   const points = DEMO_POLYLINES[`${bus}_${direction}`];
   const fallback = { latitude: 41.696601, longitude: 44.803955 };
@@ -84,16 +89,23 @@ async function fetchPositionsForDirection(direction: Direction): Promise<LiveVeh
   return [...deduped.values()];
 }
 
-export function useVehiclePositions(direction: Direction, enabled: boolean) {
+export function useVehiclePositions(
+  direction: Direction,
+  enabled: boolean,
+  options: UseVehiclePositionsOptions = {},
+) {
+  const refetchIntervalMs = options.refetchIntervalMs ?? ACTIVE_MAP_LIVE_REFRESH_MS;
+  const staleTimeMs = options.staleTimeMs ?? 2_000;
+
   return useQuery<LiveVehiclePosition[]>({
     queryKey: ['vehicle-positions', direction],
     meta: { source: 'ttc' },
     queryFn: () => fetchPositionsForDirection(direction),
     enabled,
-    staleTime: 2_000,
+    staleTime: staleTimeMs,
     refetchInterval: query => {
       if (!enabled) return false;
-      return query.state.status === 'error' ? OFFLINE_REFRESH_MS : ACTIVE_MAP_LIVE_REFRESH_MS;
+      return query.state.status === 'error' ? OFFLINE_REFRESH_MS : refetchIntervalMs;
     },
     retry: 0,
   });

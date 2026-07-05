@@ -30,12 +30,14 @@ import { useSchedule } from "@/hooks/use-schedule";
 import { useReducedMotion } from "@/hooks/use-reduced-motion";
 import { useSettings } from "@/hooks/use-settings";
 import { useStopNames } from "@/hooks/use-stop-names";
+import { useVehiclePositions } from "@/hooks/use-vehicle-positions";
 import {
   BusLine,
   computeUpcomingDepartures,
   Departure,
   findStop,
   getDepartureServiceBoundary,
+  getLiveVehicleCountsForStop,
   injectLiveDelayDemo,
   mergeArrivalsIntoSchedule,
   ROUTES,
@@ -52,6 +54,7 @@ const MONO = Platform.select({
 type SharedMode = "kojori" | "tbilisi";
 const CONTENT_SIDE = 20;
 const SECTION_SPACE = 12;
+const DEPARTURES_LIVE_VEHICLE_REFRESH_MS = 30_000;
 
 function modeToDirection(mode: SharedMode) {
   return mode === "kojori" ? "toKojori" : "toTbilisi";
@@ -608,7 +611,7 @@ function NextCard({
                         styles.nextMetaStatus,
                         { color: realtimeStatus.textColor },
                       ]}
-                      numberOfLines={1}
+                      numberOfLines={2}
                     >
                       {realtimeStatus.label}
                     </Text>
@@ -622,7 +625,7 @@ function NextCard({
                   size={16}
                   color={colors.textDim}
                 />
-                <Text style={styles.nextMetaStatus} numberOfLines={1}>
+                <Text style={[styles.nextMetaStatus, styles.nextMetaLabel]} numberOfLines={2}>
                   {t("homeScheduledDeparture")}
                 </Text>
                 <Text style={styles.nextMetaDot}>•</Text>
@@ -632,7 +635,7 @@ function NextCard({
                     styles.nextMetaCountdown,
                     { color: busColor },
                   ]}
-                  numberOfLines={1}
+                  numberOfLines={2}
                 >
                   {minsLabel}
                 </Text>
@@ -729,6 +732,10 @@ function DirectionDeparturesView({
     dataUpdatedAt,
     isError: eArrival,
   } = useArrivals(activeStopId, direction, isActive);
+  const { data: liveVehiclePositions } = useVehiclePositions(direction, isActive, {
+    refetchIntervalMs: DEPARTURES_LIVE_VEHICLE_REFRESH_MS,
+    staleTimeMs: 20_000,
+  });
 
   const rawDepartures = useMemo(
     () => computeUpcomingDepartures(
@@ -741,6 +748,16 @@ function DirectionDeparturesView({
     ),
     [s380, s316, activeStopId, now],
   );
+  const liveVehicleCounts = useMemo(
+    () => getLiveVehicleCountsForStop(
+      s380,
+      s316,
+      activeStopId,
+      liveVehiclePositions ?? [],
+      now,
+    ),
+    [s380, s316, activeStopId, liveVehiclePositions, now],
+  );
 
   const departures = useMemo(() => {
     const merged = mergeArrivalsIntoSchedule(
@@ -748,10 +765,10 @@ function DirectionDeparturesView({
       arrivals,
       now,
       dataUpdatedAt,
-      { stopId: activeStopId },
+      { stopId: activeStopId, liveVehicleCounts },
     );
     return demoEnabled ? injectLiveDelayDemo(merged, now) : merged;
-  }, [rawDepartures, arrivals, now, dataUpdatedAt, activeStopId, demoEnabled]);
+  }, [rawDepartures, arrivals, now, dataUpdatedAt, activeStopId, liveVehicleCounts, demoEnabled]);
 
   const isLoading = l380 || l316;
   const isError = (e380 || e316 || eArrival) && !s380 && !s316;
@@ -970,6 +987,10 @@ export default function HomeScreen({
           ],
           exact: true,
         }),
+        queryClient.refetchQueries({
+          queryKey: ["vehicle-positions", activeDirection],
+          exact: true,
+        }),
       ]);
     } finally {
       setNow(new Date());
@@ -1170,6 +1191,7 @@ function createStyles(C: AppColors) {
     },
     nextMetaRow: {
       flexDirection: "row",
+      flexWrap: "wrap",
       alignItems: "center",
       gap: 6,
       justifyContent: "center",
@@ -1180,16 +1202,23 @@ function createStyles(C: AppColors) {
       fontSize: 12,
       fontWeight: "800",
       marginHorizontal: 2,
+      flexShrink: 0,
     },
     nextMetaStatus: {
       color: C.textDim,
       flexShrink: 1,
+      minWidth: 0,
       fontSize: 13,
+      lineHeight: 17,
       fontWeight: "700",
       letterSpacing: 0.2,
     },
+    nextMetaLabel: {
+      flexShrink: 1,
+    },
     nextMetaCountdown: {
       fontWeight: "800",
+      flexShrink: 0,
     },
     serviceTitle: {
       color: C.text,

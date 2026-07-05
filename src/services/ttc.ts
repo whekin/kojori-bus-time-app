@@ -205,6 +205,8 @@ export const ROUTES = {
 } as const;
 
 export type BusLine = keyof typeof ROUTES;
+export type LiveVehicleCounts = Partial<Record<BusLine, number>>;
+export type LiveVehicleEvidence = Pick<VehiclePosition, 'vehicleId' | 'nextStopId'> & { bus: BusLine };
 
 export interface StopInfo {
   id: string;
@@ -463,7 +465,9 @@ const LIVE_TIMETABLE_FALLBACK_MATCH_WINDOW_MINUTES = 20;
 const MAX_TRUSTED_LIVE_DRIFT_MINUTES = 60;
 const MAX_LIVE_ARRIVAL_AGE_MS = 2 * 60_000;
 const MIN_SCHEDULED_DEPARTURE_MINUTES = 1;
+const MAX_GENERAL_EARLY_LIVE_DRIFT_MINUTES = 10;
 const EARLY_ROUTE_STOP_LIVE_DRIFT_TOLERANCE_MINUTES = 2;
+const LIVE_ON_TIME_DRIFT_TOLERANCE_MINUTES = 2;
 
 function isEarlyRouteStopId(stopId?: string) {
   return Boolean(stopId && EARLY_ROUTE_STOP_IDS.has(resolveTtcLookupStopId(stopId)));
@@ -605,6 +609,49 @@ export function getDepartureServiceBoundary(
   };
 }
 
+function stopIndexForPeriod(period: SchedulePeriod, stopId: string) {
+  const lookupStopId = resolveTtcLookupStopId(stopId);
+  return period.stops.findIndex(stop => resolveTtcLookupStopId(stop.id) === lookupStopId);
+}
+
+export function getLiveVehicleCountsForStop(
+  schedule380: SchedulePeriod[] | undefined,
+  schedule316: SchedulePeriod[] | undefined,
+  stopId: string,
+  vehicles: LiveVehicleEvidence[],
+  now = new Date(),
+): LiveVehicleCounts {
+  const counts: LiveVehicleCounts = {};
+  const schedules: Record<BusLine, SchedulePeriod[] | undefined> = {
+    '380': schedule380,
+    '316': schedule316,
+  };
+
+  for (const bus of ['380', '316'] as const) {
+    const schedule = schedules[bus];
+    if (!schedule) continue;
+
+    const period = getTodayPeriod(schedule, now);
+    if (!period) continue;
+
+    const selectedStopIndex = stopIndexForPeriod(period, stopId);
+    if (selectedStopIndex < 0) continue;
+
+    const eligibleVehicles = new Set<string>();
+    vehicles
+      .filter(vehicle => vehicle.bus === bus)
+      .forEach((vehicle, index) => {
+        const nextStopIndex = stopIndexForPeriod(period, vehicle.nextStopId);
+        if (nextStopIndex < 0 || nextStopIndex > selectedStopIndex) return;
+        eligibleVehicles.add(vehicle.vehicleId || `${bus}-${vehicle.nextStopId}-${index}`);
+      });
+
+    counts[bus] = eligibleVehicles.size;
+  }
+
+  return counts;
+}
+
 /**
  * Merges and sorts upcoming departures for both bus lines from a given stop.
  * Returns departures within the next 3 hours.
@@ -661,15 +708,15 @@ export function computeUpcomingDepartures(
 /**
  * Overlays live arrival data onto schedule-based departures.
  * If a live arrival matches a departure within ±8 min, marks it live
- * and updates minsUntil to the realtime ETA. Unmatched live arrivals are
- * still shown because TTC can expose delayed buses after schedule time.
+ * and updates minsUntil to the realtime ETA. When live vehicle counts are
+ * provided, only that many upstream vehicles can promote TTC live arrivals.
  */
 export function mergeArrivalsIntoSchedule(
   departures: Departure[],
   arrivals: ArrivalTime[],
   now = new Date(),
   arrivalsUpdatedAt?: number,
-  options: { stopId?: string } = {},
+  options: { stopId?: string; liveVehicleCounts?: LiveVehicleCounts } = {},
 ): Departure[] {
   const liveDataAgeMs = arrivalsUpdatedAt ? now.getTime() - arrivalsUpdatedAt : 0;
   const useLiveArrivals = !arrivalsUpdatedAt || liveDataAgeMs <= MAX_LIVE_ARRIVAL_AGE_MS;
@@ -699,16 +746,19 @@ export function mergeArrivalsIntoSchedule(
     );
 
     const realtimeArrivals = useLiveArrivals
-      ? arrivals
-          .filter(arrival => arrival.shortName === bus && arrival.realtime)
-          .map(arrival => ({
-            realtimeMinutes: arrival.realtimeArrivalMinutes - elapsedLiveMinutes,
-            scheduledMinutes: arrival.scheduledArrivalMinutes - elapsedLiveMinutes,
-          }))
-          .filter(arrival => Number.isFinite(arrival.realtimeMinutes) && Number.isFinite(arrival.scheduledMinutes))
-          .filter(arrival => arrival.realtimeMinutes > 0)
-          .filter(arrival => !isSuspiciousEarlyStopLiveArrival(arrival, scheduleCandidates, options.stopId))
-          .sort((a, b) => a.scheduledMinutes - b.scheduledMinutes)
+      ? gateRealtimeArrivalsByLiveVehicles(
+          arrivals
+            .filter(arrival => arrival.shortName === bus && arrival.realtime)
+            .map(arrival => ({
+              realtimeMinutes: arrival.realtimeArrivalMinutes - elapsedLiveMinutes,
+              scheduledMinutes: arrival.scheduledArrivalMinutes - elapsedLiveMinutes,
+            }))
+            .filter(arrival => Number.isFinite(arrival.realtimeMinutes) && Number.isFinite(arrival.scheduledMinutes))
+            .filter(arrival => arrival.realtimeMinutes > 0)
+            .filter(arrival => !isSuspiciousLiveArrival(arrival, scheduleCandidates, options.stopId)),
+          bus,
+          options.liveVehicleCounts,
+        )
       : [];
 
     if (scheduleCandidates.length === 0) {
@@ -780,6 +830,9 @@ export function mergeArrivalsIntoSchedule(
       if (matchedArrival != null) {
         const driftMinutes = matchedArrival.realtimeMinutes - dep.minsUntil;
         const hasTrustedScheduleAnchor = Math.abs(driftMinutes) <= MAX_TRUSTED_LIVE_DRIFT_MINUTES;
+        const displayDriftMinutes = Math.abs(driftMinutes) <= LIVE_ON_TIME_DRIFT_TOLERANCE_MINUTES
+          ? 0
+          : driftMinutes;
         merged.push({
           ...dep,
           status: 'live',
@@ -789,7 +842,7 @@ export function mergeArrivalsIntoSchedule(
           scheduledTime: hasTrustedScheduleAnchor ? (dep.scheduledTime ?? dep.time) : undefined,
           scheduledMinsUntil: hasTrustedScheduleAnchor ? dep.minsUntil : undefined,
           liveMinutes: matchedArrival.realtimeMinutes,
-          driftMinutes: hasTrustedScheduleAnchor ? driftMinutes : undefined,
+          driftMinutes: hasTrustedScheduleAnchor ? displayDriftMinutes : undefined,
           minsUntil: matchedArrival.realtimeMinutes,
         });
         continue;
@@ -818,13 +871,29 @@ export function mergeArrivalsIntoSchedule(
     .sort((a, b) => a.minsUntil - b.minsUntil);
 }
 
-function isSuspiciousEarlyStopLiveArrival(
+function gateRealtimeArrivalsByLiveVehicles(
+  arrivals: { realtimeMinutes: number; scheduledMinutes: number }[],
+  bus: BusLine,
+  liveVehicleCounts?: LiveVehicleCounts,
+) {
+  if (!liveVehicleCounts) {
+    return arrivals.sort((a, b) => a.scheduledMinutes - b.scheduledMinutes);
+  }
+
+  const liveVehicleCount = liveVehicleCounts[bus] ?? 0;
+  if (liveVehicleCount <= 0) return [];
+
+  return arrivals
+    .sort((a, b) => a.realtimeMinutes - b.realtimeMinutes)
+    .slice(0, liveVehicleCount)
+    .sort((a, b) => a.scheduledMinutes - b.scheduledMinutes);
+}
+
+function isSuspiciousLiveArrival(
   arrival: { realtimeMinutes: number; scheduledMinutes: number },
   scheduled: Departure[],
   stopId?: string,
 ) {
-  if (!isEarlyRouteStopId(stopId)) return false;
-
   const delayedPastSchedule = scheduled.find(dep => (
     dep.minsUntil < MIN_SCHEDULED_DEPARTURE_MINUTES &&
     arrival.realtimeMinutes > dep.minsUntil &&
@@ -832,17 +901,22 @@ function isSuspiciousEarlyStopLiveArrival(
   ));
   if (delayedPastSchedule) return false;
 
-  const nearestSchedule = scheduled.reduce<Departure | undefined>((nearest, dep) => {
+  const nearestScheduleByRealtime = scheduled.reduce<Departure | undefined>((nearest, dep) => {
     if (!nearest) return dep;
-    const depDistance = Math.abs(dep.minsUntil - arrival.scheduledMinutes);
-    const nearestDistance = Math.abs(nearest.minsUntil - arrival.scheduledMinutes);
+    const depDistance = Math.abs(dep.minsUntil - arrival.realtimeMinutes);
+    const nearestDistance = Math.abs(nearest.minsUntil - arrival.realtimeMinutes);
     return depDistance < nearestDistance ? dep : nearest;
   }, undefined);
-  if (!nearestSchedule || nearestSchedule.minsUntil < MIN_SCHEDULED_DEPARTURE_MINUTES) {
+  if (!nearestScheduleByRealtime || nearestScheduleByRealtime.minsUntil < MIN_SCHEDULED_DEPARTURE_MINUTES) {
     return false;
   }
 
-  return Math.abs(arrival.realtimeMinutes - nearestSchedule.minsUntil) > EARLY_ROUTE_STOP_LIVE_DRIFT_TOLERANCE_MINUTES;
+  const driftMinutes = arrival.realtimeMinutes - nearestScheduleByRealtime.minsUntil;
+  if (isEarlyRouteStopId(stopId)) {
+    return Math.abs(driftMinutes) > EARLY_ROUTE_STOP_LIVE_DRIFT_TOLERANCE_MINUTES;
+  }
+
+  return driftMinutes < -MAX_GENERAL_EARLY_LIVE_DRIFT_MINUTES;
 }
 
 function liveDepartureFromArrival(

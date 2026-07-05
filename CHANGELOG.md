@@ -9,7 +9,8 @@
 ### Fixed
 
 - Location errors in Settings now use localized app copy instead of English-only hook messages.
-- Russian relative departure labels no longer lose digits in tight departure rows.
+- Russian plural countdown labels now keep values like 21, 31, 41, and 51 instead of falling back to 1.
+- Departures now trusts TTC live arrival times only when a matching active bus is visible in vehicle-position data, reducing noisy live badges for buses that have not started.
 
 ### Infra
 

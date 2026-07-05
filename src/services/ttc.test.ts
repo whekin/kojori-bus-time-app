@@ -6,6 +6,7 @@ import {
   computeUpcomingDepartures,
   getDepartureServiceBoundary,
   getLastDepartureToday,
+  getLiveVehicleCountsForStop,
   getNextServiceDeparture,
   injectLiveDelayDemo,
   isFinalDepartureToday,
@@ -447,6 +448,77 @@ describe('mergeArrivalsIntoSchedule', () => {
     expect(result[0].driftMinutes).toBe(9);
     expect(result[1].status).toBe('scheduled');
   });
+
+  it('keeps TTC live predictions scheduled when no active vehicle evidence exists', () => {
+    const departures = [
+      makeDeparture('380', 20, '19:35'),
+      makeDeparture('380', 58, '20:13'),
+    ];
+
+    const result = mergeArrivalsIntoSchedule(
+      departures,
+      [makeArrival('380', 57, 58)],
+      new Date('2026-04-15T19:15:00Z'),
+      undefined,
+      { liveVehicleCounts: { '380': 0 } },
+    );
+
+    expect(result.map(dep => dep.status)).toEqual(['scheduled', 'scheduled']);
+    expect(result[1].time).toBe('20:13');
+    expect(result[1].minsUntil).toBe(58);
+  });
+
+  it('limits live predictions to the number of active upstream vehicles', () => {
+    const departures = [
+      makeDeparture('380', 20, '19:35'),
+      makeDeparture('380', 58, '20:13'),
+    ];
+
+    const result = mergeArrivalsIntoSchedule(
+      departures,
+      [makeArrival('380', 19, 20), makeArrival('380', 57, 58)],
+      new Date('2026-04-15T19:15:00Z'),
+      undefined,
+      { liveVehicleCounts: { '380': 1 } },
+    );
+
+    expect(result.map(dep => dep.status)).toEqual(['live', 'scheduled']);
+    expect(result[0].time).toBe('19:34');
+    expect(result[0].driftMinutes).toBe(0);
+    expect(result[1].time).toBe('20:13');
+    expect(result[1].minsUntil).toBe(58);
+  });
+
+  it('does not attach implausibly early live predictions to future timetable rows', () => {
+    const departures = [
+      makeDeparture('380', 20, '19:35'),
+      makeDeparture('380', 58, '20:13'),
+    ];
+
+    const result = mergeArrivalsIntoSchedule(
+      departures,
+      [makeArrival('380', 1, 20)],
+      new Date('2026-04-15T19:15:00Z'),
+      undefined,
+      { liveVehicleCounts: { '380': 1 } },
+    );
+
+    expect(result.map(dep => dep.status)).toEqual(['scheduled', 'scheduled']);
+    expect(result[0].time).toBe('19:35');
+    expect(result[0].minsUntil).toBe(20);
+  });
+
+  it('drops unmatched live arrivals when active vehicle evidence is required but missing', () => {
+    const result = mergeArrivalsIntoSchedule(
+      [],
+      [makeArrival('316', 3, -10)],
+      new Date('2026-04-15T15:00:00Z'),
+      undefined,
+      { liveVehicleCounts: { '316': 0 } },
+    );
+
+    expect(result).toHaveLength(0);
+  });
 });
 
 describe('injectLiveDelayDemo', () => {
@@ -528,6 +600,47 @@ describe('service boundary helpers', () => {
     expect(boundary.hasServiceToday).toBe(true);
     expect(boundary.finalDepartureToday?.time).toBe('21:52');
     expect(boundary.nextDepartureIsFinal).toBe(true);
+  });
+});
+
+describe('live vehicle evidence helpers', () => {
+  it('counts only vehicles that have not passed the selected stop', () => {
+    const schedule380 = makeSchedule(['2026-04-15'], {
+      'stop-a': '10:00',
+      'stop-b': '10:05',
+      'stop-c': '10:10',
+    });
+
+    const counts = getLiveVehicleCountsForStop(
+      schedule380,
+      undefined,
+      'stop-b',
+      [
+        { bus: '380', vehicleId: 'before', nextStopId: 'stop-a' },
+        { bus: '380', vehicleId: 'arriving', nextStopId: 'stop-b' },
+        { bus: '380', vehicleId: 'passed', nextStopId: 'stop-c' },
+      ],
+      new Date('2026-04-15T09:50:00Z'),
+    );
+
+    expect(counts['380']).toBe(2);
+  });
+
+  it('does not count already-started vehicles for a route-start stop', () => {
+    const schedule316 = makeSchedule(['2026-04-15'], {
+      '1:3932': '15:01',
+      '1:853': '15:02',
+    });
+
+    const counts = getLiveVehicleCountsForStop(
+      undefined,
+      schedule316,
+      '1:2994',
+      [{ bus: '316', vehicleId: 'started', nextStopId: '1:853' }],
+      new Date('2026-04-15T14:50:00Z'),
+    );
+
+    expect(counts['316']).toBe(0);
   });
 });
 
