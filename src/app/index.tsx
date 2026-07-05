@@ -594,6 +594,7 @@ function NextCard({
             )}
           </View>
 
+          {isLiveDeparture && !scheduledTime ? null : (
           <View style={styles.nextMetaRow}>
             {isLiveDeparture ? (
               <>
@@ -603,7 +604,7 @@ function NextCard({
                   prominent
                   highlightColor={busColor}
                 />
-                {realtimeStatus ? (
+                {realtimeStatus && dep.driftMinutes != null ? (
                   <>
                     <Text style={styles.nextMetaDot}>•</Text>
                     <Text
@@ -642,6 +643,7 @@ function NextCard({
               </>
             )}
           </View>
+          )}
         </View>
       </View>
     </View>

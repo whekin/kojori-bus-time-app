@@ -233,6 +233,26 @@ describe('mergeArrivalsIntoSchedule', () => {
     expect(result[1].status).toBe('scheduled');
   });
 
+  it('ignores TTC scheduled ETA pointing at a trip hours away and matches by realtime', () => {
+    const departures = [
+      makeDeparture('316', 23, '20:52'),
+      makeDeparture('316', 175, '23:24'),
+    ];
+
+    const result = mergeArrivalsIntoSchedule(
+      departures,
+      [makeArrival('316', 22, 175)],
+      new Date(2026, 6, 5, 20, 29),
+    );
+
+    expect(result[0].status).toBe('live');
+    expect(result[0].minsUntil).toBe(22);
+    expect(result[0].scheduledTime).toBe('20:52');
+    expect(result[0].driftMinutes).toBe(0);
+    expect(result[1].status).toBe('scheduled');
+    expect(result[1].time).toBe('23:24');
+  });
+
   it('can attach an early live bus to a hard timetable row', () => {
     const departures = [
       makeDeparture('380', 24, '18:24'),

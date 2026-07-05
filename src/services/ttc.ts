@@ -795,6 +795,11 @@ export function mergeArrivalsIntoSchedule(
       }
 
       if (closestIndex === -1 || closestDistance > LIVE_ARRIVAL_MATCH_WINDOW_MINUTES) return;
+      // TTC sometimes reports scheduledArrivalMinutes for a different trip
+      // hours away. Such an anchor would be untrusted anyway, so leave the
+      // arrival to realtime fallback matching instead of consuming a wrong slot.
+      const realtimeDrift = Math.abs(arrival.realtimeMinutes - scheduleCandidates[closestIndex].minsUntil);
+      if (realtimeDrift > MAX_TRUSTED_LIVE_DRIFT_MINUTES) return;
       usedScheduledIndexes.add(closestIndex);
       usedArrivalIndexes.add(arrivalIndex);
       matchedByIndex.set(closestIndex, arrival);

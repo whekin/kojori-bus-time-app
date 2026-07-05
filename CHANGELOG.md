@@ -11,6 +11,8 @@
 - Location errors in Settings now use localized app copy instead of English-only hook messages.
 - Russian plural countdown labels now keep values like 21, 31, 41, and 51 instead of falling back to 1.
 - Departures now trusts TTC live arrival times only when a matching active bus is visible in vehicle-position data, reducing noisy live badges for buses that have not started.
+- Live buses whose TTC scheduled time points at a trip hours away now anchor to the nearest timetable slot by realtime ETA, so the next-bus card shows the scheduled time and drift instead of a bare "live" label alongside a duplicate scheduled row.
+- The next-bus card no longer shows an orphaned dot separator when a live departure has no timetable anchor.
 
 ### Infra
 
