@@ -9,6 +9,7 @@
 ### Fixed
 
 - Location errors in Settings now use localized app copy instead of English-only hook messages.
+- Russian relative departure labels no longer lose digits in tight departure rows.
 
 ### Infra
 

@@ -404,9 +404,8 @@ export default function TimetableScreen({ isActive = true }: { isActive?: boolea
                     style={[
                       styles.relativeText,
                       isSoon && { color: accentColor },
-                      { fontFamily: MONO },
                     ]}
-                    numberOfLines={1}
+                    numberOfLines={2}
                   >
                     {relativeHint}
                   </Text>
@@ -502,13 +501,15 @@ function createStyles(C: AppColors) {
       letterSpacing: -0.3,
     },
     timeMeta: {
-      minWidth: 92,
-      flexShrink: 0,
+      minWidth: 0,
+      maxWidth: "55%",
+      flexShrink: 1,
       alignItems: "flex-end",
     },
     relativeText: {
       color: C.textDim,
       fontSize: 13,
+      lineHeight: 17,
       fontWeight: "500",
       letterSpacing: 0.1,
       textAlign: "right",

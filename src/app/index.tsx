@@ -422,9 +422,8 @@ function DepartureRow({ dep, isLast }: { dep: Departure; isLast: boolean }) {
         <Text
           style={[
             styles.rowCountdown,
-            { fontFamily: MONO },
           ]}
-          numberOfLines={1}
+          numberOfLines={2}
         >
           {countdown}
         </Text>
@@ -1265,6 +1264,7 @@ function createStyles(C: AppColors) {
     rowMeta: {
       maxWidth: "62%",
       flexShrink: 1,
+      minWidth: 0,
       alignItems: "flex-end",
       justifyContent: "center",
       gap: 7,
@@ -1273,6 +1273,7 @@ function createStyles(C: AppColors) {
     rowCountdown: {
       color: C.textDim,
       fontSize: 13,
+      lineHeight: 17,
       fontWeight: "500",
       textAlign: "right",
     },
