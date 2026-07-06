@@ -1177,12 +1177,14 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
   return (
     <View style={styles.screen}>
       <MapView
-        key={`map-${resolvedThemeMode}`}
         ref={mapRef}
         style={StyleSheet.absoluteFill}
         initialRegion={currentRegion}
         userInterfaceStyle={resolvedThemeMode}
-        customMapStyle={resolvedThemeMode === 'dark' ? GOOGLE_DARK_MAP_STYLE : undefined}
+        // An empty style array (not undefined) is required so switching back
+        // to light actually resets the runtime map style without remounting
+        // the whole MapView (which reloads tiles and resets the camera).
+        customMapStyle={resolvedThemeMode === 'dark' ? GOOGLE_DARK_MAP_STYLE : []}
         showsUserLocation={hasUserLocation}
         showsMyLocationButton={false}
         showsPointsOfInterests={false}

@@ -10,12 +10,13 @@ bun android            # Start on Android
 bun ios                # Start on iOS
 bun web                # Start on web
 bun lint               # Run ESLint via expo lint
+bun test               # Run unit tests (bun:test; *.test.ts next to sources)
 bun add <pkg>          # Add dependency (use instead of npm install)
 bun scripts/bake-ttc.ts  # Re-fetch static TTC data and write src/assets/ttc-baked.ts
 bun release            # Full release pipeline (see Releasing below)
 ```
 
-No test suite configured yet.
+Unit tests cover the TTC departure logic (`src/services/ttc.test.ts`, `ttc-offline.test.ts`) and route geometry math (`src/utils/route-progress.test.ts`). Add tests alongside pure logic; UI has no test harness.
 
 ## Releasing
 

@@ -18,6 +18,7 @@
     "runtime:check": "node scripts/check-runtime-version.js",
     "lint": "NODE_ENV=development expo lint",
     "typecheck": "NODE_ENV=development tsc --noEmit",
+    "test": "bun test",
     "release:android:preflight": "NODE_ENV=production bun run lint && NODE_ENV=production bun run typecheck && NODE_ENV=production bun run release:android:doctor",
     "release:android:build:preview": "NODE_ENV=production bunx eas build --platform android --profile preview",
     "release:android:build:preview:local": "NODE_ENV=production bunx eas build --platform android --profile preview --local",

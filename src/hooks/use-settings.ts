@@ -147,19 +147,17 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
 
     void syncWidget();
 
+    // No periodic re-sync: items carry absolute departure epochs for a full
+    // week and the widget refreshes itself on a native minute tick, so the
+    // payload only changes when settings change or the app comes back.
     const appState = AppState.addEventListener('change', state => {
       if (state === 'active') {
         void syncWidget();
       }
     });
 
-    const intervalId = setInterval(() => {
-      void syncWidget();
-    }, 60_000); // Update every minute to refresh countdown timers
-
     return () => {
       appState.remove();
-      clearInterval(intervalId);
     };
   }, [
     isLoaded,
