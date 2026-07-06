@@ -1462,7 +1462,7 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
             onPress={() => refetch()}
             disabled={isFetching}>
             <Animated.View style={{ transform: [{ rotate: spinRotation }] }}>
-              <MaterialCommunityIcons name="refresh" size={14} color={isFetching ? colors.primary : colors.textDim} />
+              <MaterialCommunityIcons name="refresh" size={16} color={isFetching ? colors.primary : colors.textDim} />
             </Animated.View>
           </Pressable>
         </View>
@@ -1664,23 +1664,29 @@ function createStyles(C: ReturnType<typeof useAppColors>) {
     position: 'absolute',
     left: 16,
     right: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 8,
   },
   directionSwitch: {
-    alignSelf: 'flex-start',
+    // Shrinks first on narrow screens; the chips keep their size. Translucent
+    // shell to match the chips (overrides the component's opaque surface).
+    flexShrink: 1,
+    backgroundColor: `${C.panel}D9`,
   },
   legendRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+    marginLeft: 'auto',
   },
   legendChip: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    borderRadius: 14,
+    height: 38,
+    paddingHorizontal: 12,
+    borderRadius: 999,
     backgroundColor: `${C.panel}D9`,
     borderWidth: 1,
     borderColor: C.border,
@@ -1694,9 +1700,9 @@ function createStyles(C: ReturnType<typeof useAppColors>) {
   legendLabel: { color: C.text, fontSize: 12, fontWeight: '700' },
   legendCount: { color: C.textDim, fontSize: 11, fontWeight: '700' },
   refreshChip: {
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    borderRadius: 14,
+    width: 38,
+    height: 38,
+    borderRadius: 999,
     backgroundColor: `${C.panel}D9`,
     borderWidth: 1,
     borderColor: C.border,

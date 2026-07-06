@@ -23,6 +23,7 @@
 - Next-departure card meta line no longer wraps: the drift readout is now a compact signed chip ("+4 min") next to the scheduled time, and the scheduled time — the trusted reference — is slightly larger and accented.
 - The live pill on the next-departure card now shows the live arrival time (e.g. "16:27") next to the pulsing dot instead of the word "LIVE".
 - Timetable section labels (Morning/Afternoon/Evening) are now centered between divider lines, matching the Departures screen.
+- Map top controls sit on one row: direction switch on the left, route chips and refresh on the right — more map visible.
 
 ### Infra
 
