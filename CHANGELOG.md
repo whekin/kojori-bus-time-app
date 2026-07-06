@@ -1,5 +1,10 @@
 # Changelog
 
+## [UNRELEASED]
+### Improved
+
+- Widget relative departure times now stay attached to the right edge of each row, switch to compact labels like "+43m" on medium-width widgets, and hide on very narrow widgets to avoid truncated localized text.
+
 ## v2026.7.6
 ### New
 
