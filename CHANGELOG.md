@@ -3,6 +3,7 @@
 ## [UNRELEASED]
 ### Improved
 
+- Map top controls now use a compact direction switch and tighter route chips on narrow phones, keeping the Tbilisi/Kojori switch readable in the one-row layout.
 - Widget relative departure times now stay attached to the right edge of each row, switch to compact labels like "+43m" on medium-width widgets, and hide on very narrow widgets to avoid truncated localized text.
 
 ## v2026.7.6

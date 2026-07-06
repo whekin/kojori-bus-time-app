@@ -83,9 +83,11 @@ function destinationLabel(
 
 export function DirectionSwitch({
   accentColor,
+  compact = false,
   style,
 }: {
   accentColor: string;
+  compact?: boolean;
   style?: StyleProp<ViewStyle>;
 }) {
   const colors = useAppColors();
@@ -115,24 +117,32 @@ export function DirectionSwitch({
         },
         style,
       ]}>
-      <View style={[styles.directionRouteSegment, { backgroundColor: accentColor }]}>
+      <View
+        style={[
+          styles.directionRouteSegment,
+          compact && styles.directionRouteSegmentCompact,
+          { backgroundColor: accentColor },
+        ]}>
+        {compact ? <MaterialCommunityIcons name="arrow-right" size={14} color="#fff" /> : null}
+        {!compact ? (
+          <Text
+            style={styles.directionRouteText}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.78}>
+            {origin}
+          </Text>
+        ) : null}
+        {!compact ? <MaterialCommunityIcons name="arrow-right" size={14} color="#fff" /> : null}
         <Text
-          style={styles.directionRouteText}
+          style={[styles.directionRouteText, compact && styles.directionRouteTextCompact]}
           numberOfLines={1}
           adjustsFontSizeToFit
-          minimumFontScale={0.78}>
-          {origin}
-        </Text>
-        <MaterialCommunityIcons name="arrow-right" size={14} color="#fff" />
-        <Text
-          style={styles.directionRouteText}
-          numberOfLines={1}
-          adjustsFontSizeToFit
-          minimumFontScale={0.78}>
+          minimumFontScale={compact ? 0.86 : 0.78}>
           {destination}
         </Text>
       </View>
-      <View style={styles.directionSwapSegment}>
+      <View style={[styles.directionSwapSegment, compact && styles.directionSwapSegmentCompact]}>
         <MaterialCommunityIcons name="swap-horizontal" size={17} color={colors.textDim} />
       </View>
     </Pressable>
@@ -522,11 +532,21 @@ function createStyles(C: ReturnType<typeof useAppColors>) {
     flexShrink: 1,
     minWidth: 28,
   },
+  directionRouteSegmentCompact: {
+    paddingHorizontal: 10,
+    gap: 5,
+  },
+  directionRouteTextCompact: {
+    minWidth: 0,
+  },
   directionSwapSegment: {
     width: 34,
     height: 32,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  directionSwapSegmentCompact: {
+    width: 30,
   },
   routeButton: {
     flexDirection: 'row',

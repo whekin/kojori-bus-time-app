@@ -846,6 +846,7 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
   const [inactiveMapDirection, setInactiveMapDirection] = useState(activeDirection);
 
   const direction = isActive ? activeDirection : inactiveMapDirection;
+  const useCompactMapControls = windowWidth < 390;
 
   useEffect(() => {
     if (!isActive) return;
@@ -1426,13 +1427,14 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
       </MapView>
 
       {/* Top controls */}
-      <View style={[styles.topPanel, { top: insets.top + 12 }]}>
+      <View style={[styles.topPanel, useCompactMapControls && styles.topPanelCompact, { top: insets.top + 12 }]}>
         <DirectionSwitch
           accentColor={direction === 'toKojori' ? colors.route380 : colors.route316}
-          style={styles.directionSwitch}
+          compact={useCompactMapControls}
+          style={[styles.directionSwitch, useCompactMapControls && styles.directionSwitchCompact]}
         />
 
-        <View style={styles.legendRow}>
+        <View style={[styles.legendRow, useCompactMapControls && styles.legendRowCompact]}>
           {(['380', '316'] as const).map(bus => {
             const accent = routeAccent(bus, colors);
             const count = groupedCounts[bus];
@@ -1444,12 +1446,16 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
                 accessibilityLabel={t('mapRouteVehiclesCount', { bus, count })}
                 accessibilityHint={hasActiveBuses ? t('mapCenterRouteVehicles', { bus }) : undefined}
                 accessibilityState={{ disabled: !hasActiveBuses }}
-                style={[styles.legendChip, hasActiveBuses && styles.legendChipClickable]}
+                style={[
+                  styles.legendChip,
+                  useCompactMapControls && styles.legendChipCompact,
+                  hasActiveBuses && styles.legendChipClickable,
+                ]}
                 onPress={() => hasActiveBuses && handleCenterOnBus(bus)}
                 disabled={!hasActiveBuses}>
-                <View style={[styles.legendDot, { backgroundColor: accent }]} />
-                <Text style={styles.legendLabel}>{bus}</Text>
-                <Text style={styles.legendCount}>{count}</Text>
+                <View style={[styles.legendDot, useCompactMapControls && styles.legendDotCompact, { backgroundColor: accent }]} />
+                <Text style={[styles.legendLabel, useCompactMapControls && styles.legendLabelCompact]}>{bus}</Text>
+                <Text style={[styles.legendCount, useCompactMapControls && styles.legendCountCompact]}>{count}</Text>
               </Pressable>
             );
           })}
@@ -1458,11 +1464,15 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
             accessibilityRole="button"
             accessibilityLabel={isFetching ? t('mapRefreshingLive') : t('mapRefreshLive')}
             accessibilityState={{ busy: isFetching, disabled: isFetching }}
-            style={styles.refreshChip}
+            style={[styles.refreshChip, useCompactMapControls && styles.refreshChipCompact]}
             onPress={() => refetch()}
             disabled={isFetching}>
             <Animated.View style={{ transform: [{ rotate: spinRotation }] }}>
-              <MaterialCommunityIcons name="refresh" size={16} color={isFetching ? colors.primary : colors.textDim} />
+              <MaterialCommunityIcons
+                name="refresh"
+                size={useCompactMapControls ? 15 : 16}
+                color={isFetching ? colors.primary : colors.textDim}
+              />
             </Animated.View>
           </Pressable>
         </View>
@@ -1668,17 +1678,33 @@ function createStyles(C: ReturnType<typeof useAppColors>) {
     alignItems: 'center',
     gap: 8,
   },
+  topPanelCompact: {
+    left: 12,
+    right: 12,
+    gap: 6,
+  },
   directionSwitch: {
-    // Shrinks first on narrow screens; the chips keep their size. Translucent
-    // shell to match the chips (overrides the component's opaque surface).
+    // Translucent shell to match the chips (overrides the component's opaque
+    // surface). The compact map variant below avoids squeezing the full
+    // Tbilisi→Kojori label past its readable width on small phones.
     flexShrink: 1,
     backgroundColor: `${C.panel}D9`,
+  },
+  directionSwitchCompact: {
+    flexShrink: 0,
+    minWidth: 108,
+    maxWidth: 128,
   },
   legendRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
     marginLeft: 'auto',
+    minWidth: 0,
+    flexShrink: 1,
+  },
+  legendRowCompact: {
+    gap: 4,
   },
   legendChip: {
     flexDirection: 'row',
@@ -1696,9 +1722,17 @@ function createStyles(C: ReturnType<typeof useAppColors>) {
   legendChipClickable: {
     opacity: 1,
   },
+  legendChipCompact: {
+    height: 36,
+    paddingHorizontal: 8,
+    gap: 4,
+  },
   legendDot: { width: 8, height: 8, borderRadius: 4 },
+  legendDotCompact: { width: 6, height: 6, borderRadius: 3 },
   legendLabel: { color: C.text, fontSize: 12, fontWeight: '700' },
+  legendLabelCompact: { fontSize: 11 },
   legendCount: { color: C.textDim, fontSize: 11, fontWeight: '700' },
+  legendCountCompact: { fontSize: 10 },
   refreshChip: {
     width: 38,
     height: 38,
@@ -1709,6 +1743,10 @@ function createStyles(C: ReturnType<typeof useAppColors>) {
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
+  },
+  refreshChipCompact: {
+    width: 36,
+    height: 36,
   },
   locateButton: {
     position: 'absolute',
