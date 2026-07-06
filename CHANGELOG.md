@@ -1,6 +1,6 @@
 # Changelog
 
-## [UNRELEASED]
+## v2026.7.7
 ### Improved
 
 - Map top controls now use a compact direction switch and tighter route chips on narrow phones, keeping the Tbilisi/Kojori switch readable in the one-row layout.
