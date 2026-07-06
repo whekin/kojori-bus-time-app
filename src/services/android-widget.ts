@@ -51,7 +51,13 @@ interface WidgetAccentColors {
   route316: string;
 }
 
+// Bump whenever the payload shape changes in a way old widget code (or new
+// widget code reading an old payload) must not silently misrender. The widget
+// treats any other version as "no data" and asks to open the app.
+export const WIDGET_STATE_SCHEMA_VERSION = 2;
+
 interface WidgetStatePayload {
+  schemaVersion: number;
   // Route accents per color scheme; the widget picks the variant matching the
   // device theme at render time. Base widget colors are native day/night resources.
   palette: {
@@ -65,6 +71,8 @@ interface WidgetStatePayload {
     toKojori: string;
     toTbilisi: string;
     from: string;
+    inMinutes: string;
+    now: string;
   };
   directions: Record<WidgetMode, WidgetDirectionPayload>;
 }
@@ -226,6 +234,7 @@ export async function syncAndroidWidgetState(settings: WidgetSyncSettings) {
   ]);
 
   const payload: WidgetStatePayload = {
+    schemaVersion: WIDGET_STATE_SCHEMA_VERSION,
     palette: {
       dark: { route380: darkColors.route380, route316: darkColors.route316 },
       light: { route380: lightColors.route380, route316: lightColors.route316 },
@@ -237,6 +246,10 @@ export async function syncAndroidWidgetState(settings: WidgetSyncSettings) {
       toKojori: translate(language, 'widgetToKojori'),
       toTbilisi: translate(language, 'widgetToTbilisi'),
       from: language === 'en' ? 'from' : language === 'ka' ? 'საიდან' : 'от',
+      // Passing the placeholder as its own value returns the raw template
+      // ("in {minutes} mins") so the widget can substitute per row natively.
+      inMinutes: translate(language, 'timePlusMinutes', { minutes: '{minutes}' }),
+      now: translate(language, 'commonNow'),
     },
     directions: { kojori, tbilisi },
   };

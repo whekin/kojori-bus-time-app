@@ -131,9 +131,16 @@ const LIVE_VEHICLE_MAX_LEAD_METERS = 120;
 const LIVE_VEHICLE_CATCH_UP_METERS = 150;
 const LIVE_VEHICLE_HARD_SNAP_METERS = 400;
 const LIVE_VEHICLE_START_HOLD_METERS = 350;
-const LIVE_VEHICLE_HEADING_LOOKAHEAD_METERS = 24;
 const LIVE_VEHICLE_OFF_ROUTE_LIMIT_METERS = 280;
-const VEHICLE_PIN_BACKGROUND_OPACITY = 0.82;
+// Translucency is baked into the fill colors (never a view-level `opacity`):
+// Android renders an alpha-composited layer solid for a frame when the marker
+// icon is recaptured, which reads as flicker.
+const VEHICLE_PIN_BACKGROUND_ALPHA_HEX = 'D1'; // ~0.82
+// The direction arrow rotates in 15° steps. Rotation lives in the icon (the
+// Fabric marker manager has no runtime rotation prop handler), so each step
+// costs one marker icon recapture — quantizing keeps those rare.
+const VEHICLE_ARROW_SECTOR_DEGREES = 15;
+const VEHICLE_ARROW_LOOK_AHEAD_METERS = 40;
 const TBILISI_TRAFFIC_ANCHOR_STOP_ID = '1:845';
 const TBILISI_TRAFFIC_SPEED_KMH = 22;
 const CITY_SPEED_KMH = 25;
@@ -153,6 +160,27 @@ const GOOGLE_DARK_MAP_STYLE = [
   { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#0f141a' }] },
   { featureType: 'water', elementType: 'labels.text.fill', stylers: [{ color: '#5f7a88' }] },
 ];
+// Warm paper tones tuned to the app's palettes (cream surfaces, muted
+// accents) instead of stock Google blue-green.
+const GOOGLE_LIGHT_MAP_STYLE = [
+  { elementType: 'geometry', stylers: [{ color: '#f2efe6' }] },
+  { elementType: 'labels.text.stroke', stylers: [{ color: '#f7f4ec' }] },
+  { elementType: 'labels.text.fill', stylers: [{ color: '#6b675c' }] },
+  { featureType: 'administrative', elementType: 'geometry', stylers: [{ color: '#d8d2c2' }] },
+  { featureType: 'landscape.natural', elementType: 'geometry', stylers: [{ color: '#eae6d8' }] },
+  { featureType: 'poi', elementType: 'geometry', stylers: [{ color: '#e7e2d3' }] },
+  { featureType: 'poi', elementType: 'labels.text.fill', stylers: [{ color: '#8a857a' }] },
+  { featureType: 'poi.park', elementType: 'geometry', stylers: [{ color: '#dde3cb' }] },
+  { featureType: 'poi.park', elementType: 'labels.text.fill', stylers: [{ color: '#7c8464' }] },
+  { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#ffffff' }] },
+  { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#e3dccb' }] },
+  { featureType: 'road', elementType: 'labels.text.fill', stylers: [{ color: '#87816F' }] },
+  { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#f7ecd6' }] },
+  { featureType: 'road.highway', elementType: 'geometry.stroke', stylers: [{ color: '#e0d3b4' }] },
+  { featureType: 'transit', elementType: 'geometry', stylers: [{ color: '#e4dfd0' }] },
+  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#c8d5d9' }] },
+  { featureType: 'water', elementType: 'labels.text.fill', stylers: [{ color: '#63808c' }] },
+];
 
 type MapDirection = 'toKojori' | 'toTbilisi';
 type StopMarkerZoomTier = 'overview' | 'mid' | 'close';
@@ -169,7 +197,7 @@ type VehicleSample = {
   bus: '380' | '316';
   vehicleId: string;
   rawCoordinate: { latitude: number; longitude: number };
-  rawHeading: number;
+  heading: number | null;
   onRoute: boolean;
   routeMeters: number;
 };
@@ -240,7 +268,8 @@ function StopMapMarker({
 }) {
   const [trackMarkerViewChanges, setTrackMarkerViewChanges] = useState(true);
   const markerSize = isSimpleOrdinaryStop ? 12 : 20;
-  const hitSize = isSimpleOrdinaryStop ? 28 : markerSize + 8;
+  // Invisible touch slop around the dot — small dots were hard to tap.
+  const hitSize = 34;
   const promotedHitSize = 44;
   const promotedMarkerSize = 30;
   const markerVisualStateKey = [
@@ -477,7 +506,7 @@ function buildVehicleSample(
     bus: position.bus,
     vehicleId: position.vehicleId,
     rawCoordinate,
-    rawHeading: Number.isFinite(position.heading) ? position.heading : 0,
+    heading: Number.isFinite(position.heading) ? position.heading : null,
     onRoute: false,
     routeMeters: 0,
   };
@@ -490,6 +519,51 @@ function buildVehicleSample(
   }
 
   return { ...base, onRoute: true, routeMeters: projected.distanceMeters };
+}
+
+function quantizeArrowSector(heading: number | null): number | null {
+  if (heading == null || !Number.isFinite(heading)) return null;
+  const normalized = ((heading % 360) + 360) % 360;
+  return Math.round(normalized / VEHICLE_ARROW_SECTOR_DEGREES) % (360 / VEHICLE_ARROW_SECTOR_DEGREES);
+}
+
+function vehicleArrowSectorAt(sample: VehicleSample, track: VehicleRouteTrack | undefined): number | null {
+  if (sample.onRoute && track) {
+    return quantizeArrowSector(
+      headingAlongPolyline(track.metrics, sample.routeMeters, VEHICLE_ARROW_LOOK_AHEAD_METERS),
+    );
+  }
+  return quantizeArrowSector(sample.heading);
+}
+
+// Rough ETA from a live vehicle to a stop further along its route, using the
+// same segment speed model that drives the marker animation. Returns null
+// when the bus is off-route, at, or already past the stop.
+function estimateVehicleEtaMinutes(
+  sample: VehicleSample,
+  track: VehicleRouteTrack | undefined,
+  direction: MapDirection,
+  stopId: string,
+): number | null {
+  if (!sample.onRoute || !track) return null;
+
+  const stopProjection = projectStopToRoute(findStop(stopId), track.metrics);
+  if (!stopProjection) return null;
+
+  const stopMeters = stopProjection.distanceMeters;
+  if (stopMeters <= sample.routeMeters + 30) return null;
+
+  let meters = sample.routeMeters;
+  let seconds = 0;
+  while (meters < stopMeters) {
+    const chunkMeters = Math.min(500, stopMeters - meters);
+    const point = interpolatePolylineAtDistance(track.metrics, meters)?.point ?? sample.rawCoordinate;
+    const speed = vehicleCruiseSpeedMetersPerSecond(direction, meters, point, track);
+    seconds += chunkMeters / Math.max(1, speed);
+    meters += chunkMeters;
+  }
+
+  return Math.max(1, Math.round(seconds / 60));
 }
 
 function AnimatedVehicleMarker({
@@ -511,9 +585,8 @@ function AnimatedVehicleMarker({
   subtitle: string;
   styles: ReturnType<typeof createStyles>;
 }) {
-  const shapeMarkerRef = useRef<MapMarker | null>(null);
   const contentMarkerRef = useRef<MapMarker | null>(null);
-  // The markers are uncontrolled after mount: the coordinate prop never
+  // The marker is uncontrolled after mount: the coordinate prop never
   // changes, and all motion goes through the native marker API on a fixed
   // tick. The tick advances a progress-in-meters value along the route and
   // only ever modulates speed — the marker never animates backwards when a
@@ -528,17 +601,18 @@ function AnimatedVehicleMarker({
     if (!sample.onRoute || !track) return sample.rawCoordinate;
     return interpolatePolylineAtDistance(track.metrics, sample.routeMeters)?.point ?? sample.rawCoordinate;
   });
-  const [displayHeading, setDisplayHeading] = useState(() => {
-    if (!sample.onRoute || !track) return sample.rawHeading;
-    return headingAlongPolyline(track.metrics, sample.routeMeters, LIVE_VEHICLE_HEADING_LOOKAHEAD_METERS) ?? sample.rawHeading;
-  });
+  // Direction is a rotated arrow point baked into the marker icon. The Fabric
+  // marker manager has no runtime rotation prop handler, so the arrow rotates
+  // via the view transform and the icon is explicitly recaptured — but only
+  // when the quantized sector actually changes (i.e. the bus turns).
+  const [arrowSector, setArrowSector] = useState(() => vehicleArrowSectorAt(sample, track));
+  const arrowSectorRef = useRef(arrowSector);
   const [canAnimateNativeMarker, setCanAnimateNativeMarker] = useState(false);
   const pinWidth = VEHICLE_PIN_CANVAS_SIZE;
   const pinHeight = VEHICLE_PIN_CANVAS_SIZE;
   const busIconSize = 16;
   const routeFontSize = 10;
   const routeDigits = sample.bus.split('');
-  const heading = Number.isFinite(displayHeading) ? displayHeading : 0;
 
   useEffect(() => {
     const readyTimeoutId = setTimeout(() => setCanAnimateNativeMarker(true), 250);
@@ -554,32 +628,33 @@ function AnimatedVehicleMarker({
   useEffect(() => {
     if (!canAnimateNativeMarker) return;
 
-    const applyHeading = (nextHeading: number | undefined) => {
-      if (nextHeading == null || !Number.isFinite(nextHeading)) return;
-      setDisplayHeading(previous => {
-        const delta = Math.abs(((nextHeading - previous + 540) % 360) - 180);
-        return delta < 1.5 ? previous : nextHeading;
-      });
-    };
+    // Motion goes only through the native marker animation API — no React
+    // commits on the movement path.
     const moveTo = (
       coordinate: { latitude: number; longitude: number },
       durationMs: number,
-      nextHeading?: number,
     ) => {
       displayedCoordinateRef.current = coordinate;
-      applyHeading(nextHeading);
       if (durationMs <= 0) {
-        shapeMarkerRef.current?.setCoordinates(coordinate);
         contentMarkerRef.current?.setCoordinates(coordinate);
         return;
       }
-      shapeMarkerRef.current?.animateMarkerToCoordinate(coordinate, durationMs);
       contentMarkerRef.current?.animateMarkerToCoordinate(coordinate, durationMs);
     };
-    const routeHeadingAt = (meters: number) => {
+    // Commits a new arrow orientation only when the quantized sector changes;
+    // the render effect below then recaptures the marker icon once.
+    const updateArrowSector = (meters: number | null) => {
+      const currentSample = sampleRef.current;
       const currentTrack = trackRef.current;
-      if (!currentTrack) return undefined;
-      return headingAlongPolyline(currentTrack.metrics, meters, LIVE_VEHICLE_HEADING_LOOKAHEAD_METERS) ?? undefined;
+      const sector = meters != null && currentTrack
+        ? quantizeArrowSector(
+            headingAlongPolyline(currentTrack.metrics, meters, VEHICLE_ARROW_LOOK_AHEAD_METERS),
+          )
+        : quantizeArrowSector(currentSample.heading);
+      if (sector != null && sector !== arrowSectorRef.current) {
+        arrowSectorRef.current = sector;
+        setArrowSector(sector);
+      }
     };
 
     const tick = () => {
@@ -588,8 +663,9 @@ function AnimatedVehicleMarker({
 
       if (!currentSample.onRoute || !currentTrack) {
         displayedMetersRef.current = null;
+        updateArrowSector(null);
         if (distanceMeters(displayedCoordinateRef.current, currentSample.rawCoordinate) > 1) {
-          moveTo(currentSample.rawCoordinate, reduceMotion ? 0 : LIVE_VEHICLE_TICK_MS, currentSample.rawHeading);
+          moveTo(currentSample.rawCoordinate, reduceMotion ? 0 : LIVE_VEHICLE_TICK_MS);
         }
         return;
       }
@@ -605,7 +681,8 @@ function AnimatedVehicleMarker({
         if (displayed !== gpsMeters) {
           displayedMetersRef.current = gpsMeters;
           const point = interpolatePolylineAtDistance(currentTrack.metrics, gpsMeters)?.point ?? currentSample.rawCoordinate;
-          moveTo(point, 0, routeHeadingAt(gpsMeters) ?? currentSample.rawHeading);
+          moveTo(point, 0);
+          updateArrowSector(gpsMeters);
         }
         return;
       }
@@ -638,7 +715,8 @@ function AnimatedVehicleMarker({
       if (!point) return;
 
       displayedMetersRef.current = nextMeters;
-      moveTo(point, LIVE_VEHICLE_TICK_MS, routeHeadingAt(nextMeters));
+      moveTo(point, LIVE_VEHICLE_TICK_MS);
+      updateArrowSector(nextMeters);
     };
 
     tick();
@@ -646,81 +724,93 @@ function AnimatedVehicleMarker({
     return () => clearInterval(intervalId);
   }, [canAnimateNativeMarker, reduceMotion]);
 
+  useEffect(() => {
+    // tracksViewChanges stays false, so a committed arrow rotation only lands
+    // in the marker icon after an explicit recapture.
+    if (!canAnimateNativeMarker) return;
+    contentMarkerRef.current?.redraw();
+  }, [arrowSector, canAnimateNativeMarker]);
+
   return (
-    <>
-      <Marker
-        ref={shapeMarkerRef}
-        coordinate={initialCoordinate}
-        anchor={VEHICLE_PIN_ANCHOR}
-        rotation={heading}
-        tracksViewChanges={false}
-        zIndex={21}>
+    <Marker
+      ref={contentMarkerRef}
+      coordinate={initialCoordinate}
+      anchor={VEHICLE_PIN_ANCHOR}
+      tracksViewChanges={false}
+      zIndex={22}>
+      <View
+        collapsable={false}
+        style={[styles.vehiclePin, { width: pinWidth, height: pinHeight }]}>
+        {/* Translucency comes from alpha baked into each fill color; a
+            view-level opacity here composites solid for a frame on Android
+            whenever the marker icon is recaptured. The circles are
+            rotation-invariant, so rotating this layer only moves the
+            arrow point. */}
         <View
           collapsable={false}
           style={[
-            styles.vehiclePin,
-            styles.vehiclePinTranslucent,
-            { width: pinWidth, height: pinHeight },
+            styles.vehiclePinShape,
+            arrowSector != null && {
+              transform: [{ rotate: `${arrowSector * VEHICLE_ARROW_SECTOR_DEGREES}deg` }],
+            },
           ]}>
-          <View style={styles.vehiclePinShape}>
-            <View style={styles.vehiclePinOuterCircle} />
-            <View style={styles.vehiclePinOuterPoint} />
-            <View style={[styles.vehiclePinInnerCircle, { backgroundColor: accent }]} />
-            <View style={[styles.vehiclePinInnerPoint, { borderBottomColor: accent }]} />
+          {arrowSector != null && (
+            <>
+              <View style={styles.vehiclePinArrowOuter} />
+              <View style={[styles.vehiclePinArrowInner, { borderBottomColor: accent }]} />
+            </>
+          )}
+          <View style={styles.vehiclePinOuterCircle} />
+          <View
+            style={[
+              styles.vehiclePinInnerCircle,
+              { backgroundColor: alpha(accent, VEHICLE_PIN_BACKGROUND_ALPHA_HEX) },
+            ]}
+          />
+        </View>
+        <View collapsable={false} style={styles.vehiclePinContent}>
+          <View collapsable={false} style={styles.vehiclePinBusIconSlot}>
+            <MaterialCommunityIcons
+              name="bus"
+              size={busIconSize}
+              color="#FFFFFF"
+              style={styles.vehiclePinBusIcon}
+            />
+          </View>
+          <View style={styles.vehicleRouteDigits}>
+            {routeDigits.map((digit, index) => (
+              <Text
+                key={`${sample.bus}-${index}`}
+                allowFontScaling={false}
+                style={[
+                  styles.vehicleRouteLabel,
+                  {
+                    fontSize: routeFontSize,
+                    lineHeight: routeFontSize + 2,
+                  },
+                ]}>
+                {digit}
+              </Text>
+            ))}
           </View>
         </View>
-      </Marker>
-      <Marker
-        ref={contentMarkerRef}
-        coordinate={initialCoordinate}
-        anchor={VEHICLE_PIN_ANCHOR}
-        tracksViewChanges={false}
-        zIndex={22}>
-        <View collapsable={false} style={{ width: pinWidth, height: pinHeight }}>
-          <View collapsable={false} style={styles.vehiclePinContent}>
-            <View collapsable={false} style={styles.vehiclePinBusIconSlot}>
-              <MaterialCommunityIcons
-                name="bus"
-                size={busIconSize}
-                color="#FFFFFF"
-                style={styles.vehiclePinBusIcon}
-              />
-            </View>
-            <View style={styles.vehicleRouteDigits}>
-              {routeDigits.map((digit, index) => (
-                <Text
-                  key={`${sample.bus}-${index}`}
-                  allowFontScaling={false}
-                  style={[
-                    styles.vehicleRouteLabel,
-                    {
-                      fontSize: routeFontSize,
-                      lineHeight: routeFontSize + 2,
-                    },
-                  ]}>
-                  {digit}
-                </Text>
-              ))}
-            </View>
+      </View>
+      <Callout tooltip>
+        <View style={styles.vehicleCallout}>
+          <View style={[styles.vehicleCalloutIcon, { backgroundColor: accent }]}>
+            <MaterialCommunityIcons name="bus" size={22} color="#FFFFFF" />
+          </View>
+          <View style={styles.vehicleCalloutCopy}>
+            <Text style={styles.vehicleCalloutTitle} numberOfLines={1}>
+              {title}
+            </Text>
+            <Text style={styles.vehicleCalloutSubtitle} numberOfLines={1}>
+              {subtitle}
+            </Text>
           </View>
         </View>
-        <Callout tooltip>
-          <View style={styles.vehicleCallout}>
-            <View style={[styles.vehicleCalloutIcon, { backgroundColor: accent }]}>
-              <MaterialCommunityIcons name="bus" size={22} color="#FFFFFF" />
-            </View>
-            <View style={styles.vehicleCalloutCopy}>
-              <Text style={styles.vehicleCalloutTitle} numberOfLines={1}>
-                {title}
-              </Text>
-              <Text style={styles.vehicleCalloutSubtitle} numberOfLines={1}>
-                {subtitle}
-              </Text>
-            </View>
-          </View>
-        </Callout>
-      </Marker>
-    </>
+      </Callout>
+    </Marker>
   );
 }
 
@@ -786,6 +876,8 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
     if (isActive) return;
     setMapReady(false);
     setMapTimedOut(false);
+    // Re-fit the fleet next time the map opens.
+    lastFitKeyRef.current = null;
   }, [isActive]);
 
   const { data: toKojoriRouteData } = useRoutePolylines('toKojori');
@@ -984,7 +1076,10 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
   useEffect(() => {
     if (!isActive || positions.length === 0 || focusedStop) return;
 
-    const fitKey = `${direction}-${positions.map(position => `${position.bus}-${position.vehicleId}`).sort().join('|')}`;
+    // Fit the fleet once per direction/activation. Keying on the vehicle set
+    // made the camera yank away from wherever the user had panned every time
+    // a bus appeared or dropped off.
+    const fitKey = direction;
     if (fitKey === lastFitKeyRef.current) return;
 
     lastFitKeyRef.current = fitKey;
@@ -1122,10 +1217,13 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
       longitudeDelta: region.longitudeDelta,
     };
     
-    if (
-      clampedRegion.latitude !== region.latitude ||
-      clampedRegion.longitude !== region.longitude
-    ) {
+    // Bounce back only when meaningfully outside the bounds — re-animating on
+    // sub-epsilon clamp deltas made the edge feel springy on every gesture.
+    const clampDelta = Math.max(
+      Math.abs(clampedRegion.latitude - region.latitude),
+      Math.abs(clampedRegion.longitude - region.longitude),
+    );
+    if (clampDelta > 0.002) {
       mapRef.current?.animateToRegion(clampedRegion, 300);
     }
     
@@ -1181,10 +1279,10 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
         style={StyleSheet.absoluteFill}
         initialRegion={currentRegion}
         userInterfaceStyle={resolvedThemeMode}
-        // An empty style array (not undefined) is required so switching back
-        // to light actually resets the runtime map style without remounting
-        // the whole MapView (which reloads tiles and resets the camera).
-        customMapStyle={resolvedThemeMode === 'dark' ? GOOGLE_DARK_MAP_STYLE : []}
+        // Both themes pass a non-empty style so switching always restyles the
+        // map at runtime without remounting the MapView (which would reload
+        // tiles and reset the camera).
+        customMapStyle={resolvedThemeMode === 'dark' ? GOOGLE_DARK_MAP_STYLE : GOOGLE_LIGHT_MAP_STYLE}
         showsUserLocation={hasUserLocation}
         showsMyLocationButton={false}
         showsPointsOfInterests={false}
@@ -1232,11 +1330,16 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
             </>
           )
           : null}
-        {showMarkers && fullStopMarkers.map(({ stop, isPromoted }) => {
-          const isMidZoom = stopMarkerZoomTier === 'mid';
-          const isSimpleOrdinaryStop = !isPromoted && isMidZoom;
+        {/* One flat keyed list: decluttering re-buckets stops between the full
+            and compact tiers on every pan/zoom, and rendering them as two
+            sibling fragments remounted (blinked) every marker that crossed. */}
+        {showMarkers && [
+          ...fullStopMarkers.map(entry => ({ ...entry, compact: false })),
+          ...compactStopMarkers.map(({ stop }) => ({ stop, isPromoted: false, compact: true })),
+        ].map(({ stop, isPromoted, compact }) => {
+          const isSimpleOrdinaryStop = compact || (!isPromoted && stopMarkerZoomTier === 'mid');
           const stopAccent = direction === 'toKojori' ? colors.route380 : colors.route316;
-          const markerColor = isPromoted || isSimpleOrdinaryStop ? stopAccent : colors.map;
+          const calloutIconColor = isPromoted || compact ? stopAccent : colors.map;
           const stopNumberLabel = t('commonStopNumber', { id: stop.id.split(':')[1] ?? stop.id });
 
           return (
@@ -1246,30 +1349,8 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
               stop={stop}
               isPromoted={isPromoted}
               isSimpleOrdinaryStop={isSimpleOrdinaryStop}
-              markerColor={isPromoted ? markerColor : stopAccent}
-              calloutIconColor={isPromoted ? markerColor : colors.map}
-              stopNumberLabel={stopNumberLabel}
-              tapHint={t('mapStopTapActions')}
-              styles={styles}
-              resolvedThemeMode={resolvedThemeMode}
-              colors={colors}
-              onPress={() => requestStopFocus(stop, direction)}
-            />
-          );
-        })}
-        {showMarkers && compactStopMarkers.map(({ stop }) => {
-          const stopAccent = direction === 'toKojori' ? colors.route380 : colors.route316;
-          const stopNumberLabel = t('commonStopNumber', { id: stop.id.split(':')[1] ?? stop.id });
-
-          return (
-            <StopMapMarker
-              key={`stop-${direction}-${stop.id}`}
-              direction={direction}
-              stop={stop}
-              isPromoted={false}
-              isSimpleOrdinaryStop
               markerColor={stopAccent}
-              calloutIconColor={stopAccent}
+              calloutIconColor={calloutIconColor}
               stopNumberLabel={stopNumberLabel}
               tapHint={t('mapStopTapActions')}
               styles={styles}
@@ -1282,6 +1363,16 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
         {showMarkers && vehicleSamples.map(sample => {
           const accent = routeAccent(sample.bus, colors);
           const destination = direction === 'toKojori' ? t('cityKojori') : t('cityTbilisi');
+          // Boarding stop for this direction: toKojori boards in Tbilisi.
+          const boardingStopId = direction === 'toKojori'
+            ? settings.activeTbilisiStopId
+            : settings.activeKojoriStopId;
+          const etaMinutes = estimateVehicleEtaMinutes(
+            sample,
+            vehicleRouteTracks[sample.bus],
+            direction,
+            boardingStopId,
+          );
 
           return (
             <AnimatedVehicleMarker
@@ -1292,7 +1383,9 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
               reduceMotion={reduceMotion}
               accent={accent}
               title={`${sample.bus} ${t('directionTo')}${destination}`}
-              subtitle={t('mapVehicle', { id: sample.vehicleId })}
+              subtitle={etaMinutes != null
+                ? t('mapVehicleEta', { minutes: etaMinutes })
+                : t('mapVehicle', { id: sample.vehicleId })}
               styles={styles}
             />
           );
@@ -1875,9 +1968,6 @@ function createStyles(C: ReturnType<typeof useAppColors>) {
     shadowOffset: { width: 0, height: 4 },
     elevation: 6,
   },
-  vehiclePinTranslucent: {
-    opacity: VEHICLE_PIN_BACKGROUND_OPACITY,
-  },
   vehiclePinShape: {
     position: 'absolute',
     top: 0,
@@ -1888,6 +1978,8 @@ function createStyles(C: ReturnType<typeof useAppColors>) {
     overflow: 'visible',
     zIndex: 1,
   },
+  // White ring + accent disc, alphas pre-baked per color. The disc tucks 1px
+  // under the ring border so no map-colored hairline shows between them.
   vehiclePinOuterCircle: {
     position: 'absolute',
     top: 12,
@@ -1895,38 +1987,39 @@ function createStyles(C: ReturnType<typeof useAppColors>) {
     width: 42,
     height: 42,
     borderRadius: 21,
-    backgroundColor: alpha('#FFFFFF', 'F2'),
+    borderWidth: 3,
+    borderColor: alpha('#FFFFFF', 'C7'),
   },
-  vehiclePinOuterPoint: {
+  vehiclePinInnerCircle: {
     position: 'absolute',
-    top: 2,
-    left: 21,
+    top: 14,
+    left: 14,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+  },
+  vehiclePinArrowOuter: {
+    position: 'absolute',
+    top: 1,
+    left: 23,
     width: 0,
     height: 0,
-    borderLeftWidth: 12,
-    borderRightWidth: 12,
-    borderBottomWidth: 17,
+    borderLeftWidth: 10,
+    borderRightWidth: 10,
+    borderBottomWidth: 14,
     borderLeftColor: 'transparent',
     borderRightColor: 'transparent',
     borderBottomColor: alpha('#FFFFFF', 'F2'),
   },
-  vehiclePinInnerCircle: {
+  vehiclePinArrowInner: {
     position: 'absolute',
-    top: 15,
-    left: 15,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-  },
-  vehiclePinInnerPoint: {
-    position: 'absolute',
-    top: 7,
-    left: 24,
+    top: 4,
+    left: 26,
     width: 0,
     height: 0,
-    borderLeftWidth: 9,
-    borderRightWidth: 9,
-    borderBottomWidth: 14,
+    borderLeftWidth: 7,
+    borderRightWidth: 7,
+    borderBottomWidth: 10,
     borderLeftColor: 'transparent',
     borderRightColor: 'transparent',
   },

@@ -1,7 +1,19 @@
 # Changelog
 
 ## v2026.7.6
+### New
+
+- Tapping a live bus on the map now shows an estimated arrival at your boarding stop ("≈ 12 min to your stop") instead of just the vehicle number.
+- Wide widgets show a relative countdown ("in 12 min") next to each departure within the next hour; narrow widgets keep showing only times.
+
 ### Improved
+
+- Light theme now has a custom warm map style matching the app's palettes, instead of stock Google colors.
+- The map camera no longer jumps away from where you panned whenever a bus appears or drops off — the fleet is fitted once per map open or direction switch.
+- Stop markers no longer blink while zooming across marker density tiers, and small stop dots have a larger touch area.
+- Live buses got their direction arrow back: the badge carries a rotating arrow point (TTC style) that turns in 15° steps as the bus follows the road, replacing the accent bead that used to glide ahead of the marker.
+- Fixed the one-frame "solid fill" flicker on moving bus markers: the badge's translucency is now baked into the fill colors instead of a view-level opacity layer (which Android renders fully opaque for a frame during marker icon captures), and the separate direction-bead marker — whose accent dot could slip under the translucent badge during animation desync — is gone.
+- Widget ignores state payloads from older app versions and asks to open the app once, instead of repeating a stale day of departures.
 
 - Switching theme no longer reloads the whole map: the map style now updates in place, keeping tiles, camera position, and markers.
 - Widget state no longer re-syncs every minute while the app is open — departures carry absolute times for a week and the widget refreshes itself natively, so the periodic rebuild was pure overhead.

@@ -3,6 +3,13 @@ package expo.modules.kojoriwidget
 import android.content.Context
 import java.util.UUID
 
+// Must match WIDGET_STATE_SCHEMA_VERSION in src/services/android-widget.ts.
+// Payloads with any other version render as "open app to load".
+internal const val WIDGET_STATE_SCHEMA_VERSION = 2
+
+internal fun isSupportedWidgetState(root: org.json.JSONObject?): Boolean =
+  root?.optInt("schemaVersion", 1) == WIDGET_STATE_SCHEMA_VERSION
+
 object WidgetPrefs {
   private const val PREFS_NAME = "kojori_bus_widget"
   private const val KEY_STATE_JSON = "state_json"

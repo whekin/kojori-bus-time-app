@@ -82,6 +82,8 @@ open class KojoriBusWidgetProvider : AppWidgetProvider() {
     newOptions: android.os.Bundle,
   ) {
     super.onAppWidgetOptionsChanged(context, appWidgetManager, appWidgetId, newOptions)
+    // Row layout depends on widget width (countdown column), so re-query rows.
+    appWidgetManager.notifyAppWidgetViewDataChanged(intArrayOf(appWidgetId), R.id.widget_list)
     updateWidget(context, appWidgetManager, appWidgetId)
   }
 
@@ -145,7 +147,7 @@ open class KojoriBusWidgetProvider : AppWidgetProvider() {
       views.setRemoteAdapter(R.id.widget_list, listIntent)
       views.setPendingIntentTemplate(R.id.widget_list, widgetCollectionPendingIntent(context, appWidgetId))
 
-      if (stateJson.isNullOrBlank()) {
+      if (stateJson.isNullOrBlank() || !isSupportedWidgetState(root)) {
         bindEmptyState(context, views, root)
         appWidgetManager.updateAppWidget(appWidgetId, views)
         return

@@ -44,6 +44,7 @@ class WidgetListFactory(
   private data class Palette(val text: Int, val textDim: Int, val route380: Int, val route316: Int)
 
   private var direction: String = "kojori"
+  private var narrow: Boolean = false
   private var stopLabel: String = ""
   private var stopId: String = ""
   private var rows: List<WidgetRow> = emptyList()
@@ -58,12 +59,14 @@ class WidgetListFactory(
     stopLabel = ""
     val stateJson = WidgetPrefs.getStateJson(context) ?: return
     val root = runCatching { JSONObject(stateJson) }.getOrNull() ?: return
+    if (!isSupportedWidgetState(root)) return
     strings = root.optJSONObject("strings")
     direction = WidgetPrefs.getDirection(context)
     val snapshot = root.optJSONObject("directions")?.optJSONObject(direction) ?: return
     val items = snapshot.optJSONArray("items") ?: return
 
     palette = readPalette(root)
+    narrow = isNarrow()
     val label = snapshot.optString("stopLabel", "")
     stopId = snapshot.optString("stopId", "")
     val syncedAtEpochMs = snapshot.optLong("syncedAtEpochMs", 0L)
@@ -147,6 +150,8 @@ class WidgetListFactory(
 
     views.setTextViewText(R.id.item_bus, bus)
     views.setTextColor(R.id.item_bus, busColor)
+    views.setTextViewText(R.id.item_countdown, countdownLabel(row.remainingMins))
+    views.setTextColor(R.id.item_countdown, palette.textDim)
     views.setTextViewText(R.id.item_time, row.time ?: "--:--")
     views.setTextColor(R.id.item_time, palette.text)
     views.setViewVisibility(R.id.item_divider, if (isLast) View.GONE else View.VISIBLE)
@@ -156,6 +161,22 @@ class WidgetListFactory(
 
   private fun localizedString(key: String, fallback: String): String {
     return strings?.optString(key, fallback)?.ifBlank { fallback } ?: fallback
+  }
+
+  // Narrow widgets show only the departure time; wide ones add a relative
+  // countdown for departures within the next hour.
+  private fun countdownLabel(remainingMins: Int?): String {
+    if (narrow || remainingMins == null || remainingMins >= 60) return ""
+    if (remainingMins <= 0) return localizedString("now", "now")
+    return localizedString("inMinutes", "in {minutes} mins")
+      .replace("{minutes}", remainingMins.toString())
+  }
+
+  private fun isNarrow(): Boolean {
+    if (appWidgetId == AppWidgetManager.INVALID_APPWIDGET_ID) return false
+    val options = AppWidgetManager.getInstance(context).getAppWidgetOptions(appWidgetId)
+    val minWidth = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 0)
+    return minWidth in 1 until 180
   }
 
   private fun openAppIntent() = baseActionIntent(stopId).apply {
