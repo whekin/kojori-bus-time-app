@@ -10,6 +10,7 @@
 - The map shows your location dot whenever location permission is already granted, instead of only after tapping the locate button.
 - Next-departure card meta line no longer wraps: the drift readout is now a compact signed chip ("+4 min") next to the scheduled time, and the scheduled time — the trusted reference — is slightly larger and accented.
 - The live pill on the next-departure card now shows the live arrival time (e.g. "16:27") next to the pulsing dot instead of the word "LIVE".
+- Timetable section labels (Morning/Afternoon/Evening) are now centered between divider lines, matching the Departures screen.
 
 ### Infra
 

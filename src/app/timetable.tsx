@@ -364,6 +364,7 @@ export default function TimetableScreen({ isActive = true }: { isActive?: boolea
         }
         renderSectionHeader={({ section }) => (
           <View style={styles.sectionHeader}>
+            <View style={styles.sectionHeaderLine} />
             <Text style={styles.sectionHeaderText}>
               {section.title.toUpperCase()}
             </Text>
