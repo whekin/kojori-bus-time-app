@@ -4,6 +4,10 @@
 ### Improved
 
 - Brake Dust palette: bus 316 now uses the theme's brass tone instead of a second rust shade, so 380 (rust) and 316 (brass) are distinguishable while the palette stays in one warm-metal family.
+- Live bus markers on the map move smoothly: a route-progress follower advances each bus along the road on a fixed tick and only modulates speed — speeding up when behind the GPS fix, easing to a stop when too far ahead — so markers never jump backwards, never freeze between stops on stale GPS data, and follow curves instead of cutting corners.
+- The map shows your location dot whenever location permission is already granted, instead of only after tapping the locate button.
+- Next-departure card meta line no longer wraps: the drift readout is now a compact signed chip ("+4 min") next to the scheduled time, and the scheduled time — the trusted reference — is slightly larger and accented.
+- The live pill on the next-departure card now shows the live arrival time (e.g. "16:27") next to the pulsing dot instead of the word "LIVE".
 
 ### Fixed
 

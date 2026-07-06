@@ -124,8 +124,12 @@ const PROMOTED_STOP_DECLUTTER_PX = {
 const KOJORI_CENTER_STOP_ID = '1:3078';
 const ROUTE_LINE_SIMPLIFY_TOLERANCE_METERS = 12;
 const SHARED_ROUTE_STRIPE_METERS = 260;
-const LIVE_VEHICLE_CRUISE_MS = 3_900;
-const LIVE_VEHICLE_CORRECTION_MS = 900;
+const LIVE_VEHICLE_TICK_MS = 800;
+// How far ahead of the last GPS fix the marker may dead-reckon before it
+// eases to a stop, and how strongly it accelerates when it falls behind.
+const LIVE_VEHICLE_MAX_LEAD_METERS = 120;
+const LIVE_VEHICLE_CATCH_UP_METERS = 150;
+const LIVE_VEHICLE_HARD_SNAP_METERS = 400;
 const LIVE_VEHICLE_START_HOLD_METERS = 350;
 const LIVE_VEHICLE_HEADING_LOOKAHEAD_METERS = 24;
 const LIVE_VEHICLE_OFF_ROUTE_LIMIT_METERS = 280;
@@ -161,17 +165,13 @@ type DeclutteredStopMarkers = {
   visible: StopMarkerData[];
   compact: StopMarkerData[];
 };
-type VehicleDisplayPosition = {
+type VehicleSample = {
   bus: '380' | '316';
   vehicleId: string;
-  nextStopId: string;
-  heading: number;
-  headingSamples: { progress: number; heading: number }[];
-  currentCoordinate: { latitude: number; longitude: number };
-  targetCoordinate: { latitude: number; longitude: number };
-  sampleKey: string;
-  correctionDurationMs: number;
-  cruiseDurationMs: number;
+  rawCoordinate: { latitude: number; longitude: number };
+  rawHeading: number;
+  onRoute: boolean;
+  routeMeters: number;
 };
 type VehicleRouteTrack = {
   metrics: PolylineMetrics;
@@ -462,105 +462,50 @@ function vehicleCruiseSpeedMetersPerSecond(
   return kmhToMetersPerSecond(KOJORI_SPEED_KMH);
 }
 
-function buildVehicleDisplayPosition(
+function buildVehicleSample(
   position: {
     bus: '380' | '316';
     vehicleId: string;
-    nextStopId: string;
     lat: number;
     lon: number;
     heading: number;
   },
-  direction: MapDirection,
   track: VehicleRouteTrack | undefined,
-  reduceMotion: boolean,
-): VehicleDisplayPosition {
+): VehicleSample {
   const rawCoordinate = { latitude: position.lat, longitude: position.lon };
-  const rawHeading = Number.isFinite(position.heading) ? position.heading : 0;
-  const fallback = {
+  const base: VehicleSample = {
     bus: position.bus,
     vehicleId: position.vehicleId,
-    nextStopId: position.nextStopId,
-    heading: rawHeading,
-    headingSamples: [{ progress: 0, heading: rawHeading }],
-    currentCoordinate: rawCoordinate,
-    targetCoordinate: rawCoordinate,
-    sampleKey: `${position.bus}-${position.vehicleId}-${position.lat}-${position.lon}-${position.nextStopId}`,
-    correctionDurationMs: reduceMotion ? 0 : LIVE_VEHICLE_CORRECTION_MS,
-    cruiseDurationMs: reduceMotion ? 0 : LIVE_VEHICLE_CRUISE_MS,
+    rawCoordinate,
+    rawHeading: Number.isFinite(position.heading) ? position.heading : 0,
+    onRoute: false,
+    routeMeters: 0,
   };
 
-  if (!track || track.metrics.points.length < 2) return fallback;
+  if (!track || track.metrics.points.length < 2) return base;
 
   const projected = projectPointToPolyline(rawCoordinate, track.metrics);
   if (!projected || projected.offRouteMeters > LIVE_VEHICLE_OFF_ROUTE_LIMIT_METERS) {
-    return fallback;
+    return base;
   }
 
-  const nextStopProjection = projectStopToRoute(findStop(position.nextStopId), track.metrics);
-  const nextStopMeters = nextStopProjection?.distanceMeters ?? track.metrics.totalMeters;
-  const currentMeters = Math.min(projected.distanceMeters, nextStopMeters);
-  const current = interpolatePolylineAtDistance(track.metrics, currentMeters);
-  const currentPoint = current?.point ?? projected.point;
-  const routeHeading = headingAlongPolyline(
-    track.metrics,
-    currentMeters,
-    Math.min(LIVE_VEHICLE_HEADING_LOOKAHEAD_METERS, Math.max(0, nextStopMeters - currentMeters)),
-  ) ?? current?.heading ?? projected.heading;
-
-  if (currentMeters <= LIVE_VEHICLE_START_HOLD_METERS) {
-    return {
-      ...fallback,
-      heading: routeHeading,
-      headingSamples: [{ progress: 0, heading: routeHeading }],
-      currentCoordinate: currentPoint,
-      targetCoordinate: currentPoint,
-      correctionDurationMs: 0,
-      cruiseDurationMs: 0,
-    };
-  }
-
-  const speedMetersPerSecond = vehicleCruiseSpeedMetersPerSecond(
-    direction,
-    currentMeters,
-    currentPoint,
-    track,
-  );
-  const cruiseMeters = speedMetersPerSecond * (LIVE_VEHICLE_CRUISE_MS / 1000);
-  const targetMeters = Math.min(
-    currentMeters + cruiseMeters,
-    nextStopMeters,
-  );
-  const target = interpolatePolylineAtDistance(track.metrics, targetMeters);
-  const headingSamples = [0, 0.25, 0.5, 0.75, 1].map(progress => {
-    const sampleMeters = currentMeters + (targetMeters - currentMeters) * progress;
-    return {
-      progress,
-      heading: headingAlongPolyline(
-        track.metrics,
-        sampleMeters,
-        Math.min(LIVE_VEHICLE_HEADING_LOOKAHEAD_METERS, Math.max(0, nextStopMeters - sampleMeters)),
-      ) ?? routeHeading,
-    };
-  });
-
-  return {
-    ...fallback,
-    heading: routeHeading,
-    headingSamples,
-    currentCoordinate: currentPoint,
-    targetCoordinate: target?.point ?? currentPoint,
-  };
+  return { ...base, onRoute: true, routeMeters: projected.distanceMeters };
 }
 
 function AnimatedVehicleMarker({
-  position,
+  sample,
+  track,
+  direction,
+  reduceMotion,
   accent,
   title,
   subtitle,
   styles,
 }: {
-  position: VehicleDisplayPosition;
+  sample: VehicleSample;
+  track: VehicleRouteTrack | undefined;
+  direction: MapDirection;
+  reduceMotion: boolean;
   accent: string;
   title: string;
   subtitle: string;
@@ -568,19 +513,31 @@ function AnimatedVehicleMarker({
 }) {
   const shapeMarkerRef = useRef<MapMarker | null>(null);
   const contentMarkerRef = useRef<MapMarker | null>(null);
-  const animationStartTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const animationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const cruiseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const headingTimeoutRefs = useRef<ReturnType<typeof setTimeout>[]>([]);
-  const renderedCoordinateRef = useRef(position.currentCoordinate);
-  const [renderedCoordinate, setRenderedCoordinate] = useState(position.currentCoordinate);
-  const [displayHeading, setDisplayHeading] = useState(position.heading);
+  // The markers are uncontrolled after mount: the coordinate prop never
+  // changes, and all motion goes through the native marker API on a fixed
+  // tick. The tick advances a progress-in-meters value along the route and
+  // only ever modulates speed — the marker never animates backwards when a
+  // stale GPS fix projects behind the dead-reckoned position, and chained
+  // short segments follow the road instead of cutting corners.
+  const sampleRef = useRef(sample);
+  const trackRef = useRef(track);
+  const directionRef = useRef(direction);
+  const displayedMetersRef = useRef<number | null>(null);
+  const displayedCoordinateRef = useRef(sample.rawCoordinate);
+  const [initialCoordinate] = useState(() => {
+    if (!sample.onRoute || !track) return sample.rawCoordinate;
+    return interpolatePolylineAtDistance(track.metrics, sample.routeMeters)?.point ?? sample.rawCoordinate;
+  });
+  const [displayHeading, setDisplayHeading] = useState(() => {
+    if (!sample.onRoute || !track) return sample.rawHeading;
+    return headingAlongPolyline(track.metrics, sample.routeMeters, LIVE_VEHICLE_HEADING_LOOKAHEAD_METERS) ?? sample.rawHeading;
+  });
   const [canAnimateNativeMarker, setCanAnimateNativeMarker] = useState(false);
   const pinWidth = VEHICLE_PIN_CANVAS_SIZE;
   const pinHeight = VEHICLE_PIN_CANVAS_SIZE;
   const busIconSize = 16;
   const routeFontSize = 10;
-  const routeDigits = position.bus.split('');
+  const routeDigits = sample.bus.split('');
   const heading = Number.isFinite(displayHeading) ? displayHeading : 0;
 
   useEffect(() => {
@@ -589,98 +546,111 @@ function AnimatedVehicleMarker({
   }, []);
 
   useEffect(() => {
-    const clearTimers = () => {
-      if (animationStartTimeoutRef.current) {
-        clearTimeout(animationStartTimeoutRef.current);
-        animationStartTimeoutRef.current = null;
-      }
-      if (animationTimeoutRef.current) {
-        clearTimeout(animationTimeoutRef.current);
-        animationTimeoutRef.current = null;
-      }
-      if (cruiseTimeoutRef.current) {
-        clearTimeout(cruiseTimeoutRef.current);
-        cruiseTimeoutRef.current = null;
-      }
-      headingTimeoutRefs.current.forEach(timeoutId => clearTimeout(timeoutId));
-      headingTimeoutRefs.current = [];
-    };
-    const scheduleHeadingSamples = (
-      samples: { progress: number; heading: number }[],
-      durationMs: number,
-    ) => {
-      if (samples.length === 0) return;
-      setDisplayHeading(samples[0].heading);
-      samples.slice(1).forEach(sample => {
-        const timeoutId = setTimeout(
-          () => setDisplayHeading(sample.heading),
-          Math.max(0, durationMs * sample.progress),
-        );
-        headingTimeoutRefs.current.push(timeoutId);
+    sampleRef.current = sample;
+    trackRef.current = track;
+    directionRef.current = direction;
+  }, [sample, track, direction]);
+
+  useEffect(() => {
+    if (!canAnimateNativeMarker) return;
+
+    const applyHeading = (nextHeading: number | undefined) => {
+      if (nextHeading == null || !Number.isFinite(nextHeading)) return;
+      setDisplayHeading(previous => {
+        const delta = Math.abs(((nextHeading - previous + 540) % 360) - 180);
+        return delta < 1.5 ? previous : nextHeading;
       });
     };
-    const settleAt = (
+    const moveTo = (
       coordinate: { latitude: number; longitude: number },
       durationMs: number,
-      headingSamples: { progress: number; heading: number }[],
+      nextHeading?: number,
     ) => {
+      displayedCoordinateRef.current = coordinate;
+      applyHeading(nextHeading);
       if (durationMs <= 0) {
-        renderedCoordinateRef.current = coordinate;
-        setRenderedCoordinate(coordinate);
-        scheduleHeadingSamples(headingSamples, 0);
         shapeMarkerRef.current?.setCoordinates(coordinate);
         contentMarkerRef.current?.setCoordinates(coordinate);
         return;
       }
-
-      scheduleHeadingSamples(headingSamples, durationMs);
-      shapeMarkerRef.current?.setCoordinates(renderedCoordinateRef.current);
-      contentMarkerRef.current?.setCoordinates(renderedCoordinateRef.current);
-      animationStartTimeoutRef.current = setTimeout(() => {
-        shapeMarkerRef.current?.animateMarkerToCoordinate(coordinate, durationMs);
-        contentMarkerRef.current?.animateMarkerToCoordinate(coordinate, durationMs);
-      }, 50);
-      animationTimeoutRef.current = setTimeout(() => {
-        renderedCoordinateRef.current = coordinate;
-        setRenderedCoordinate(coordinate);
-      }, durationMs + 50);
+      shapeMarkerRef.current?.animateMarkerToCoordinate(coordinate, durationMs);
+      contentMarkerRef.current?.animateMarkerToCoordinate(coordinate, durationMs);
     };
-    const cruise = () => settleAt(position.targetCoordinate, position.cruiseDurationMs, position.headingSamples);
-    const predictionDistance = distanceMeters(position.currentCoordinate, position.targetCoordinate);
+    const routeHeadingAt = (meters: number) => {
+      const currentTrack = trackRef.current;
+      if (!currentTrack) return undefined;
+      return headingAlongPolyline(currentTrack.metrics, meters, LIVE_VEHICLE_HEADING_LOOKAHEAD_METERS) ?? undefined;
+    };
 
-    clearTimers();
+    const tick = () => {
+      const currentSample = sampleRef.current;
+      const currentTrack = trackRef.current;
 
-    if (!canAnimateNativeMarker) {
-      renderedCoordinateRef.current = position.currentCoordinate;
-      setRenderedCoordinate(position.currentCoordinate);
-      setDisplayHeading(position.heading);
-      return clearTimers;
-    }
+      if (!currentSample.onRoute || !currentTrack) {
+        displayedMetersRef.current = null;
+        if (distanceMeters(displayedCoordinateRef.current, currentSample.rawCoordinate) > 1) {
+          moveTo(currentSample.rawCoordinate, reduceMotion ? 0 : LIVE_VEHICLE_TICK_MS, currentSample.rawHeading);
+        }
+        return;
+      }
 
-    if (predictionDistance > 8 && position.correctionDurationMs > 0) {
-      settleAt(position.currentCoordinate, position.correctionDurationMs, [{ progress: 0, heading: position.heading }]);
-      cruiseTimeoutRef.current = setTimeout(cruise, position.correctionDurationMs);
-    } else {
-      cruise();
-    }
+      const gpsMeters = currentSample.routeMeters;
+      const displayed = displayedMetersRef.current;
 
-    return clearTimers;
-  }, [
-    canAnimateNativeMarker,
-    position.correctionDurationMs,
-    position.cruiseDurationMs,
-    position.currentCoordinate,
-    position.heading,
-    position.headingSamples,
-    position.sampleKey,
-    position.targetCoordinate,
-  ]);
+      if (
+        displayed == null ||
+        reduceMotion ||
+        Math.abs(gpsMeters - displayed) > LIVE_VEHICLE_HARD_SNAP_METERS
+      ) {
+        if (displayed !== gpsMeters) {
+          displayedMetersRef.current = gpsMeters;
+          const point = interpolatePolylineAtDistance(currentTrack.metrics, gpsMeters)?.point ?? currentSample.rawCoordinate;
+          moveTo(point, 0, routeHeadingAt(gpsMeters) ?? currentSample.rawHeading);
+        }
+        return;
+      }
+
+      const errorMeters = gpsMeters - displayed;
+      // Near the route start the bus is usually waiting at the terminal —
+      // hold instead of creeping forward on dead reckoning alone.
+      const holding = gpsMeters <= LIVE_VEHICLE_START_HOLD_METERS && errorMeters <= 0;
+      const speedFactor = holding
+        ? 0
+        : errorMeters >= 0
+          ? Math.min(2.2, 1 + errorMeters / LIVE_VEHICLE_CATCH_UP_METERS)
+          : Math.max(0, 1 + errorMeters / LIVE_VEHICLE_MAX_LEAD_METERS);
+
+      if (speedFactor <= 0) return;
+
+      const cruiseSpeed = vehicleCruiseSpeedMetersPerSecond(
+        directionRef.current,
+        displayed,
+        displayedCoordinateRef.current,
+        currentTrack,
+      );
+      const nextMeters = Math.min(
+        displayed + cruiseSpeed * speedFactor * (LIVE_VEHICLE_TICK_MS / 1000),
+        currentTrack.metrics.totalMeters,
+      );
+      if (nextMeters <= displayed) return;
+
+      const point = interpolatePolylineAtDistance(currentTrack.metrics, nextMeters)?.point;
+      if (!point) return;
+
+      displayedMetersRef.current = nextMeters;
+      moveTo(point, LIVE_VEHICLE_TICK_MS, routeHeadingAt(nextMeters));
+    };
+
+    tick();
+    const intervalId = setInterval(tick, LIVE_VEHICLE_TICK_MS);
+    return () => clearInterval(intervalId);
+  }, [canAnimateNativeMarker, reduceMotion]);
 
   return (
     <>
       <Marker
         ref={shapeMarkerRef}
-        coordinate={renderedCoordinate}
+        coordinate={initialCoordinate}
         anchor={VEHICLE_PIN_ANCHOR}
         rotation={heading}
         tracksViewChanges={false}
@@ -702,7 +672,7 @@ function AnimatedVehicleMarker({
       </Marker>
       <Marker
         ref={contentMarkerRef}
-        coordinate={renderedCoordinate}
+        coordinate={initialCoordinate}
         anchor={VEHICLE_PIN_ANCHOR}
         tracksViewChanges={false}
         zIndex={22}>
@@ -719,7 +689,7 @@ function AnimatedVehicleMarker({
             <View style={styles.vehicleRouteDigits}>
               {routeDigits.map((digit, index) => (
                 <Text
-                  key={`${position.bus}-${index}`}
+                  key={`${sample.bus}-${index}`}
                   allowFontScaling={false}
                   style={[
                     styles.vehicleRouteLabel,
@@ -884,14 +854,9 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
       return tracks;
     }, {});
   }, [routePolylines]);
-  const vehicleDisplayPositions = useMemo(() => {
-    return positions.map(position => buildVehicleDisplayPosition(
-      position,
-      direction,
-      vehicleRouteTracks[position.bus],
-      reduceMotion,
-    ));
-  }, [direction, positions, reduceMotion, vehicleRouteTracks]);
+  const vehicleSamples = useMemo(() => {
+    return positions.map(position => buildVehicleSample(position, vehicleRouteTracks[position.bus]));
+  }, [positions, vehicleRouteTracks]);
   const focusedStopAccent = focusedStop?.direction === 'toKojori' ? colors.route380 : colors.route316;
   const focusedStopIsSaved = focusedStop
     ? focusedStop.direction === 'toKojori'
@@ -1100,6 +1065,23 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
     lastFitKeyRef.current = null;
   }, [direction]);
 
+  // Show the user-location dot whenever permission is already granted, without
+  // prompting — the locate button remains the only place that requests it.
+  useEffect(() => {
+    if (!isActive || hasUserLocation) return;
+
+    let cancelled = false;
+    Location.getForegroundPermissionsAsync()
+      .then(permission => {
+        if (!cancelled && permission.status === 'granted') setHasUserLocation(true);
+      })
+      .catch(() => { });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isActive, hasUserLocation]);
+
   async function handleLocateMe() {
     setIsLocating(true);
     setLocationMessage(null);
@@ -1295,17 +1277,20 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
             />
           );
         })}
-        {showMarkers && vehicleDisplayPositions.map(position => {
-          const accent = routeAccent(position.bus, colors);
+        {showMarkers && vehicleSamples.map(sample => {
+          const accent = routeAccent(sample.bus, colors);
           const destination = direction === 'toKojori' ? t('cityKojori') : t('cityTbilisi');
-          
+
           return (
             <AnimatedVehicleMarker
-              key={`${position.bus}-${position.vehicleId}`}
-              position={position}
+              key={`${sample.bus}-${sample.vehicleId}`}
+              sample={sample}
+              track={vehicleRouteTracks[sample.bus]}
+              direction={direction}
+              reduceMotion={reduceMotion}
               accent={accent}
-              title={`${position.bus} ${t('directionTo')}${destination}`}
-              subtitle={t('mapVehicle', { id: position.vehicleId })}
+              title={`${sample.bus} ${t('directionTo')}${destination}`}
+              subtitle={t('mapVehicle', { id: sample.vehicleId })}
               styles={styles}
             />
           );

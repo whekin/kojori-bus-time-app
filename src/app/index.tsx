@@ -314,6 +314,7 @@ function ScheduledTimeHint({
             <Text
               style={[
                 styles.scheduledHintTime,
+                prominent && styles.scheduledHintTimeProminent,
                 { color: highlightColor ?? colors.live },
               ]}
             >
@@ -514,6 +515,13 @@ function NextCard({
       };
   const scheduledTime = isLiveDeparture ? dep.scheduledTime : dep.scheduledTime ?? dep.time;
   const countdownParts = splitCountdownLabel(minsLabel);
+  const driftLabel = !isLiveDeparture || dep.driftMinutes == null
+    ? null
+    : dep.driftMinutes > 0
+      ? t("homeDriftLate", { minutes: dep.driftMinutes })
+      : dep.driftMinutes < 0
+        ? t("homeDriftEarly", { minutes: Math.abs(dep.driftMinutes) })
+        : t("liveOnTime");
   return (
     <View style={styles.nextBlock}>
       <View
@@ -553,13 +561,21 @@ function NextCard({
               </View>
             </View>
             {realtimeStatus ? (
-              <View style={[styles.nextStatusPill, statusPillStyle]}>
+              <View
+                accessible
+                accessibilityLabel={`${t("homeArrivalSignal")} ${dep.time || ""}`.trim()}
+                style={[styles.nextStatusPill, statusPillStyle]}
+              >
                 <LiveDot color={realtimeStatus.textColor} />
                 <Text
-                  style={[styles.nextStatusText, { color: statusColor }]}
+                  style={[
+                    styles.nextStatusText,
+                    { color: statusColor },
+                    dep.time ? { fontFamily: MONO, fontSize: 12, letterSpacing: 0.3 } : null,
+                  ]}
                   numberOfLines={1}
                 >
-                  {t("homeArrivalSignal")}
+                  {dep.time || t("homeArrivalSignal")}
                 </Text>
               </View>
             ) : null}
@@ -604,19 +620,26 @@ function NextCard({
                   prominent
                   highlightColor={busColor}
                 />
-                {realtimeStatus && dep.driftMinutes != null ? (
-                  <>
-                    <Text style={styles.nextMetaDot}>•</Text>
+                {realtimeStatus && driftLabel ? (
+                  <View
+                    style={[
+                      styles.nextDriftChip,
+                      {
+                        backgroundColor: realtimeStatus.backgroundColor,
+                        borderColor: realtimeStatus.borderColor,
+                      },
+                    ]}
+                  >
                     <Text
                       style={[
-                        styles.nextMetaStatus,
+                        styles.nextDriftChipText,
                         { color: realtimeStatus.textColor },
                       ]}
-                      numberOfLines={2}
+                      numberOfLines={1}
                     >
-                      {realtimeStatus.label}
+                      {driftLabel}
                     </Text>
-                  </>
+                  </View>
                 ) : null}
               </>
             ) : (
@@ -626,7 +649,7 @@ function NextCard({
                   size={16}
                   color={colors.textDim}
                 />
-                <Text style={[styles.nextMetaStatus, styles.nextMetaLabel]} numberOfLines={2}>
+                <Text style={[styles.nextMetaStatus, styles.nextMetaLabel]} numberOfLines={1}>
                   {t("homeScheduledDeparture")}
                 </Text>
                 <Text style={styles.nextMetaDot}>•</Text>
@@ -636,7 +659,7 @@ function NextCard({
                     styles.nextMetaCountdown,
                     { color: busColor },
                   ]}
-                  numberOfLines={2}
+                  numberOfLines={1}
                 >
                   {minsLabel}
                 </Text>
@@ -1193,11 +1216,24 @@ function createStyles(C: AppColors) {
     },
     nextMetaRow: {
       flexDirection: "row",
-      flexWrap: "wrap",
+      flexWrap: "nowrap",
       alignItems: "center",
       gap: 6,
       justifyContent: "center",
       minHeight: 22,
+    },
+    nextDriftChip: {
+      borderRadius: 999,
+      borderWidth: 1,
+      paddingHorizontal: 8,
+      paddingVertical: 2,
+      flexShrink: 0,
+    },
+    nextDriftChipText: {
+      fontSize: 12,
+      lineHeight: 16,
+      fontWeight: "800",
+      letterSpacing: 0.2,
     },
     nextMetaDot: {
       color: C.textFaint,
@@ -1362,6 +1398,9 @@ function createStyles(C: AppColors) {
     },
     scheduledHintTime: {
       fontWeight: "800",
+    },
+    scheduledHintTimeProminent: {
+      fontSize: 15,
     },
     liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: C.live },
 
