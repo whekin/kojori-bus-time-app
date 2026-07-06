@@ -1,13 +1,15 @@
 <resources>
-  <color name="widget_surface">#111316</color>
-  <color name="widget_surface_high">#18191E</color>
-  <color name="widget_border">#1E2128</color>
-  <color name="widget_border_strong">#2A2F3A</color>
-  <color name="widget_text">#EDEAE4</color>
-  <color name="widget_text_dim">#8C92A0</color>
-  <color name="widget_text_faint">#565C6B</color>
-  <color name="widget_live">#22C55E</color>
-  <color name="widget_warning">#F59E0B</color>
-  <color name="widget_amber">#F5A20A</color>
-  <color name="widget_teal">#10B8A3</color>
+  <!-- Light (day) widget palette. Dark variants live in values-night/colors.xml.
+       The widget always follows the device theme, independent of the in-app theme. -->
+  <color name="widget_surface">#F9F8F4</color>
+  <color name="widget_surface_high">#EFEDE6</color>
+  <color name="widget_border">#E0DDD3</color>
+  <color name="widget_border_strong">#C8C4B6</color>
+  <color name="widget_text">#1C1B17</color>
+  <color name="widget_text_dim">#5F5D53</color>
+  <color name="widget_text_faint">#8D8A7C</color>
+  <color name="widget_live">#15803D</color>
+  <color name="widget_warning">#B45309</color>
+  <color name="widget_amber">#A16207</color>
+  <color name="widget_teal">#0F766E</color>
 </resources>

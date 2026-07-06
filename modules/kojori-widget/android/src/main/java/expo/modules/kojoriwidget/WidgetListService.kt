@@ -3,7 +3,6 @@ package expo.modules.kojoriwidget
 import android.content.Context
 import android.content.Intent
 import android.appwidget.AppWidgetManager
-import android.graphics.Color
 import android.view.View
 import android.widget.RemoteViews
 import android.widget.RemoteViewsService
@@ -22,7 +21,13 @@ class WidgetListFactory(
   private val context: Context,
   private val appWidgetId: Int,
 ) : RemoteViewsService.RemoteViewsFactory {
-  private enum class RowType { TOGGLE, HEADER, DEPARTURE }
+  private companion object {
+    // The synced state carries up to a week of departures; only render the next few.
+    const val MAX_VISIBLE_DEPARTURES = 24
+    const val WEEK_MS = 7L * 24 * 60 * 60 * 1000
+  }
+
+  private enum class RowType { HEADER, DEPARTURE }
   private data class WidgetRow(
     val id: Long,
     val type: RowType,
@@ -30,11 +35,15 @@ class WidgetListFactory(
     val time: String? = null,
     val remainingMins: Int? = null,
   )
-  private data class DepartureRow(val bus: String, val time: String, val remainingMins: Int)
-  private data class Palette(val text: Int, val textDim: Int, val textFaint: Int, val route380: Int, val route316: Int)
+  private data class DepartureRow(
+    val bus: String,
+    val time: String,
+    val remainingMins: Int,
+    val departureEpochMs: Long,
+  )
+  private data class Palette(val text: Int, val textDim: Int, val route380: Int, val route316: Int)
 
   private var direction: String = "kojori"
-  private var narrow: Boolean = false
   private var stopLabel: String = ""
   private var stopId: String = ""
   private var rows: List<WidgetRow> = emptyList()
@@ -55,7 +64,6 @@ class WidgetListFactory(
     val items = snapshot.optJSONArray("items") ?: return
 
     palette = readPalette(root)
-    narrow = isNarrow()
     val label = snapshot.optString("stopLabel", "")
     stopId = snapshot.optString("stopId", "")
     val syncedAtEpochMs = snapshot.optLong("syncedAtEpochMs", 0L)
@@ -63,31 +71,33 @@ class WidgetListFactory(
     val from = localizedString("from", "from")
     stopLabel = if (stopCode.isNotBlank()) "$from $label [#$stopCode]" else "$from $label"
     val nowMs = System.currentTimeMillis()
-    val elapsedMins = if (syncedAtEpochMs > 0L) {
-      ((nowMs - syncedAtEpochMs) / 60_000L).toInt().coerceAtLeast(0)
-    } else {
-      0
-    }
 
     val departures = (0 until items.length()).mapNotNull { i ->
       val item = items.optJSONObject(i) ?: return@mapNotNull null
       val time = item.optString("time", "--:--")
-      val departureEpochMs = item.optLong("departureEpochMs", 0L)
-      val remainingMins = when {
-        departureEpochMs > 0L -> Math.floorDiv(departureEpochMs - nowMs, 60_000L).toInt()
-        item.has("minsUntilAtSync") -> item.optInt("minsUntilAtSync", Int.MAX_VALUE) - elapsedMins
-        else -> Int.MAX_VALUE
+      var departureEpochMs = item.optLong("departureEpochMs", 0L)
+      if (departureEpochMs <= 0L && syncedAtEpochMs > 0L && item.has("minsUntilAtSync")) {
+        departureEpochMs = syncedAtEpochMs + item.optInt("minsUntilAtSync", 0) * 60_000L
       }
-      if (remainingMins < 0) return@mapNotNull null
+      if (departureEpochMs <= 0L) return@mapNotNull null
+      // The synced items cover a full week and the timetable repeats weekly
+      // (Georgia has no DST), so past departures are projected forward to
+      // their next weekly occurrence instead of expiring.
+      if (departureEpochMs < nowMs) {
+        val weeksBehind = Math.floorDiv(nowMs - departureEpochMs, WEEK_MS) + 1
+        departureEpochMs += weeksBehind * WEEK_MS
+      }
       DepartureRow(
         bus = item.optString("bus", "--"),
         time = time,
-        remainingMins = remainingMins,
+        remainingMins = Math.floorDiv(departureEpochMs - nowMs, 60_000L).toInt(),
+        departureEpochMs = departureEpochMs,
       )
     }
+      .sortedBy { it.departureEpochMs }
+      .take(MAX_VISIBLE_DEPARTURES)
 
     rows = buildList {
-      add(WidgetRow(id = 1L, type = RowType.TOGGLE))
       add(WidgetRow(id = 2L, type = RowType.HEADER))
       departures.forEachIndexed { index, row ->
         add(
@@ -112,7 +122,6 @@ class WidgetListFactory(
   override fun getViewAt(position: Int): RemoteViews {
     val row = rows[position]
     return when (row.type) {
-      RowType.TOGGLE -> toggleRow()
       RowType.HEADER -> headerRow()
       RowType.DEPARTURE -> departureRow(row, position == rows.lastIndex)
     }
@@ -122,32 +131,6 @@ class WidgetListFactory(
   override fun getViewTypeCount(): Int = RowType.entries.size
   override fun getItemId(position: Int): Long = rows[position].id
   override fun hasStableIds(): Boolean = true
-
-  private fun toggleRow(): RemoteViews {
-    val views = RemoteViews(context.packageName, R.layout.widget_list_toggle)
-    views.setViewVisibility(R.id.toggle_row_h, if (narrow) View.GONE else View.VISIBLE)
-    views.setViewVisibility(R.id.toggle_row_v, if (narrow) View.VISIBLE else View.GONE)
-
-    styleToggleButton(views, R.id.toggle_kojori, localizedString("toKojori", "to Kojori"), direction == "kojori", palette.route380)
-    styleToggleButton(views, R.id.toggle_tbilisi, localizedString("toTbilisi", "to Tbilisi"), direction == "tbilisi", palette.route316)
-    styleToggleButton(views, R.id.toggle_kojori_v, localizedString("toKojori", "to Kojori"), direction == "kojori", palette.route380)
-    styleToggleButton(views, R.id.toggle_tbilisi_v, localizedString("toTbilisi", "to Tbilisi"), direction == "tbilisi", palette.route316)
-
-    val kojoriIntent = baseActionIntent("kojori").apply {
-      action = "expo.modules.kojoriwidget.SET_DIRECTION"
-      putExtra("direction", "kojori")
-    }
-    val tbilisiIntent = baseActionIntent("tbilisi").apply {
-      action = "expo.modules.kojoriwidget.SET_DIRECTION"
-      putExtra("direction", "tbilisi")
-    }
-
-    views.setOnClickFillInIntent(R.id.toggle_kojori, kojoriIntent)
-    views.setOnClickFillInIntent(R.id.toggle_tbilisi, tbilisiIntent)
-    views.setOnClickFillInIntent(R.id.toggle_kojori_v, kojoriIntent)
-    views.setOnClickFillInIntent(R.id.toggle_tbilisi_v, tbilisiIntent)
-    return views
-  }
 
   private fun headerRow(): RemoteViews {
     val views = RemoteViews(context.packageName, R.layout.widget_list_header)
@@ -171,18 +154,6 @@ class WidgetListFactory(
     return views
   }
 
-  private fun styleToggleButton(
-    views: RemoteViews,
-    viewId: Int,
-    label: String,
-    isActive: Boolean,
-    activeColor: Int,
-  ) {
-    views.setTextViewText(viewId, label)
-    views.setTextColor(viewId, if (isActive) activeColor else palette.textDim)
-    views.setInt(viewId, "setBackgroundResource", R.drawable.widget_chip_idle)
-  }
-
   private fun localizedString(key: String, fallback: String): String {
     return strings?.optString(key, fallback)?.ifBlank { fallback } ?: fallback
   }
@@ -201,36 +172,15 @@ class WidgetListFactory(
     }
   }
 
-  private fun isNarrow(): Boolean {
-    if (appWidgetId == AppWidgetManager.INVALID_APPWIDGET_ID) return false
-    val manager = AppWidgetManager.getInstance(context)
-    val options = manager.getAppWidgetOptions(appWidgetId)
-    val minWidth = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 0)
-    return minWidth in 1 until 180
-  }
-
-  private fun readPalette(root: JSONObject): Palette {
-    val p = root.optJSONObject("palette")
+  private fun readPalette(root: JSONObject?): Palette {
+    val accents = WidgetTheme.accents(context, root)
     return Palette(
-      text = parseColor(p?.optString("text"), R.color.widget_text),
-      textDim = parseColor(p?.optString("textDim"), R.color.widget_text_dim),
-      textFaint = parseColor(p?.optString("textFaint"), R.color.widget_text_faint),
-      route380 = parseColor(p?.optString("route380"), R.color.widget_amber),
-      route316 = parseColor(p?.optString("route316"), R.color.widget_teal),
+      text = ContextCompat.getColor(context, R.color.widget_text),
+      textDim = ContextCompat.getColor(context, R.color.widget_text_dim),
+      route380 = accents.route380,
+      route316 = accents.route316,
     )
   }
 
-  private fun parseColor(hex: String?, fallbackRes: Int): Int {
-    return runCatching {
-      if (hex.isNullOrBlank()) ContextCompat.getColor(context, fallbackRes) else Color.parseColor(hex)
-    }.getOrElse { ContextCompat.getColor(context, fallbackRes) }
-  }
-
-  private fun defaultPalette() = Palette(
-    text = ContextCompat.getColor(context, R.color.widget_text),
-    textDim = ContextCompat.getColor(context, R.color.widget_text_dim),
-    textFaint = ContextCompat.getColor(context, R.color.widget_text_faint),
-    route380 = ContextCompat.getColor(context, R.color.widget_amber),
-    route316 = ContextCompat.getColor(context, R.color.widget_teal),
-  )
+  private fun defaultPalette() = readPalette(null)
 }

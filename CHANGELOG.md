@@ -1,5 +1,15 @@
 # Changelog
 
+## v2026.7.6
+### Fixed
+
+- Android widget now always follows the device light/dark theme instead of the in-app theme, with native day/night colors for background, text, and dividers — departure times stay readable regardless of the theme or palette chosen in the app.
+- Widget route badge colors (380/316) still follow the app palette, but pick the light or dark variant matching the device theme.
+- Removed the dark fading-edge bars the widget list drew over the direction toggle buttons and the last visible row.
+- Direction toggle buttons are now pinned above the departure list instead of scrolling with it, so list edge effects can never overlap them; departure rows are slightly tighter so more times fit.
+- The 3×3 widget now renders its preview in the widget picker instead of "Couldn't add widget" (its preview layout had an invalid `<include>` root).
+- Widget no longer asks to "Open app to refresh": it now syncs a full week of scheduled departures and repeats the weekly timetable indefinitely, so it always shows upcoming times even if the app is never reopened.
+
 ## v2026.7.5
 ### Improved
 

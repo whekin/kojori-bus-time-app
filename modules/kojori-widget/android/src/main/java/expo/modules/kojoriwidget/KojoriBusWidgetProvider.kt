@@ -7,7 +7,6 @@ import android.appwidget.AppWidgetProvider
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.graphics.Color
 import android.net.Uri
 import android.os.SystemClock
 import android.view.View
@@ -100,14 +99,6 @@ open class KojoriBusWidgetProvider : AppWidgetProvider() {
     private const val CLEAR_REFRESH_REQUEST_CODE = 10000
     private const val REFRESH_ANIMATION_MS = 1800L
 
-    private data class WidgetPalette(
-      val text: Int,
-      val textDim: Int,
-      val textFaint: Int,
-      val route380: Int,
-      val route316: Int,
-    )
-
     private val PROVIDER_CLASSES: Array<Class<out KojoriBusWidgetProvider>> = arrayOf(
       KojoriBusWidgetProvider::class.java,
       KojoriBusWidget2x2::class.java,
@@ -144,7 +135,8 @@ open class KojoriBusWidgetProvider : AppWidgetProvider() {
       val currentDirection = WidgetPrefs.getDirection(context)
       val stateJson = WidgetPrefs.getStateJson(context)
       val root = stateJson?.let { runCatching { JSONObject(it) }.getOrNull() }
-      val palette = readPalette(context, root)
+
+      bindToggles(context, appWidgetManager, appWidgetId, views, root, currentDirection)
 
       val listIntent = Intent(context, WidgetListService::class.java).apply {
         putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
@@ -154,7 +146,7 @@ open class KojoriBusWidgetProvider : AppWidgetProvider() {
       views.setPendingIntentTemplate(R.id.widget_list, widgetCollectionPendingIntent(context, appWidgetId))
 
       if (stateJson.isNullOrBlank()) {
-        bindEmptyState(views, root, palette)
+        bindEmptyState(context, views, root)
         appWidgetManager.updateAppWidget(appWidgetId, views)
         return
       }
@@ -164,7 +156,7 @@ open class KojoriBusWidgetProvider : AppWidgetProvider() {
         ?.optJSONObject(currentDirection)
 
       if (snapshot == null) {
-        bindEmptyState(views, root, palette)
+        bindEmptyState(context, views, root)
         appWidgetManager.updateAppWidget(appWidgetId, views)
         return
       }
@@ -172,7 +164,7 @@ open class KojoriBusWidgetProvider : AppWidgetProvider() {
       val message = snapshot.optString("message", "")
       val items = snapshot.optJSONArray("items")
       val hadSnapshotItems = items != null && items.length() > 0
-      val hasItems = hasUpcomingItems(snapshot, System.currentTimeMillis())
+      val hasItems = hasUpcomingItems(snapshot)
       val displayMessage = when {
         snapshot.optString("status") == "error" -> message.ifBlank { root.localizedString("openAppToRefresh", "Open app to refresh") }
         !hasItems && hadSnapshotItems -> root.localizedString("openAppToRefresh", "Open app to refresh")
@@ -186,7 +178,7 @@ open class KojoriBusWidgetProvider : AppWidgetProvider() {
         if (snapshot.optString("status") == "error") {
           ContextCompat.getColor(context, R.color.widget_warning)
         } else {
-          palette.textDim
+          ContextCompat.getColor(context, R.color.widget_text_dim)
         },
       )
 
@@ -195,29 +187,62 @@ open class KojoriBusWidgetProvider : AppWidgetProvider() {
       appWidgetManager.updateAppWidget(appWidgetId, views)
     }
 
-    private fun hasUpcomingItems(snapshot: JSONObject, nowMs: Long): Boolean {
+    // The list factory projects past departures forward week by week (the
+    // timetable repeats weekly), so any item with a resolvable departure time
+    // counts as upcoming — the widget never falls back to "open app to refresh".
+    private fun hasUpcomingItems(snapshot: JSONObject): Boolean {
       val items = snapshot.optJSONArray("items") ?: return false
       val syncedAtEpochMs = snapshot.optLong("syncedAtEpochMs", 0L)
 
       for (index in 0 until items.length()) {
         val item = items.optJSONObject(index) ?: continue
-        val departureEpochMs = item.optLong("departureEpochMs", 0L)
-        if (departureEpochMs > nowMs) return true
-
-        if (departureEpochMs <= 0L && syncedAtEpochMs > 0L && item.has("minsUntilAtSync")) {
-          val legacyDepartureEpochMs = syncedAtEpochMs + item.optInt("minsUntilAtSync", Int.MIN_VALUE) * 60_000L
-          if (legacyDepartureEpochMs > nowMs) return true
-        }
+        if (item.optLong("departureEpochMs", 0L) > 0L) return true
+        if (syncedAtEpochMs > 0L && item.has("minsUntilAtSync")) return true
       }
 
       return false
     }
 
+    private fun bindToggles(
+      context: Context,
+      appWidgetManager: AppWidgetManager,
+      appWidgetId: Int,
+      views: RemoteViews,
+      root: JSONObject?,
+      currentDirection: String,
+    ) {
+      val accents = WidgetTheme.accents(context, root)
+      val narrow = isNarrow(appWidgetManager, appWidgetId)
+      views.setViewVisibility(R.id.toggle_row_h, if (narrow) View.GONE else View.VISIBLE)
+      views.setViewVisibility(R.id.toggle_row_v, if (narrow) View.VISIBLE else View.GONE)
+
+      val toKojori = root.localizedString("toKojori", "to Kojori")
+      val toTbilisi = root.localizedString("toTbilisi", "to Tbilisi")
+      val idleColor = ContextCompat.getColor(context, R.color.widget_text_dim)
+      val kojoriColor = if (currentDirection == "kojori") accents.route380 else idleColor
+      val tbilisiColor = if (currentDirection == "tbilisi") accents.route316 else idleColor
+
+      for ((viewId, label, color) in listOf(
+        Triple(R.id.toggle_kojori, toKojori, kojoriColor),
+        Triple(R.id.toggle_kojori_v, toKojori, kojoriColor),
+        Triple(R.id.toggle_tbilisi, toTbilisi, tbilisiColor),
+        Triple(R.id.toggle_tbilisi_v, toTbilisi, tbilisiColor),
+      )) {
+        views.setTextViewText(viewId, label)
+        views.setTextColor(viewId, color)
+      }
+
+      views.setOnClickPendingIntent(R.id.toggle_kojori, directionPendingIntent(context, appWidgetId, "kojori"))
+      views.setOnClickPendingIntent(R.id.toggle_kojori_v, directionPendingIntent(context, appWidgetId, "kojori"))
+      views.setOnClickPendingIntent(R.id.toggle_tbilisi, directionPendingIntent(context, appWidgetId, "tbilisi"))
+      views.setOnClickPendingIntent(R.id.toggle_tbilisi_v, directionPendingIntent(context, appWidgetId, "tbilisi"))
+    }
+
     private fun bindEmptyState(
-      views: RemoteViews, root: JSONObject?, palette: WidgetPalette,
+      context: Context, views: RemoteViews, root: JSONObject?,
     ) {
       views.setTextViewText(R.id.widget_message, root.localizedString("openAppToLoad", "Open app to load"))
-      views.setTextColor(R.id.widget_message, palette.textDim)
+      views.setTextColor(R.id.widget_message, ContextCompat.getColor(context, R.color.widget_text_dim))
       views.setViewVisibility(R.id.widget_list, View.GONE)
       views.setViewVisibility(R.id.widget_message, View.VISIBLE)
     }
@@ -305,21 +330,5 @@ open class KojoriBusWidgetProvider : AppWidgetProvider() {
       alarmManager.cancel(clearRefreshAnimationPendingIntent(context))
     }
 
-    private fun readPalette(context: Context, root: JSONObject?): WidgetPalette {
-      val p = root?.optJSONObject("palette")
-      return WidgetPalette(
-        text = colorOrDefault(context, p?.optString("text"), R.color.widget_text),
-        textDim = colorOrDefault(context, p?.optString("textDim"), R.color.widget_text_dim),
-        textFaint = colorOrDefault(context, p?.optString("textFaint"), R.color.widget_text_faint),
-        route380 = colorOrDefault(context, p?.optString("route380"), R.color.widget_amber),
-        route316 = colorOrDefault(context, p?.optString("route316"), R.color.widget_teal),
-      )
-    }
-
-    private fun colorOrDefault(context: Context, hex: String?, defaultRes: Int): Int {
-      return runCatching {
-        if (hex.isNullOrBlank()) ContextCompat.getColor(context, defaultRes) else Color.parseColor(hex)
-      }.getOrElse { ContextCompat.getColor(context, defaultRes) }
-    }
   }
 }

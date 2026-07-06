@@ -1,7 +1,7 @@
 import { Platform } from 'react-native';
 
 import { BAKED_SCHEDULES, BAKED_STOP_NAMES } from '@/assets/ttc-baked';
-import { getAppColors, type AppPaletteId, type AppResolvedThemeMode } from '@/constants/theme';
+import { getAppColors, type AppPaletteId } from '@/constants/theme';
 import { resolveLanguage, type AppLanguage } from '@/i18n/languages';
 import { localizedStopName } from '@/i18n/stop-names';
 import { translate } from '@/i18n/translations';
@@ -27,7 +27,6 @@ interface WidgetSyncSettings {
   activeKojoriStopId: string;
   activeTbilisiStopId: string;
   paletteId: AppPaletteId;
-  themeMode: AppResolvedThemeMode;
   language: AppLanguage;
 }
 
@@ -47,14 +46,17 @@ interface WidgetDirectionPayload {
   items: WidgetItemPayload[];
 }
 
+interface WidgetAccentColors {
+  route380: string;
+  route316: string;
+}
+
 interface WidgetStatePayload {
+  // Route accents per color scheme; the widget picks the variant matching the
+  // device theme at render time. Base widget colors are native day/night resources.
   palette: {
-    text: string;
-    textDim: string;
-    textFaint: string;
-    primary: string;
-    route380: string;
-    route316: string;
+    dark: WidgetAccentColors;
+    light: WidgetAccentColors;
   };
   strings: {
     openAppToLoad: string;
@@ -67,8 +69,11 @@ interface WidgetStatePayload {
   directions: Record<WidgetMode, WidgetDirectionPayload>;
 }
 
-const WIDGET_FUTURE_DAYS = 3;
-const WIDGET_MAX_ITEMS = 24;
+// Schedules are baked/cached, so sync a whole week of departures — the widget
+// keeps showing real times even if the app is not opened for days. The widget
+// list itself caps how many rows it renders.
+const WIDGET_FUTURE_DAYS = 7;
+const WIDGET_MAX_ITEMS = 400;
 const LATE_DEPARTURE_GRACE_MS = 5 * 60_000;
 
 function formatLocalServiceDate(date: Date) {
@@ -213,7 +218,8 @@ export async function syncAndroidWidgetState(settings: WidgetSyncSettings) {
 
   const now = new Date();
   const language = resolveLanguage(settings.language);
-  const palette = getAppColors(settings.paletteId, settings.themeMode);
+  const darkColors = getAppColors(settings.paletteId, 'dark');
+  const lightColors = getAppColors(settings.paletteId, 'light');
   const [kojori, tbilisi] = await Promise.all([
     buildDirectionPayload('kojori', settings.activeTbilisiStopId, now, language),
     buildDirectionPayload('tbilisi', settings.activeKojoriStopId, now, language),
@@ -221,12 +227,8 @@ export async function syncAndroidWidgetState(settings: WidgetSyncSettings) {
 
   const payload: WidgetStatePayload = {
     palette: {
-      text: palette.text,
-      textDim: palette.textDim,
-      textFaint: palette.textFaint,
-      primary: palette.primary,
-      route380: palette.route380,
-      route316: palette.route316,
+      dark: { route380: darkColors.route380, route316: darkColors.route316 },
+      light: { route380: lightColors.route380, route316: lightColors.route316 },
     },
     strings: {
       openAppToLoad: translate(language, 'widgetOpenLoad'),

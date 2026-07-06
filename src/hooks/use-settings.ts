@@ -1,12 +1,11 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
-import { AppState, Appearance, Platform } from 'react-native';
+import { AppState, Platform } from 'react-native';
 
 import {
   DEFAULT_APP_PALETTE,
   DEFAULT_APP_THEME_MODE,
   isAppPaletteId,
-  resolveAppThemeMode,
   type AppPaletteId,
   type AppThemeMode,
 } from '@/constants/theme';
@@ -142,7 +141,6 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
         activeKojoriStopId: settings.widgetKojoriStopId,
         activeTbilisiStopId: settings.widgetTbilisiStopId,
         paletteId: settings.paletteId,
-        themeMode: resolveAppThemeMode(settings.themeMode, Appearance.getColorScheme()),
         language: settings.language,
       }).catch(() => { });
     }
@@ -166,7 +164,6 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   }, [
     isLoaded,
     settings.paletteId,
-    settings.themeMode,
     settings.language,
     settings.widgetKojoriStopId,
     settings.widgetTbilisiStopId,
