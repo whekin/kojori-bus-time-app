@@ -1,6 +1,10 @@
 # Changelog
 
 ## v2026.7.6
+### Improved
+
+- Brake Dust palette: bus 316 now uses the theme's brass tone instead of a second rust shade, so 380 (rust) and 316 (brass) are distinguishable while the palette stays in one warm-metal family.
+
 ### Fixed
 
 - Android widget now always follows the device light/dark theme instead of the in-app theme, with native day/night colors for background, text, and dividers — departure times stay readable regardless of the theme or palette chosen in the app.
