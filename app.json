@@ -2,7 +2,7 @@
   "expo": {
     "name": "Kojoring Time",
     "slug": "kojori-bus-time",
-    "version": "2026.7.7",
+    "version": "2026.7.18",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "kojoribs",
@@ -16,7 +16,7 @@
     },
     "ios": {
       "bundleIdentifier": "com.whekin.kojoribus",
-      "buildNumber": "2026070700",
+      "buildNumber": "2026071800",
       "supportsTablet": false
     },
     "android": {
@@ -38,7 +38,7 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "backgroundColor": "#0F0B10",
-      "versionCode": 2026070700,
+      "versionCode": 2026071800,
       "predictiveBackGestureEnabled": false
     },
     "web": {
