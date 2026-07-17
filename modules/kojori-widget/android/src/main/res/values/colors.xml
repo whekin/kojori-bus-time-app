@@ -1,6 +1,7 @@
 <resources>
-  <!-- Light (day) widget palette. Dark variants live in values-night/colors.xml.
-       The widget always follows the device theme, independent of the in-app theme. -->
+  <!-- Light fallback palette for Android 11 and earlier. Android 12+ colors
+       live in values-v31 and inherit the wallpaper's Material You palette.
+       The widget follows the device theme, independent of the in-app theme. -->
   <color name="widget_surface">#F9F8F4</color>
   <color name="widget_surface_high">#EFEDE6</color>
   <color name="widget_border">#E0DDD3</color>

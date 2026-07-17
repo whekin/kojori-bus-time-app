@@ -1,5 +1,10 @@
 # Changelog
 
+## [UNRELEASED]
+### Improved
+
+- Android 12+ widgets now inherit a softly tinted Material You palette from the device wallpaper for their background, chips, dividers, and text, while preserving route colors and the existing fallback on older Android versions.
+
 ## v2026.7.7
 ### Improved
 

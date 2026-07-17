@@ -8,8 +8,9 @@ import org.json.JSONObject
 
 // Base widget colors come from day/night resources so the widget always
 // matches the device theme, regardless of the theme selected inside the app.
-// Only the route accents come from the synced app palette, picked for the
-// device color scheme at render time.
+// Android 12+ resource variants use wallpaper-derived Material You colors;
+// older versions retain the app's native fallback palette. Only route accents
+// come from the synced app palette, picked for the device scheme at render time.
 object WidgetTheme {
   data class Accents(val route380: Int, val route316: Int)
 

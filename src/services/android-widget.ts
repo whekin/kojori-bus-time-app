@@ -59,7 +59,8 @@ export const WIDGET_STATE_SCHEMA_VERSION = 2;
 interface WidgetStatePayload {
   schemaVersion: number;
   // Route accents per color scheme; the widget picks the variant matching the
-  // device theme at render time. Base widget colors are native day/night resources.
+  // device theme at render time. Base colors come from native day/night
+  // resources, with Material You overrides on Android 12+.
   palette: {
     dark: WidgetAccentColors;
     light: WidgetAccentColors;
