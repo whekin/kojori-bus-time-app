@@ -337,6 +337,26 @@ describe('mergeArrivalsIntoSchedule', () => {
     expect(result.some(dep => dep.live)).toBe(false);
   });
 
+  it('keeps late arrivals at route-start stops when an active bus confirms them', () => {
+    const departures = [
+      makeDeparture('316', 1, '15:01'),
+      makeDeparture('316', 31, '15:31'),
+    ];
+
+    const result = mergeArrivalsIntoSchedule(
+      departures,
+      [makeArrival('316', 12, 1)],
+      new Date('2026-04-15T15:00:00Z'),
+      undefined,
+      { stopId: '1:3932', liveVehicleCounts: { '316': 1 } },
+    );
+
+    expect(result[0].status).toBe('live');
+    expect(result[0].time).toBe('15:12');
+    expect(result[0].scheduledTime).toBe('15:01');
+    expect(result[0].driftMinutes).toBe(11);
+  });
+
   it('keeps slightly delayed live arrivals at route-start stops', () => {
     const departures = [
       makeDeparture('316', 1, '15:01'),

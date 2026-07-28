@@ -1,5 +1,10 @@
 # Changelog
 
+## [UNRELEASED]
+### Fixed
+
+- Stops now show buses running more than five minutes late when an active vehicle confirms the live prediction.
+
 ## v2026.7.18
 ### Improved
 

@@ -769,7 +769,13 @@ export function mergeArrivalsIntoSchedule(
             }))
             .filter(arrival => Number.isFinite(arrival.realtimeMinutes) && Number.isFinite(arrival.scheduledMinutes))
             .filter(arrival => arrival.realtimeMinutes > 0)
-            .filter(arrival => !isSuspiciousLiveArrival(bus, arrival, scheduleCandidates, options.stopId)),
+            .filter(arrival => !isSuspiciousLiveArrival(
+              bus,
+              arrival,
+              scheduleCandidates,
+              options.stopId,
+              (options.liveVehicleCounts?.[bus] ?? 0) > 0,
+            )),
           bus,
           options.liveVehicleCounts,
         )
@@ -913,6 +919,7 @@ function isSuspiciousLiveArrival(
   arrival: { realtimeMinutes: number; scheduledMinutes: number },
   scheduled: Departure[],
   stopId?: string,
+  hasLiveVehicleEvidence = false,
 ) {
   const delayedPastSchedule = scheduled.find(dep => (
     dep.minsUntil < MIN_SCHEDULED_DEPARTURE_MINUTES &&
@@ -935,7 +942,7 @@ function isSuspiciousLiveArrival(
   if (isEarlyRouteStop(bus, stopId)) {
     return (
       driftMinutes < -ROUTE_START_MAX_EARLY_DRIFT_MINUTES ||
-      driftMinutes > ROUTE_START_MAX_LATE_DRIFT_MINUTES
+      (!hasLiveVehicleEvidence && driftMinutes > ROUTE_START_MAX_LATE_DRIFT_MINUTES)
     );
   }
 
