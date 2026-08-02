@@ -1,6 +1,6 @@
 # Changelog
 
-## [UNRELEASED]
+## v2026.8.2
 ### Improved
 
 - The map now preloads quietly after Departures becomes available, keeping app startup focused while making the first map visit much faster.
