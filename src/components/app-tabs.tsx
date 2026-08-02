@@ -25,6 +25,7 @@ import { useI18n } from "@/hooks/use-i18n";
 import { MapFocusProvider } from "@/hooks/use-map-focus";
 import { useReducedMotion } from "@/hooks/use-reduced-motion";
 import { TabNavProvider, type TabRoute } from "@/hooks/use-tab-nav";
+import { scheduleIdleTask } from "@/utils/idle-task";
 
 type TabItem = {
   route: TabRoute;
@@ -38,6 +39,7 @@ const NAV_PADDING = 5;
 const NAV_HIGHLIGHT_EXTRA = 2;
 const NAV_PROGRESS_TIMING = { duration: 220 };
 const NAV_PROGRESS_REDUCED_TIMING = { duration: 1 };
+const MAP_PREWARM_DELAY_MS = 500;
 const TAB_ROUTES: TabRoute[] = ["index", "explore", "timetable", "settings"];
 
 const AnimatedIcon = Animated.createAnimatedComponent(MaterialCommunityIcons);
@@ -232,6 +234,20 @@ export default function AppTabs({
       return next ?? prev;
     });
   }, [deferInactiveTabs]);
+
+  useEffect(() => {
+    if (deferInactiveTabs) return;
+
+    let idleTask: ReturnType<typeof scheduleIdleTask> | undefined;
+    const delayId = setTimeout(() => {
+      idleTask = scheduleIdleTask(() => mountTab(1));
+    }, MAP_PREWARM_DELAY_MS);
+
+    return () => {
+      clearTimeout(delayId);
+      idleTask?.cancel();
+    };
+  }, [deferInactiveTabs, mountTab]);
 
   const switchToTabIndex = useCallback((
     nextIndex: number,

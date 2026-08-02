@@ -3,6 +3,7 @@
 ## [UNRELEASED]
 ### Improved
 
+- The map now preloads quietly after Departures becomes available, keeping app startup focused while making the first map visit much faster.
 - Map now stays warm between Departures, Map, and Timetable, preserves its camera between visits, and pauses hidden live-marker work; Settings still suspends the native map so theme changes remain smooth.
 - Map stops now use neutral signpost markers with route-colored outlines, making them distinct from solid moving-vehicle markers.
 - Destination cards now show the next two scheduled buses from the selected stop, so the nearest departure is visible before opening the departures screen.
