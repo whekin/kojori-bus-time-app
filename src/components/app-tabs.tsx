@@ -83,7 +83,9 @@ function TabButton({
   const activationPulse = useSharedValue(0);
 
   useEffect(() => {
-    if (index !== activeIndex || reduceMotion) return;
+    // The native map is expensive to composite on Android. Avoid layering a
+    // decorative tab pulse over the frame where it becomes visible.
+    if (index !== activeIndex || reduceMotion || index === 1) return;
 
     activationPulse.value = withSequence(
       withTiming(1, { duration: 120 }),
@@ -186,7 +188,12 @@ export default function AppTabs({
       route: "explore",
       title: t("tabsMap"),
       icon: "map-marker-radius",
-      render: (isActive) => <ExploreScreen isActive={isActive} />,
+      render: (isActive) => (
+        <ExploreScreen
+          isActive={isActive}
+          suspendNativeMap={activeIndex === 3}
+        />
+      ),
     },
     {
       route: "timetable",
@@ -233,10 +240,16 @@ export default function AppTabs({
     if (nextIndex < 0 || nextIndex >= TAB_ROUTES.length || nextIndex === activeIndex) return;
 
     const recordHistory = options.recordHistory ?? true;
-    const shouldJumpDirectly = reduceMotion || Math.abs(nextIndex - activeIndex) > 1;
+    const involvesNativeMap = activeIndex === 1 || nextIndex === 1;
+    const shouldJumpDirectly =
+      reduceMotion || involvesNativeMap || Math.abs(nextIndex - activeIndex) > 1;
 
     mountTab(nextIndex);
-    pagerProgress.value = withTiming(nextIndex, navProgressTiming);
+    if (shouldJumpDirectly) {
+      pagerProgress.value = nextIndex;
+    } else {
+      pagerProgress.value = withTiming(nextIndex, navProgressTiming);
+    }
 
     if (recordHistory) {
       tabHistoryRef.current = [

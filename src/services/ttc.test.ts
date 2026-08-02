@@ -8,6 +8,7 @@ import {
   getLastDepartureToday,
   getLiveVehicleCountsForStop,
   getNextServiceDeparture,
+  getUpcomingServiceDepartures,
   injectLiveDelayDemo,
   isFinalDepartureToday,
   mergeArrivalsIntoSchedule,
@@ -683,6 +684,23 @@ describe('service boundary helpers', () => {
     expect(nextService?.date).toBe('2026-04-17');
     expect(nextService?.daysUntil).toBe(2);
     expect(nextService?.time).toBe('09:15');
+  });
+
+  it('returns multiple upcoming departures across service-day boundaries', () => {
+    const schedule380 = makeSchedule(['2026-04-15'], { '1:stop': '20:00,22:00' });
+    const schedule316 = makeSchedule(['2026-04-16'], { '1:stop': '08:30,09:15' });
+    const now = new Date(2026, 3, 15, 22, 30);
+
+    const departures = getUpcomingServiceDepartures(
+      schedule380,
+      schedule316,
+      '1:stop',
+      now,
+      2,
+    );
+
+    expect(departures.map(departure => departure.time)).toEqual(['08:30', '09:15']);
+    expect(departures.every(departure => departure.daysUntil === 1)).toBe(true);
   });
 
   it('uses the TTC lookup proxy stop for service-boundary checks', () => {

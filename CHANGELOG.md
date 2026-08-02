@@ -3,6 +3,9 @@
 ## [UNRELEASED]
 ### Improved
 
+- Map now stays warm between Departures, Map, and Timetable, preserves its camera between visits, and pauses hidden live-marker work; Settings still suspends the native map so theme changes remain smooth.
+- Map stops now use neutral signpost markers with route-colored outlines, making them distinct from solid moving-vehicle markers.
+- Destination cards now show the next two scheduled buses from the selected stop, so the nearest departure is visible before opening the departures screen.
 - The Android widget now lets you scroll through every departure in the next 24 hours instead of stopping after the first 24 buses.
 - The widget direction control now mirrors the app's compact route pill, showing the active journey with a crisp vector arrow and a single swap action instead of two separate buttons.
 - Widget departures are now grouped under Today and Tomorrow, with the next bus highlighted and the final bus of the day clearly marked.

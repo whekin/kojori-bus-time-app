@@ -579,6 +579,33 @@ export function getNextServiceDeparture(
   return undefined;
 }
 
+/** Returns the next scheduled departures across service-day boundaries. */
+export function getUpcomingServiceDepartures(
+  schedule380: SchedulePeriod[] | undefined,
+  schedule316: SchedulePeriod[] | undefined,
+  stopId: string,
+  now = new Date(),
+  count = 2,
+  lookaheadDays = 14,
+): ServiceDeparture[] {
+  if (count <= 0) return [];
+
+  const nowMins = now.getHours() * 60 + now.getMinutes();
+  const result: ServiceDeparture[] = [];
+
+  for (let daysUntil = 0; daysUntil <= lookaheadDays; daysUntil += 1) {
+    const date = addServiceDays(now, daysUntil);
+    const departures = scheduledDeparturesForDate(schedule380, schedule316, stopId, date, daysUntil)
+      .filter(departure => daysUntil > 0 || departure.minsFromMidnight > nowMins)
+      .map(departure => withRelativeServiceMinutes(departure, nowMins));
+
+    result.push(...departures);
+    if (result.length >= count) break;
+  }
+
+  return result.slice(0, count);
+}
+
 export function getDepartureServiceBoundary(
   schedule380: SchedulePeriod[] | undefined,
   schedule316: SchedulePeriod[] | undefined,

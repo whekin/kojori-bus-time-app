@@ -48,6 +48,7 @@ const MAP_BOUNDS = {
 
 type ExploreScreenProps = {
   isActive?: boolean;
+  suspendNativeMap?: boolean;
 };
 
 function routeAccent(bus: '380' | '316', colors: ReturnType<typeof useAppColors>) {
@@ -58,33 +59,30 @@ function isTrackedBusLine(value: string): value is '380' | '316' {
   return value === '380' || value === '316';
 }
 
-function BusStopGlyph({
-  size,
-  color,
-  shiftX = 0,
-  shiftY = 0,
-}: {
-  size: number;
-  color: string;
-  shiftX?: number;
-  shiftY?: number;
-}) {
-  const poleWidth = Math.max(1, Math.round(size * 0.1));
-  const dotSize = Math.max(2, Math.round(size * 0.2));
-  const busSize = Math.round(size * 0.78);
-  const poleHeight = Math.round(size * 0.62);
-  const xOffset = size * shiftX;
-  const yOffset = size * shiftY;
+function StopPostGlyph({ size, color }: { size: number; color: string }) {
+  const stroke = Math.max(1, Math.round(size * 0.1));
+  const plateWidth = Math.round(size * 0.72);
+  const plateHeight = Math.round(size * 0.52);
+  const plateLeft = Math.round((size - plateWidth) / 2);
+  const dotSize = Math.max(2, Math.round(size * 0.18));
+  const poleWidth = Math.max(1, Math.round(size * 0.11));
+  const poleHeight = Math.round(size * 0.35);
+  const footWidth = Math.round(size * 0.48);
 
   return (
-    <View style={{ width: size, height: size, transform: [{ translateX: xOffset }, { translateY: yOffset }] }}>
+    <View style={{ width: size, height: size }}>
       <View
         style={{
           position: 'absolute',
-          left: Math.round(size * 0.04),
-          top: Math.round(size * 0.13),
-          width: dotSize,
+          top: 0,
+          left: plateLeft,
+          width: plateWidth,
+          height: plateHeight,
+          borderRadius: Math.max(2, Math.round(size * 0.14)),
+          borderWidth: stroke,
+          borderColor: color,
           alignItems: 'center',
+          justifyContent: 'center',
         }}>
         <View
           style={{
@@ -94,18 +92,29 @@ function BusStopGlyph({
             backgroundColor: color,
           }}
         />
-        <View
-          style={{
-            width: poleWidth,
-            height: poleHeight,
-            borderRadius: poleWidth / 2,
-            backgroundColor: color,
-          }}
-        />
       </View>
-      <View style={{ position: 'absolute', left: Math.round(size * 0.28), top: Math.round(size * 0.08) }}>
-        <MaterialCommunityIcons name="bus" size={busSize} color={color} />
-      </View>
+      <View
+        style={{
+          position: 'absolute',
+          top: plateHeight - stroke,
+          left: Math.round((size - poleWidth) / 2),
+          width: poleWidth,
+          height: poleHeight,
+          borderRadius: poleWidth / 2,
+          backgroundColor: color,
+        }}
+      />
+      <View
+        style={{
+          position: 'absolute',
+          bottom: 0,
+          left: Math.round((size - footWidth) / 2),
+          width: footWidth,
+          height: stroke,
+          borderRadius: stroke / 2,
+          backgroundColor: color,
+        }}
+      />
     </View>
   );
 }
@@ -125,6 +134,7 @@ const KOJORI_CENTER_STOP_ID = '1:3078';
 const ROUTE_LINE_SIMPLIFY_TOLERANCE_METERS = 12;
 const SHARED_ROUTE_STRIPE_METERS = 260;
 const LIVE_VEHICLE_TICK_MS = 800;
+const LIVE_VEHICLE_ACTIVATION_DELAY_MS = 750;
 // How far ahead of the last GPS fix the marker may dead-reckon before it
 // eases to a stop, and how strongly it accelerates when it falls behind.
 const LIVE_VEHICLE_MAX_LEAD_METERS = 120;
@@ -222,8 +232,15 @@ function StopMarkerCallout({
   return (
     <Callout tooltip>
       <View style={styles.stopCallout}>
-        <View style={[styles.stopCalloutIcon, { backgroundColor: iconColor }]}>
-          <BusStopGlyph size={18} color="#FFFFFF" shiftY={0.14} />
+        <View
+          style={[
+            styles.stopCalloutIcon,
+            {
+              backgroundColor: alpha(iconColor, '14'),
+              borderColor: iconColor,
+            },
+          ]}>
+          <StopPostGlyph size={20} color={iconColor} />
         </View>
         <View style={styles.stopCalloutCopy}>
           <Text style={styles.stopCalloutLabel} numberOfLines={2}>
@@ -267,11 +284,12 @@ function StopMapMarker({
   onPress: () => void;
 }) {
   const [trackMarkerViewChanges, setTrackMarkerViewChanges] = useState(true);
-  const markerSize = isSimpleOrdinaryStop ? 12 : 20;
+  const markerSize = isSimpleOrdinaryStop ? 10 : 20;
   // Invisible touch slop around the dot — small dots were hard to tap.
   const hitSize = 34;
   const promotedHitSize = 44;
-  const promotedMarkerSize = 30;
+  const promotedMarkerWidth = 28;
+  const promotedMarkerHeight = 34;
   const markerVisualStateKey = [
     isPromoted ? 'promoted' : 'ordinary',
     isSimpleOrdinaryStop ? 'simple' : 'full',
@@ -321,14 +339,14 @@ function StopMapMarker({
             style={[
               styles.promotedStopMarker,
               {
-                width: promotedMarkerSize,
-                height: promotedMarkerSize,
-                borderRadius: promotedMarkerSize / 2,
-                backgroundColor: markerColor,
-                borderColor: alpha(colors.panel, resolvedThemeMode === 'dark' ? 'E8' : 'F2'),
+                width: promotedMarkerWidth,
+                height: promotedMarkerHeight,
+                borderRadius: 8,
+                backgroundColor: colors.panel,
+                borderColor: markerColor,
               },
             ]}>
-            <BusStopGlyph size={20} color="#FFFFFF" shiftX={0.02} shiftY={0.06} />
+            <StopPostGlyph size={20} color={markerColor} />
           </View>
         </View>
         {stopMarker}
@@ -365,12 +383,15 @@ function StopMapMarker({
             {
               width: markerSize,
               height: markerSize,
-              borderRadius: markerSize / 2,
-              borderColor: isSimpleOrdinaryStop ? alpha(colors.panel, 'D9') : alpha(colors.panel, 'E6'),
-              backgroundColor: alpha(markerColor, resolvedThemeMode === 'dark' ? 'D9' : 'EE'),
+              borderRadius: isSimpleOrdinaryStop ? 3 : 6,
+              borderColor: markerColor,
+              backgroundColor: colors.panel,
             },
-          ]}
-        />
+          ]}>
+          {isSimpleOrdinaryStop ? null : (
+            <StopPostGlyph size={13} color={markerColor} />
+          )}
+        </View>
       </View>
       {stopMarker}
     </Marker>
@@ -570,6 +591,7 @@ function AnimatedVehicleMarker({
   sample,
   track,
   direction,
+  isActive,
   reduceMotion,
   accent,
   title,
@@ -579,6 +601,7 @@ function AnimatedVehicleMarker({
   sample: VehicleSample;
   track: VehicleRouteTrack | undefined;
   direction: MapDirection;
+  isActive: boolean;
   reduceMotion: boolean;
   accent: string;
   title: string;
@@ -615,9 +638,17 @@ function AnimatedVehicleMarker({
   const routeDigits = sample.bus.split('');
 
   useEffect(() => {
-    const readyTimeoutId = setTimeout(() => setCanAnimateNativeMarker(true), 250);
+    setCanAnimateNativeMarker(false);
+    if (!isActive) return;
+
+    // Let the tab transition and any initial camera fit finish before native
+    // marker animations start competing for Android render-thread time.
+    const readyTimeoutId = setTimeout(
+      () => setCanAnimateNativeMarker(true),
+      LIVE_VEHICLE_ACTIVATION_DELAY_MS,
+    );
     return () => clearTimeout(readyTimeoutId);
-  }, []);
+  }, [isActive]);
 
   useEffect(() => {
     sampleRef.current = sample;
@@ -626,7 +657,7 @@ function AnimatedVehicleMarker({
   }, [sample, track, direction]);
 
   useEffect(() => {
-    if (!canAnimateNativeMarker) return;
+    if (!isActive || !canAnimateNativeMarker) return;
 
     // Motion goes only through the native marker animation API — no React
     // commits on the movement path.
@@ -722,7 +753,7 @@ function AnimatedVehicleMarker({
     tick();
     const intervalId = setInterval(tick, LIVE_VEHICLE_TICK_MS);
     return () => clearInterval(intervalId);
-  }, [canAnimateNativeMarker, reduceMotion]);
+  }, [canAnimateNativeMarker, isActive, reduceMotion]);
 
   useEffect(() => {
     // tracksViewChanges stays false, so a committed arrow rotation only lands
@@ -814,7 +845,10 @@ function AnimatedVehicleMarker({
   );
 }
 
-export default function ExploreScreen({ isActive = false }: ExploreScreenProps) {
+export default function ExploreScreen({
+  isActive = false,
+  suspendNativeMap = false,
+}: ExploreScreenProps) {
   const liveColors = useAppColors();
   const liveResolvedThemeMode = useResolvedAppThemeMode();
   const [inactiveThemeSnapshot, setInactiveThemeSnapshot] = useState(() => ({
@@ -849,7 +883,7 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
   const useCompactMapControls = windowWidth < 390;
 
   useEffect(() => {
-    if (!isActive) return;
+    if (!isActive && !suspendNativeMap) return;
     setInactiveThemeSnapshot((prev) => {
       if (prev.colors === liveColors && prev.resolvedThemeMode === liveResolvedThemeMode) {
         return prev;
@@ -860,7 +894,7 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
         resolvedThemeMode: liveResolvedThemeMode,
       };
     });
-  }, [isActive, liveColors, liveResolvedThemeMode]);
+  }, [isActive, liveColors, liveResolvedThemeMode, suspendNativeMap]);
 
   useEffect(() => {
     if (!isActive || inactiveMapDirection === activeDirection) return;
@@ -868,18 +902,17 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
   }, [activeDirection, inactiveMapDirection, isActive]);
 
   useEffect(() => {
+    if (!suspendNativeMap) return;
+    setMapReady(false);
+    setMapTimedOut(false);
+    lastFitKeyRef.current = null;
+  }, [suspendNativeMap]);
+
+  useEffect(() => {
     if (!isActive || mapReady) return;
     const id = setTimeout(() => setMapTimedOut(true), 8000);
     return () => clearTimeout(id);
   }, [isActive, mapReady]);
-
-  useEffect(() => {
-    if (isActive) return;
-    setMapReady(false);
-    setMapTimedOut(false);
-    // Re-fit the fleet next time the map opens.
-    lastFitKeyRef.current = null;
-  }, [isActive]);
 
   const { data: toKojoriRouteData } = useRoutePolylines('toKojori');
   const { data: toTbilisiRouteData } = useRoutePolylines('toTbilisi');
@@ -1077,7 +1110,8 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
   useEffect(() => {
     if (!isActive || positions.length === 0 || focusedStop) return;
 
-    // Fit the fleet once per direction/activation. Keying on the vehicle set
+    // Fit the fleet once per direction while this native map stays mounted.
+    // Keying on the vehicle set
     // made the camera yank away from wherever the user had panned every time
     // a bus appeared or dropped off.
     const fitKey = direction;
@@ -1269,7 +1303,7 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
     toggleKojoriFavorite(focusedStop.id);
   }
 
-  if (!isActive) {
+  if (suspendNativeMap) {
     return <View style={styles.screen} />;
   }
 
@@ -1284,7 +1318,7 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
         // map at runtime without remounting the MapView (which would reload
         // tiles and reset the camera).
         customMapStyle={resolvedThemeMode === 'dark' ? GOOGLE_DARK_MAP_STYLE : GOOGLE_LIGHT_MAP_STYLE}
-        showsUserLocation={hasUserLocation}
+        showsUserLocation={isActive && hasUserLocation}
         showsMyLocationButton={false}
         showsPointsOfInterests={false}
         showsCompass={false}
@@ -1381,6 +1415,7 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
               sample={sample}
               track={vehicleRouteTracks[sample.bus]}
               direction={direction}
+              isActive={isActive}
               reduceMotion={reduceMotion}
               accent={accent}
               title={`${sample.bus} ${t('directionTo')}${destination}`}
@@ -1403,14 +1438,28 @@ export default function ExploreScreen({ isActive = false }: ExploreScreenProps) 
           >
             <View collapsable={false} style={styles.focusedStopMarker}>
               <View style={[styles.focusedStopMarkerHalo, { backgroundColor: alpha(focusedStopAccent, '22') }]} />
-              <View style={[styles.focusedStopMarkerCore, { backgroundColor: focusedStopAccent }]}>
-                <BusStopGlyph size={24} color="#FFFFFF" shiftY={0.02} />
+              <View
+                style={[
+                  styles.focusedStopMarkerCore,
+                  {
+                    backgroundColor: colors.panel,
+                    borderColor: focusedStopAccent,
+                  },
+                ]}>
+                <StopPostGlyph size={26} color={focusedStopAccent} />
               </View>
             </View>
             <Callout tooltip>
               <View style={styles.focusedStopCallout}>
-                <View style={[styles.focusedStopCalloutIcon, { backgroundColor: focusedStopAccent }]}>
-                  <BusStopGlyph size={26} color="#FFFFFF" shiftY={0.02} />
+                <View
+                  style={[
+                    styles.focusedStopCalloutIcon,
+                    {
+                      backgroundColor: alpha(focusedStopAccent, '14'),
+                      borderColor: focusedStopAccent,
+                    },
+                  ]}>
+                  <StopPostGlyph size={26} color={focusedStopAccent} />
                 </View>
                 <View style={styles.focusedStopCalloutCopy}>
                   <Text style={styles.focusedStopCalloutLabel} numberOfLines={2}>
@@ -1921,7 +1970,7 @@ function createStyles(C: ReturnType<typeof useAppColors>) {
     justifyContent: 'center',
   },
   stopMarker: {
-    borderWidth: 1.5,
+    borderWidth: 2,
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#000',
@@ -1931,7 +1980,7 @@ function createStyles(C: ReturnType<typeof useAppColors>) {
     elevation: 2,
   },
   simpleStopMarker: {
-    borderWidth: 1,
+    borderWidth: 1.5,
     shadowOpacity: 0.12,
     shadowRadius: 3,
     shadowOffset: { width: 0, height: 1 },
@@ -1959,6 +2008,7 @@ function createStyles(C: ReturnType<typeof useAppColors>) {
     width: 34,
     height: 34,
     borderRadius: 9,
+    borderWidth: 1.5,
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
@@ -2158,11 +2208,10 @@ function createStyles(C: ReturnType<typeof useAppColors>) {
     borderRadius: 15,
   },
   focusedStopMarkerCore: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    borderWidth: 1.5,
-    borderColor: alpha('#FFFFFF', 'E6'),
+    width: 38,
+    height: 42,
+    borderRadius: 11,
+    borderWidth: 2,
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#000',
@@ -2193,6 +2242,7 @@ function createStyles(C: ReturnType<typeof useAppColors>) {
     width: 42,
     height: 42,
     borderRadius: 11,
+    borderWidth: 2,
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
