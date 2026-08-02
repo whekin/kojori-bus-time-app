@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+  android:layout_width="match_parent"
+  android:layout_height="wrap_content"
+  android:gravity="center_vertical"
+  android:orientation="horizontal"
+  android:paddingStart="2dp"
+  android:paddingEnd="2dp"
+  android:paddingTop="7dp"
+  android:paddingBottom="5dp">
+
+  <TextView
+    android:id="@+id/day_label"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:maxLines="1"
+    android:text="Today"
+    android:textColor="@color/widget_text_faint"
+    android:textSize="10sp"
+    android:textStyle="bold"
+    android:letterSpacing="0.1" />
+
+  <ImageView
+    android:layout_width="0dp"
+    android:layout_height="1dp"
+    android:layout_weight="1"
+    android:layout_marginStart="8dp"
+    android:background="@color/widget_border"
+    android:importantForAccessibility="no" />
+
+</LinearLayout>

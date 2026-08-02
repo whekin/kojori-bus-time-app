@@ -58,6 +58,20 @@
       android:letterSpacing="0.04" />
   </LinearLayout>
 
+  <TextView
+    android:id="@+id/item_last_today"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:gravity="end"
+    android:maxLines="1"
+    android:paddingEnd="2dp"
+    android:paddingBottom="3dp"
+    android:text="Last bus today"
+    android:textColor="@color/widget_amber"
+    android:textSize="9sp"
+    android:textStyle="bold"
+    android:visibility="gone" />
+
   <ImageView
     android:id="@+id/item_divider"
     android:layout_width="match_parent"

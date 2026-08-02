@@ -71,16 +71,29 @@ interface WidgetStatePayload {
     noDeparturesSoon: string;
     toKojori: string;
     toTbilisi: string;
+    cityKojori: string;
+    cityTbilisi: string;
+    directionToKojoriAccessibility: string;
+    directionToTbilisiAccessibility: string;
     from: string;
+    today: string;
+    tomorrow: string;
+    nextDeparture: string;
+    lastToday: string;
     inMinutes: string;
+    countdownHours: string;
+    countdownWholeHours: string;
+    countdownCompactMinutes: string;
+    countdownCompactHours: string;
+    countdownCompactWholeHours: string;
     now: string;
   };
   directions: Record<WidgetMode, WidgetDirectionPayload>;
 }
 
 // Schedules are baked/cached, so sync a whole week of departures — the widget
-// keeps showing real times even if the app is not opened for days. The widget
-// list itself caps how many rows it renders.
+// keeps showing real times even if the app is not opened for days. The native
+// widget renders every departure in its rolling 24-hour display window.
 const WIDGET_FUTURE_DAYS = 7;
 const WIDGET_MAX_ITEMS = 400;
 const LATE_DEPARTURE_GRACE_MS = 5 * 60_000;
@@ -229,6 +242,8 @@ export async function syncAndroidWidgetState(settings: WidgetSyncSettings) {
   const language = resolveLanguage(settings.language);
   const darkColors = getAppColors(settings.paletteId, 'dark');
   const lightColors = getAppColors(settings.paletteId, 'light');
+  const cityKojori = translate(language, 'cityKojori');
+  const cityTbilisi = translate(language, 'cityTbilisi');
   const [kojori, tbilisi] = await Promise.all([
     buildDirectionPayload('kojori', settings.activeTbilisiStopId, now, language),
     buildDirectionPayload('tbilisi', settings.activeKojoriStopId, now, language),
@@ -246,10 +261,35 @@ export async function syncAndroidWidgetState(settings: WidgetSyncSettings) {
       noDeparturesSoon: translate(language, 'widgetNoDepartures'),
       toKojori: translate(language, 'widgetToKojori'),
       toTbilisi: translate(language, 'widgetToTbilisi'),
+      cityKojori,
+      cityTbilisi,
+      directionToKojoriAccessibility: translate(language, 'directionAccessibility', {
+        origin: cityTbilisi,
+        destination: cityKojori,
+      }),
+      directionToTbilisiAccessibility: translate(language, 'directionAccessibility', {
+        origin: cityKojori,
+        destination: cityTbilisi,
+      }),
       from: language === 'en' ? 'from' : language === 'ka' ? 'საიდან' : 'от',
+      today: translate(language, 'widgetToday'),
+      tomorrow: translate(language, 'widgetTomorrow'),
+      nextDeparture: translate(language, 'homeNextDeparture'),
+      lastToday: translate(language, 'homeLastDeparture'),
       // Passing the placeholder as its own value returns the raw template
       // ("in {minutes} mins") so the widget can substitute per row natively.
       inMinutes: translate(language, 'timePlusMinutes', { minutes: '{minutes}' }),
+      countdownHours: translate(language, 'widgetCountdownHours', {
+        hours: '{hours}',
+        minutes: '{minutes}',
+      }),
+      countdownWholeHours: translate(language, 'widgetCountdownWholeHours', { hours: '{hours}' }),
+      countdownCompactMinutes: translate(language, 'widgetCountdownCompactMinutes', { minutes: '{minutes}' }),
+      countdownCompactHours: translate(language, 'widgetCountdownCompactHours', {
+        hours: '{hours}',
+        minutes: '{minutes}',
+      }),
+      countdownCompactWholeHours: translate(language, 'widgetCountdownCompactWholeHours', { hours: '{hours}' }),
       now: translate(language, 'commonNow'),
     },
     directions: { kojori, tbilisi },

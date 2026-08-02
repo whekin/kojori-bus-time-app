@@ -7,7 +7,9 @@ import android.appwidget.AppWidgetProvider
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.res.ColorStateList
 import android.net.Uri
+import android.os.Build
 import android.os.SystemClock
 import android.view.View
 import android.widget.RemoteViews
@@ -138,7 +140,7 @@ open class KojoriBusWidgetProvider : AppWidgetProvider() {
       val stateJson = WidgetPrefs.getStateJson(context)
       val root = stateJson?.let { runCatching { JSONObject(it) }.getOrNull() }
 
-      bindToggles(context, appWidgetManager, appWidgetId, views, root, currentDirection)
+      bindDirectionSwitch(context, appWidgetManager, appWidgetId, views, root, currentDirection)
 
       val listIntent = Intent(context, WidgetListService::class.java).apply {
         putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
@@ -205,7 +207,7 @@ open class KojoriBusWidgetProvider : AppWidgetProvider() {
       return false
     }
 
-    private fun bindToggles(
+    private fun bindDirectionSwitch(
       context: Context,
       appWidgetManager: AppWidgetManager,
       appWidgetId: Int,
@@ -218,26 +220,72 @@ open class KojoriBusWidgetProvider : AppWidgetProvider() {
       views.setViewVisibility(R.id.toggle_row_h, if (narrow) View.GONE else View.VISIBLE)
       views.setViewVisibility(R.id.toggle_row_v, if (narrow) View.VISIBLE else View.GONE)
 
-      val toKojori = root.localizedString("toKojori", "to Kojori")
-      val toTbilisi = root.localizedString("toTbilisi", "to Tbilisi")
-      val idleColor = ContextCompat.getColor(context, R.color.widget_text_dim)
-      val kojoriColor = if (currentDirection == "kojori") accents.route380 else idleColor
-      val tbilisiColor = if (currentDirection == "tbilisi") accents.route316 else idleColor
-
-      for ((viewId, label, color) in listOf(
-        Triple(R.id.toggle_kojori, toKojori, kojoriColor),
-        Triple(R.id.toggle_kojori_v, toKojori, kojoriColor),
-        Triple(R.id.toggle_tbilisi, toTbilisi, tbilisiColor),
-        Triple(R.id.toggle_tbilisi_v, toTbilisi, tbilisiColor),
-      )) {
-        views.setTextViewText(viewId, label)
-        views.setTextColor(viewId, color)
+      val cityKojori = root.localizedString("cityKojori", "Kojori")
+      val cityTbilisi = root.localizedString("cityTbilisi", "Tbilisi")
+      val toKojori = currentDirection == "kojori"
+      val origin = if (toKojori) cityTbilisi else cityKojori
+      val destination = if (toKojori) cityKojori else cityTbilisi
+      val accessibilityKey = if (toKojori) {
+        "directionToKojoriAccessibility"
+      } else {
+        "directionToTbilisiAccessibility"
       }
+      val accessibilityLabel = root.localizedString(
+        accessibilityKey,
+        "$origin to $destination. Tap to change.",
+      )
+      val accent = if (toKojori) accents.route380 else accents.route316
+      val fallbackBackground = if (toKojori) {
+        R.drawable.widget_direction_active_380
+      } else {
+        R.drawable.widget_direction_active_316
+      }
+      val nextDirection = if (toKojori) "tbilisi" else "kojori"
+      val pendingIntent = directionPendingIntent(context, appWidgetId, nextDirection)
 
-      views.setOnClickPendingIntent(R.id.toggle_kojori, directionPendingIntent(context, appWidgetId, "kojori"))
-      views.setOnClickPendingIntent(R.id.toggle_kojori_v, directionPendingIntent(context, appWidgetId, "kojori"))
-      views.setOnClickPendingIntent(R.id.toggle_tbilisi, directionPendingIntent(context, appWidgetId, "tbilisi"))
-      views.setOnClickPendingIntent(R.id.toggle_tbilisi_v, directionPendingIntent(context, appWidgetId, "tbilisi"))
+      bindDirectionControl(
+        views, R.id.toggle_row_h, R.id.direction_route_h, R.id.direction_swap_h,
+        R.id.direction_origin_h, origin, R.id.direction_destination_h, destination,
+        accessibilityLabel, accent, fallbackBackground, pendingIntent,
+      )
+      bindDirectionControl(
+        views, R.id.toggle_row_v, R.id.direction_route_v, R.id.direction_swap_v,
+        null, null, R.id.direction_destination_v, destination,
+        accessibilityLabel, accent, fallbackBackground, pendingIntent,
+      )
+    }
+
+    private fun bindDirectionControl(
+      views: RemoteViews,
+      containerId: Int,
+      routeId: Int,
+      swapId: Int,
+      originId: Int?,
+      origin: String?,
+      destinationId: Int,
+      destination: String,
+      accessibilityLabel: String,
+      accent: Int,
+      fallbackBackground: Int,
+      pendingIntent: PendingIntent,
+    ) {
+      if (originId != null && origin != null) {
+        views.setTextViewText(originId, origin)
+      }
+      views.setTextViewText(destinationId, destination)
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        views.setColorStateList(
+          routeId,
+          "setBackgroundTintList",
+          ColorStateList.valueOf(accent),
+        )
+      } else {
+        views.setInt(routeId, "setBackgroundResource", fallbackBackground)
+      }
+      views.setContentDescription(containerId, accessibilityLabel)
+      views.setOnClickPendingIntent(containerId, pendingIntent)
+      views.setOnClickPendingIntent(routeId, pendingIntent)
+      views.setOnClickPendingIntent(swapId, pendingIntent)
     }
 
     private fun bindEmptyState(

@@ -8,36 +8,56 @@
 
   <LinearLayout
     android:layout_width="match_parent"
-    android:layout_height="wrap_content"
+    android:layout_height="34dp"
     android:layout_marginBottom="8dp"
-    android:orientation="horizontal">
+    android:background="@drawable/widget_chip_idle"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:padding="2dp">
 
-    <TextView
+    <LinearLayout
       android:layout_width="0dp"
-      android:layout_height="wrap_content"
+      android:layout_height="match_parent"
       android:layout_weight="1"
-      android:layout_marginEnd="6dp"
-      android:background="@drawable/widget_chip_idle"
+      android:background="@drawable/widget_direction_active_380"
       android:gravity="center"
-      android:paddingHorizontal="8dp"
-      android:paddingVertical="5dp"
-      android:text="to Kojori"
-      android:textColor="@color/widget_amber"
-      android:textSize="11sp"
-      android:textStyle="bold" />
+      android:orientation="horizontal"
+      android:paddingHorizontal="4dp">
 
-    <TextView
-      android:layout_width="0dp"
-      android:layout_height="wrap_content"
-      android:layout_weight="1"
-      android:background="@drawable/widget_chip_idle"
-      android:gravity="center"
-      android:paddingHorizontal="8dp"
-      android:paddingVertical="5dp"
-      android:text="to Tbilisi"
-      android:textColor="@color/widget_text_dim"
-      android:textSize="11sp"
-      android:textStyle="bold" />
+      <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:maxLines="1"
+        android:text="Tbilisi"
+        android:textColor="#FFFFFFFF"
+        android:textSize="12sp"
+        android:textStyle="bold" />
+
+      <ImageView
+        android:layout_width="16dp"
+        android:layout_height="16dp"
+        android:layout_marginHorizontal="2dp"
+        android:contentDescription="@null"
+        android:importantForAccessibility="no"
+        android:src="@drawable/widget_ic_direction_arrow" />
+
+      <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:maxLines="1"
+        android:text="Kojori"
+        android:textColor="#FFFFFFFF"
+        android:textSize="12sp"
+        android:textStyle="bold" />
+    </LinearLayout>
+
+    <ImageView
+      android:layout_width="32dp"
+      android:layout_height="match_parent"
+      android:contentDescription="@null"
+      android:importantForAccessibility="no"
+      android:padding="7dp"
+      android:src="@drawable/widget_ic_swap" />
   </LinearLayout>
 
   <LinearLayout
@@ -65,48 +85,9 @@
       android:importantForAccessibility="no" />
   </LinearLayout>
 
-  <LinearLayout
-    android:layout_width="match_parent"
-    android:layout_height="wrap_content"
-    android:gravity="center_vertical"
-    android:orientation="horizontal"
-    android:paddingVertical="8dp"
-    android:paddingHorizontal="2dp">
+  <include layout="@layout/widget_list_day_header" />
 
-    <TextView
-      android:layout_width="wrap_content"
-      android:layout_height="wrap_content"
-      android:minWidth="44dp"
-      android:background="@drawable/widget_bus_chip"
-      android:gravity="center"
-      android:paddingHorizontal="8dp"
-      android:paddingVertical="5dp"
-      android:text="380"
-      android:textColor="@color/widget_amber"
-      android:textSize="13sp"
-      android:textStyle="bold"
-      android:fontFamily="monospace" />
-
-    <TextView
-      android:layout_marginStart="10dp"
-      android:layout_width="0dp"
-      android:layout_height="wrap_content"
-      android:layout_weight="1"
-      android:gravity="end"
-      android:text="09:30"
-      android:textColor="@color/widget_text"
-      android:textSize="18sp"
-      android:textStyle="bold"
-      android:fontFamily="monospace"
-      android:letterSpacing="0.04" />
-  </LinearLayout>
-
-  <ImageView
-    android:layout_width="match_parent"
-    android:layout_height="1dp"
-    android:layout_marginStart="54dp"
-    android:background="@color/widget_border"
-    android:importantForAccessibility="no" />
+  <include layout="@layout/widget_list_featured" />
 
   <LinearLayout
     android:layout_width="match_parent"

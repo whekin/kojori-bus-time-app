@@ -10,80 +10,120 @@
   android:paddingBottom="12dp"
   android:paddingTop="14dp">
 
-  <!-- Direction toggles live outside the list so they stay pinned and are
+  <!-- The direction switch lives outside the list so it stays pinned and is
        never overlapped by list scroll effects. -->
   <LinearLayout
     android:id="@+id/toggle_row_h"
     android:layout_width="match_parent"
-    android:layout_height="wrap_content"
+    android:layout_height="34dp"
     android:layout_marginBottom="10dp"
-    android:baselineAligned="false"
-    android:orientation="horizontal">
+    android:background="@drawable/widget_chip_idle"
+    android:gravity="center_vertical"
+    android:importantForAccessibility="yes"
+    android:orientation="horizontal"
+    android:padding="2dp">
 
-    <TextView
-      android:id="@+id/toggle_kojori"
+    <LinearLayout
+      android:id="@+id/direction_route_h"
       android:layout_width="0dp"
-      android:layout_height="wrap_content"
+      android:layout_height="match_parent"
       android:layout_weight="1"
-      android:layout_marginEnd="6dp"
-      android:background="@drawable/widget_chip_idle"
+      android:background="@drawable/widget_direction_active_380"
       android:gravity="center"
-      android:paddingHorizontal="8dp"
-      android:paddingVertical="5dp"
-      android:text="to Kojori"
-      android:textColor="@color/widget_text_dim"
-      android:textSize="11sp"
-      android:textStyle="bold" />
+      android:importantForAccessibility="no"
+      android:orientation="horizontal"
+      android:paddingHorizontal="4dp">
 
-    <TextView
-      android:id="@+id/toggle_tbilisi"
-      android:layout_width="0dp"
-      android:layout_height="wrap_content"
-      android:layout_weight="1"
-      android:background="@drawable/widget_chip_idle"
-      android:gravity="center"
-      android:paddingHorizontal="8dp"
-      android:paddingVertical="5dp"
-      android:text="to Tbilisi"
-      android:textColor="@color/widget_text_dim"
-      android:textSize="11sp"
-      android:textStyle="bold" />
+      <TextView
+        android:id="@+id/direction_origin_h"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:maxLines="1"
+        android:text="Tbilisi"
+        android:textColor="#FFFFFFFF"
+        android:textSize="12sp"
+        android:textStyle="bold" />
+
+      <ImageView
+        android:layout_width="16dp"
+        android:layout_height="16dp"
+        android:layout_marginHorizontal="2dp"
+        android:contentDescription="@null"
+        android:importantForAccessibility="no"
+        android:src="@drawable/widget_ic_direction_arrow" />
+
+      <TextView
+        android:id="@+id/direction_destination_h"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:maxLines="1"
+        android:text="Kojori"
+        android:textColor="#FFFFFFFF"
+        android:textSize="12sp"
+        android:textStyle="bold" />
+    </LinearLayout>
+
+    <ImageView
+      android:id="@+id/direction_swap_h"
+      android:layout_width="32dp"
+      android:layout_height="match_parent"
+      android:contentDescription="@null"
+      android:importantForAccessibility="no"
+      android:padding="7dp"
+      android:src="@drawable/widget_ic_swap" />
   </LinearLayout>
 
   <LinearLayout
     android:id="@+id/toggle_row_v"
     android:layout_width="match_parent"
-    android:layout_height="wrap_content"
+    android:layout_height="34dp"
     android:layout_marginBottom="10dp"
-    android:orientation="vertical"
+    android:background="@drawable/widget_chip_idle"
+    android:gravity="center_vertical"
+    android:importantForAccessibility="yes"
+    android:orientation="horizontal"
+    android:padding="2dp"
     android:visibility="gone">
 
-    <TextView
-      android:id="@+id/toggle_kojori_v"
-      android:layout_width="match_parent"
-      android:layout_height="wrap_content"
-      android:layout_marginBottom="4dp"
-      android:background="@drawable/widget_chip_idle"
+    <LinearLayout
+      android:id="@+id/direction_route_v"
+      android:layout_width="0dp"
+      android:layout_height="match_parent"
+      android:layout_weight="1"
+      android:background="@drawable/widget_direction_active_380"
       android:gravity="center"
-      android:paddingHorizontal="8dp"
-      android:paddingVertical="5dp"
-      android:text="to Kojori"
-      android:textColor="@color/widget_text_dim"
-      android:textSize="11sp"
-      android:textStyle="bold" />
+      android:importantForAccessibility="no"
+      android:orientation="horizontal"
+      android:paddingHorizontal="8dp">
 
-    <TextView
-      android:id="@+id/toggle_tbilisi_v"
-      android:layout_width="match_parent"
-      android:layout_height="wrap_content"
-      android:background="@drawable/widget_chip_idle"
-      android:gravity="center"
-      android:paddingHorizontal="8dp"
-      android:paddingVertical="5dp"
-      android:text="to Tbilisi"
-      android:textColor="@color/widget_text_dim"
-      android:textSize="11sp"
-      android:textStyle="bold" />
+      <ImageView
+        android:layout_width="16dp"
+        android:layout_height="16dp"
+        android:layout_marginEnd="3dp"
+        android:contentDescription="@null"
+        android:importantForAccessibility="no"
+        android:src="@drawable/widget_ic_direction_arrow" />
+
+      <TextView
+        android:id="@+id/direction_destination_v"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:text="Kojori"
+        android:textColor="#FFFFFFFF"
+        android:textSize="12sp"
+        android:textStyle="bold" />
+    </LinearLayout>
+
+    <ImageView
+      android:id="@+id/direction_swap_v"
+      android:layout_width="30dp"
+      android:layout_height="match_parent"
+      android:contentDescription="@null"
+      android:importantForAccessibility="no"
+      android:padding="7dp"
+      android:src="@drawable/widget_ic_swap" />
   </LinearLayout>
 
   <TextView
