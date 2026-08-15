@@ -77,6 +77,27 @@ function compactDepartureCountdown(
     : t('widgetCountdownCompactHours', { hours, minutes });
 }
 
+function fullDepartureCountdown(
+  departure: ServiceDeparture,
+  t: ReturnType<typeof useI18n>['t'],
+  formatRelativeDuration: ReturnType<typeof useI18n>['formatRelativeDuration'],
+) {
+  if (departure.daysUntil > 1) {
+    return t('startInDays', { days: departure.daysUntil });
+  }
+  if (departure.daysUntil === 1) return t('widgetTomorrow');
+  if (departure.minsUntil <= 0) return t('commonNow');
+  if (departure.minsUntil < 60) {
+    return formatRelativeDuration('future', 'minute', departure.minsUntil);
+  }
+
+  const hours = Math.floor(departure.minsUntil / 60);
+  const minutes = departure.minsUntil % 60;
+  return minutes === 0
+    ? t('widgetCountdownWholeHours', { hours })
+    : t('widgetCountdownHours', { hours, minutes });
+}
+
 function CardSchedule({
   departures,
   stopName,
@@ -86,52 +107,69 @@ function CardSchedule({
 }) {
   const colors = useAppColors();
   const styles = useStyles();
-  const { t } = useI18n();
+  const { t, formatRelativeDuration } = useI18n();
 
-  if (departures.length === 0) return null;
+  if (departures.length === 0) {
+    return (
+      <View style={styles.cardSchedule}>
+        <Text style={styles.cardStopLabel} numberOfLines={1}>
+          {t('directionFrom', { origin: stopName })}
+        </Text>
+        <Text style={styles.scheduleEmpty} numberOfLines={2}>
+          {t('homeNoDepartures')}
+        </Text>
+      </View>
+    );
+  }
+
+  const [primary, ...rest] = departures;
+  const primaryAccent = departureColor(primary.bus, colors);
 
   return (
     <View style={styles.cardSchedule}>
       <Text style={styles.cardStopLabel} numberOfLines={1}>
         {t('directionFrom', { origin: stopName })}
       </Text>
-      <View style={styles.departurePills}>
-        {departures.map((departure, index) => {
-          const accent = departureColor(departure.bus, colors);
-          const prominent = index === 0;
-          return (
-            <View
-              key={departure.key}
-              style={[
-                styles.departurePill,
-                {
-                  backgroundColor: alpha(accent, prominent ? '24' : '12'),
-                  borderColor: alpha(accent, prominent ? 'C0' : '72'),
-                },
-              ]}>
-              <Text style={[styles.departureBus, { color: accent }]}>{departure.bus}</Text>
-              <View style={[styles.departureDivider, { backgroundColor: alpha(accent, '55') }]} />
-              <Text
-                style={[styles.departureTime, !prominent && styles.departureTimeSecondary]}
-                numberOfLines={1}
-                adjustsFontSizeToFit
-                minimumFontScale={0.86}>
-                {departure.time}
-              </Text>
-              <Text
-                style={[
-                  styles.departureCountdown,
-                  { color: prominent ? accent : alpha(accent, 'D8') },
-                ]}
-                numberOfLines={1}
-                adjustsFontSizeToFit
-                minimumFontScale={0.8}>
-                {compactDepartureCountdown(departure, t)}
-              </Text>
-            </View>
-          );
-        })}
+
+      <View style={styles.primaryDeparture}>
+        <View
+          style={[
+            styles.primaryBusBadge,
+            { backgroundColor: alpha(primaryAccent, '2E'), borderColor: alpha(primaryAccent, 'C0') },
+          ]}>
+          <Text style={[styles.primaryBus, { color: primaryAccent }]}>{primary.bus}</Text>
+        </View>
+        <Text
+          style={styles.primaryTime}
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          minimumFontScale={0.7}>
+          {primary.time}
+        </Text>
+        <Text
+          style={[styles.primaryCountdown, { color: primaryAccent }]}
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          minimumFontScale={0.7}>
+          {fullDepartureCountdown(primary, t, formatRelativeDuration)}
+        </Text>
       </View>
+
+      {rest.length > 0 ? (
+        <View style={styles.secondaryDepartures}>
+          {rest.map(departure => {
+            const accent = departureColor(departure.bus, colors);
+            return (
+              <Text key={departure.key} style={styles.secondaryDeparture} numberOfLines={1}>
+                <Text style={[styles.secondaryBus, { color: alpha(accent, 'E6') }]}>
+                  {departure.bus}
+                </Text>
+                {`  ${departure.time}  ·  ${compactDepartureCountdown(departure, t)}`}
+              </Text>
+            );
+          })}
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -214,13 +252,20 @@ export function StartScreen({ onDone }: { onDone: () => void }) {
   }
 
   const smartIssue = Boolean(locationError);
+  const locationSubtitle = isLocating
+    ? t('locationDetectingClosest')
+    : locationError
+      ? t('locationChooseDestination')
+      : smartEnabled
+        ? ''
+        : t('locationSkipManual');
   const kojoriAccent = colors.route380;
   const tbilisiAccent = colors.route316;
 
   return (
     <View style={[styles.root, { paddingTop: insets.top + 10 }]}>
       <ScrollView
-        contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 118 }]}
+        contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 24 }]}
         showsVerticalScrollIndicator={false}>
         <View style={styles.topBar}>
           <View style={styles.brandRow}>
@@ -231,9 +276,6 @@ export function StartScreen({ onDone }: { onDone: () => void }) {
 
         <View style={styles.header}>
           <Text style={[styles.title, { fontFamily: DISPLAY }]}>{t('startTitle')}</Text>
-          <Text style={styles.subtitle}>
-            {t('startSubtitle')}
-          </Text>
         </View>
 
         <View style={styles.cards}>
@@ -312,52 +354,50 @@ export function StartScreen({ onDone }: { onDone: () => void }) {
             );
           })}
         </View>
-      </ScrollView>
 
-      <View style={[styles.locationFixedArea, { bottom: insets.bottom + 12 }]}>
-        <View style={styles.locationDock}>
+        <View style={styles.locationArea}>
           <View style={styles.locationRow}>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={smartIssue ? t('locationUnavailable') : t('locationUseNextTime')}
-              onPress={handleEnableSmart}
-              disabled={isLocating}
-              style={({ pressed }) => [styles.locationTapTarget, pressed && styles.locationTapTargetPressed]}>
-              <MaterialCommunityIcons
-                name={smartIssue ? 'crosshairs-off' : smartEnabled ? 'crosshairs-gps' : 'crosshairs'}
-                size={28}
-                color={smartIssue ? colors.warning : colors.textDim}
-              />
-              <View style={styles.locationCopy}>
-                <Text style={styles.locationTitle}>
-                  {smartIssue ? t('locationUnavailable') : smartEnabled ? t('locationSetNextTime') : t('locationUseNextTime')}
-                </Text>
-                <Text style={styles.locationSubtitle}>
-                  {isLocating
-                    ? t('locationDetectingClosest')
-                    : locationError
-                      ? t('locationChooseDestination')
-                      : t('locationSkipManual')}
-                </Text>
-              </View>
-            </Pressable>
+            <MaterialCommunityIcons
+              name={smartIssue ? 'crosshairs-off' : smartEnabled ? 'crosshairs-gps' : 'crosshairs'}
+              size={22}
+              color={smartIssue ? colors.warning : colors.textFaint}
+            />
+            <View style={styles.locationCopy}>
+              <Text style={styles.locationTitle}>
+                {smartIssue ? t('locationUnavailable') : smartEnabled ? t('locationSetNextTime') : t('locationUseNextTime')}
+              </Text>
+              {locationSubtitle ? (
+                <Text style={styles.locationSubtitle}>{locationSubtitle}</Text>
+              ) : null}
+            </View>
             {isLocating ? (
               <ActivityIndicator size="small" color={kojoriAccent} />
+            ) : smartIssue ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={t('locationRefresh')}
+                onPress={handleEnableSmart}
+                hitSlop={10}
+                style={({ pressed }) => [styles.locationRetry, pressed && styles.locationRetryPressed]}>
+                <Text style={styles.locationRetryText}>{t('commonRefresh')}</Text>
+              </Pressable>
             ) : (
               <SettingsSwitch
                 value={smartEnabled}
-                disabled={isLocating}
                 accentColor={kojoriAccent}
                 onValueChange={handleLocationToggle}
               />
             )}
           </View>
+
+          {smartEnabled || isLocating ? (
+            <View style={styles.privacyRow}>
+              <MaterialCommunityIcons name="lock" size={12} color={colors.textFaint} />
+              <Text style={styles.privacyText}>{t('locationPrivacyNote')}</Text>
+            </View>
+          ) : null}
         </View>
-        <View style={styles.privacyRow}>
-          <MaterialCommunityIcons name="lock" size={13} color={colors.textFaint} />
-          <Text style={styles.privacyText}>{t('locationPrivacyNote')}</Text>
-        </View>
-      </View>
+      </ScrollView>
     </View>
   );
 }
@@ -429,12 +469,11 @@ function createStyles(C: AppColors) {
       lineHeight: 22,
       fontWeight: '900',
     },
-    header: { gap: 8, marginTop: 10, marginBottom: 16, maxWidth: 330 },
-    title: { color: C.text, fontSize: 42, fontWeight: '700', lineHeight: 47 },
-    subtitle: { color: C.textDim, fontSize: 18, lineHeight: 24 },
+    header: { marginTop: 4, marginBottom: 10, maxWidth: 330 },
+    title: { color: C.text, fontSize: 32, fontWeight: '700', lineHeight: 38 },
     cards: { gap: 14 },
     card: {
-      minHeight: 194,
+      minHeight: 226,
       borderWidth: 1,
       borderRadius: 24,
       backgroundColor: C.surface,
@@ -452,7 +491,7 @@ function createStyles(C: AppColors) {
       borderRadius: 23,
     },
     cardContent: {
-      minHeight: 194,
+      minHeight: 226,
       justifyContent: 'space-between',
       gap: 11,
       paddingHorizontal: 19,
@@ -498,7 +537,7 @@ function createStyles(C: AppColors) {
       paddingTop: 4,
       marginBottom: -5,
     },
-    cardSchedule: { gap: 6 },
+    cardSchedule: { gap: 7 },
     cardStopLabel: {
       color: alpha('#FFFFFF', 'C7'),
       fontSize: 10,
@@ -509,45 +548,67 @@ function createStyles(C: AppColors) {
       textShadowRadius: 6,
       textShadowOffset: { width: 0, height: 1 },
     },
-    departurePills: {
-      flexDirection: 'row',
-      gap: 7,
-    },
-    departurePill: {
-      flex: 1,
-      minWidth: 0,
-      height: 36,
+    primaryDeparture: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 6,
+      gap: 10,
+    },
+    primaryBusBadge: {
+      flexShrink: 0,
+      height: 26,
+      justifyContent: 'center',
       borderWidth: 1,
-      borderRadius: 18,
+      borderRadius: 13,
       paddingHorizontal: 9,
     },
-    departureBus: {
-      minWidth: 25,
+    primaryBus: {
       fontFamily: MONO,
-      fontSize: 14,
-      lineHeight: 18,
+      fontSize: 13,
+      lineHeight: 17,
       fontWeight: '900',
     },
-    departureDivider: { width: 1, height: 17 },
-    departureTime: {
+    primaryTime: {
+      flexShrink: 0,
       color: '#FFFFFF',
       fontFamily: MONO,
-      fontSize: 14,
-      lineHeight: 18,
+      fontSize: 28,
+      lineHeight: 34,
       fontWeight: '800',
+      textShadowColor: alpha('#000000', 'CC'),
+      textShadowRadius: 10,
+      textShadowOffset: { width: 0, height: 2 },
     },
-    departureTimeSecondary: { color: alpha('#FFFFFF', 'D8') },
-    departureCountdown: {
+    primaryCountdown: {
       flexShrink: 1,
       marginLeft: 'auto',
+      fontSize: 13,
+      lineHeight: 17,
+      fontWeight: '800',
+      textAlign: 'right',
+      textShadowColor: alpha('#000000', 'CC'),
+      textShadowRadius: 8,
+      textShadowOffset: { width: 0, height: 1 },
+    },
+    secondaryDepartures: { gap: 2 },
+    secondaryDeparture: {
+      color: alpha('#FFFFFF', 'A6'),
       fontFamily: MONO,
       fontSize: 12,
       lineHeight: 16,
-      fontWeight: '800',
-      textAlign: 'right',
+      fontWeight: '700',
+      textShadowColor: alpha('#000000', 'CC'),
+      textShadowRadius: 6,
+      textShadowOffset: { width: 0, height: 1 },
+    },
+    secondaryBus: { fontWeight: '900' },
+    scheduleEmpty: {
+      color: alpha('#FFFFFF', 'B0'),
+      fontSize: 13,
+      lineHeight: 18,
+      fontWeight: '600',
+      textShadowColor: alpha('#000000', 'CC'),
+      textShadowRadius: 8,
+      textShadowOffset: { width: 0, height: 1 },
     },
     arrowButton: {
       width: 44,
@@ -564,52 +625,33 @@ function createStyles(C: AppColors) {
       shadowOffset: { width: 0, height: 6 },
       elevation: 4,
     },
-    locationFixedArea: {
-      position: 'absolute',
-      left: 20,
-      right: 20,
-      gap: 8,
-    },
-    locationDock: {
-      borderRadius: 20,
-      borderWidth: 1,
-      borderColor: C.border,
-      backgroundColor: C.surface,
-      shadowColor: C.mode === 'dark' ? '#000000' : C.borderStrong,
-      shadowOpacity: C.mode === 'dark' ? 0.24 : 0.14,
-      shadowRadius: 18,
-      shadowOffset: { width: 0, height: 8 },
-      elevation: 2,
-      overflow: 'hidden',
-    },
+    locationArea: { marginTop: 4, gap: 8 },
     locationRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 10,
-      paddingRight: 14,
-    },
-    locationTapTarget: {
-      flex: 1,
-      minWidth: 0,
-      flexDirection: 'row',
-      alignItems: 'center',
       gap: 12,
-      paddingLeft: 16,
-      paddingTop: 13,
-      paddingBottom: 8,
+      paddingHorizontal: 4,
+      minHeight: 44,
     },
-    locationTapTargetPressed: { backgroundColor: C.surfaceHigh },
-    locationCopy: { flex: 1, minWidth: 0, gap: 2 },
-    locationTitle: { color: C.text, fontSize: 15, lineHeight: 19, fontWeight: '800' },
-    locationSubtitle: { color: C.textDim, fontSize: 13, lineHeight: 18 },
+    locationCopy: { flex: 1, minWidth: 0, gap: 1 },
+    locationTitle: { color: C.textDim, fontSize: 14, lineHeight: 18, fontWeight: '700' },
+    locationSubtitle: { color: C.textFaint, fontSize: 12, lineHeight: 16 },
+    locationRetry: {
+      borderRadius: 14,
+      borderWidth: 1,
+      borderColor: C.border,
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+    },
+    locationRetryPressed: { backgroundColor: C.surfaceHigh },
+    locationRetryText: { color: C.text, fontSize: 13, lineHeight: 17, fontWeight: '700' },
     privacyRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      justifyContent: 'center',
-      gap: 7,
-      paddingHorizontal: 12,
+      gap: 6,
+      paddingHorizontal: 4,
     },
-    privacyText: { color: C.textFaint, fontSize: 12, lineHeight: 16, textAlign: 'center' },
+    privacyText: { color: C.textFaint, fontSize: 11, lineHeight: 15 },
   });
 }
 

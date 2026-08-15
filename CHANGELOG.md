@@ -1,5 +1,19 @@
 # Changelog
 
+## v2026.8.15
+### Improved
+
+- The start screen now leads with the departure itself: the next bus shows its time in large type with a full countdown, while the following bus sits underneath as a quiet second line.
+- Destination cards are taller and the headline is more compact, so the choice and the times get the space instead of the intro copy.
+- The location control moved into the page flow as a quiet row under the cards, with the toggle as the only tap target and the privacy note shown only once location is on.
+
+### Fixed
+
+- Destination cards now say when there are no more buses from the selected stop instead of showing an empty card with no explanation.
+- Refreshed the bundled offline timetable, which had aged out of its service dates and left cards blank on a fresh install without network.
+- The location control no longer overlaps the destination cards when its text wraps to two lines on wider phones.
+- Tapping the location row while it was already enabled no longer re-runs the location check and jumps off the screen; a Refresh button now appears only when the location lookup fails.
+
 ## v2026.8.2
 ### Improved
 
