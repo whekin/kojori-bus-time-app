@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 
 import { useLocation } from '@/hooks/use-location';
 import { useRouteStops } from '@/hooks/use-route-stops';
+import { DEFAULT_BOARDING_STOP_ID } from '@/hooks/use-settings';
 import type { StopInfo } from '@/services/ttc';
 
 const MAX_CLOSEST_STOP_DISTANCE_METERS = 2_500;
@@ -18,6 +19,7 @@ export type ClosestStopStatus =
   | 'already-active'
   | 'denied'
   | 'disabled'
+  | 'fallback'
   | 'locating'
   | 'missing-geometry'
   | 'no-location'
@@ -46,7 +48,7 @@ function distanceMeters(
 export function getClosestStopCandidate(
   stops: StopInfo[],
   resolvedLocation: ResolvedLocation | null,
-  options?: { activeStopId?: string },
+  options?: { activeStopId?: string; fallbackStopId?: string },
 ) {
   if (!resolvedLocation) {
     return { status: 'no-location' as const, closestStop: null, distanceMeters: null };
@@ -82,8 +84,30 @@ export function getClosestStopCandidate(
     return { status: 'missing-geometry' as const, closestStop: null, distanceMeters: null };
   }
 
+  // Riders who are nowhere near the route still need a usable boarding stop, so
+  // fall back to the direction's main stop instead of offering nothing at all.
   if (nearest.distanceMeters > MAX_CLOSEST_STOP_DISTANCE_METERS) {
-    return { status: 'too-far' as const, closestStop: null, distanceMeters: nearest.distanceMeters };
+    const fallbackStop = options?.fallbackStopId
+      ? stops.find(stop => stop.id === options.fallbackStopId)
+      : undefined;
+
+    if (!fallbackStop) {
+      return { status: 'too-far' as const, closestStop: null, distanceMeters: nearest.distanceMeters };
+    }
+
+    if (fallbackStop.id === options?.activeStopId) {
+      return {
+        status: 'already-active' as const,
+        closestStop: null,
+        distanceMeters: nearest.distanceMeters,
+      };
+    }
+
+    return {
+      status: 'fallback' as const,
+      closestStop: fallbackStop,
+      distanceMeters: nearest.distanceMeters,
+    };
   }
 
   if (options?.activeStopId && nearest.stop.id === options.activeStopId) {
@@ -103,9 +127,9 @@ export function useClosestStop(
   enabled = true,
 ) {
   const { stops } = useRouteStops(direction);
-  const { permission, resolvedLocation, isLocating } = useLocation(enabled);
+  const { permission, resolvedLocation, isLocating, requestLocationAccess } = useLocation(enabled);
 
-  return useMemo(() => {
+  const candidate = useMemo(() => {
     if (!enabled) {
       return { status: 'disabled' as const, closestStop: null, distanceMeters: null };
     }
@@ -121,6 +145,18 @@ export function useClosestStop(
         distanceMeters: null,
       };
     }
-    return getClosestStopCandidate(stops, resolvedLocation, { activeStopId });
-  }, [activeStopId, enabled, isLocating, permission, resolvedLocation, stops]);
+    return getClosestStopCandidate(stops, resolvedLocation, {
+      activeStopId,
+      fallbackStopId: DEFAULT_BOARDING_STOP_ID[direction],
+    });
+  }, [activeStopId, direction, enabled, isLocating, permission, resolvedLocation, stops]);
+
+  return {
+    ...candidate,
+    resolvedLocation,
+    isLocating,
+    // Surfaces on the boarding-stop map so riders can opt in from where the
+    // feature is actually visible, not only from Settings.
+    requestLocation: () => void requestLocationAccess({ forceFresh: true }),
+  };
 }

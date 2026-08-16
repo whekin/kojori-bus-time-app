@@ -16,7 +16,7 @@ import { AppColorsProvider, useAppColors, useResolvedAppThemeMode } from '@/hook
 import { getClosestStopCandidate } from '@/hooks/use-closest-stop';
 import { useLocation } from '@/hooks/use-location';
 import { useRouteStops } from '@/hooks/use-route-stops';
-import { SettingsProvider, useSettings, type SharedDirection } from '@/hooks/use-settings';
+import { DEFAULT_BOARDING_STOP_ID, SettingsProvider, useSettings, type SharedDirection } from '@/hooks/use-settings';
 import { prefillStopNames } from '@/hooks/use-stop-names';
 import {
   hydrateTtcOfflineData,
@@ -85,8 +85,10 @@ function AppReady() {
     if (!waitingForSmart || !suggestedMode || !resolvedLocation) return;
     const direction: SharedDirection = suggestedMode === 'kojori' ? 'toKojori' : 'toTbilisi';
     const routeStops = direction === 'toKojori' ? toKojoriStops : toTbilisiStops;
-    const closestStopResult = getClosestStopCandidate(routeStops, resolvedLocation);
-    if (closestStopResult.status !== 'available' || !closestStopResult.closestStop) return;
+    const closestStopResult = getClosestStopCandidate(routeStops, resolvedLocation, {
+      fallbackStopId: DEFAULT_BOARDING_STOP_ID[direction],
+    });
+    if (!closestStopResult.closestStop) return;
 
     if (direction === 'toKojori') {
       update({ activeTbilisiStopId: closestStopResult.closestStop.id });

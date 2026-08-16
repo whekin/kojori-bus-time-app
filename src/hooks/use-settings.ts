@@ -17,8 +17,13 @@ import {
 import type { AppLanguage } from '@/i18n/languages';
 
 const STORAGE_KEY = '@kojori_settings_v2';
-const DEFAULT_TBILISI_STOP_ID = '1:2994';
-const DEFAULT_KOJORI_STOP_ID = '1:3078';
+export const DEFAULT_TBILISI_STOP_ID = '1:2994';
+export const DEFAULT_KOJORI_STOP_ID = '1:3078';
+/** Boarding stop used when the rider is nowhere near the route. */
+export const DEFAULT_BOARDING_STOP_ID = {
+  toKojori: DEFAULT_TBILISI_STOP_ID,
+  toTbilisi: DEFAULT_KOJORI_STOP_ID,
+} as const;
 export type SharedDirection = 'toKojori' | 'toTbilisi';
 /**
  * Governs what happens when the user opens the app:

@@ -23,7 +23,7 @@ import { useI18n } from '@/hooks/use-i18n';
 import { useLocation } from '@/hooks/use-location';
 import { useRouteStops } from '@/hooks/use-route-stops';
 import { useSchedule } from '@/hooks/use-schedule';
-import { useSettings, type SharedDirection } from '@/hooks/use-settings';
+import { DEFAULT_BOARDING_STOP_ID, useSettings, type SharedDirection } from '@/hooks/use-settings';
 import { useStopNames } from '@/hooks/use-stop-names';
 import {
   type BusLine,
@@ -223,8 +223,10 @@ export function StartScreen({ onDone }: { onDone: () => void }) {
 
     const direction = modeToDirection(result.suggestedMode);
     const routeStops = direction === 'toKojori' ? toKojoriStops : toTbilisiStops;
-    const closestStopResult = getClosestStopCandidate(routeStops, result.resolvedLocation);
-    if (closestStopResult.status !== 'available' || !closestStopResult.closestStop) return;
+    const closestStopResult = getClosestStopCandidate(routeStops, result.resolvedLocation, {
+      fallbackStopId: DEFAULT_BOARDING_STOP_ID[direction],
+    });
+    if (!closestStopResult.closestStop) return;
 
     if (direction === 'toKojori') {
       update({
