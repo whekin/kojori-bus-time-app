@@ -137,8 +137,7 @@ export default function TimetableScreen({ isActive = true }: { isActive?: boolea
   const styles = useTimetableStyles();
   const { t, formatDuration, formatRelativeDuration } = useI18n();
   const insets = useSafeAreaInsets();
-  const { settings, update, toggleKojoriFavorite, toggleTbilisiFavorite } =
-    useSettings();
+  const { settings, update } = useSettings();
   const { activeDirection } = useActiveDirection();
   const stopNames = useStopNames();
   const [filter, setFilter] = useState<Filter>("all");
@@ -179,8 +178,9 @@ export default function TimetableScreen({ isActive = true }: { isActive?: boolea
   const { stops: routeStops } = useRouteStops(direction);
   const {
     closestStop,
-    distanceMeters: closestStopDistance,
     status: closestStopStatus,
+    resolvedLocation,
+    requestLocation: handleRequestLocation,
   } = useClosestStop(direction, stopId, isActive);
   const stops = useMemo(
     () =>
@@ -194,21 +194,11 @@ export default function TimetableScreen({ isActive = true }: { isActive?: boolea
       }),
     [favoriteIds, routeStops, stopId, stopNames, t],
   );
-  const locationSuggestion = useMemo(
-    () =>
-      closestStopStatus === "available" &&
-      closestStop &&
-      closestStopDistance != null
-        ? {
-            stop: {
-              ...closestStop,
-              label: stopNames[closestStop.id] ?? closestStop.label,
-            },
-            distanceMeters: closestStopDistance,
-          }
-        : undefined,
-    [closestStop, closestStopDistance, closestStopStatus, stopNames],
-  );
+  const closestStopId =
+    (closestStopStatus === "available" || closestStopStatus === "fallback") &&
+    closestStop
+      ? closestStop.id
+      : null;
 
   function handleSelectStop(id: string) {
     if (direction === "toKojori") {
@@ -293,22 +283,13 @@ export default function TimetableScreen({ isActive = true }: { isActive?: boolea
                 stops={stops}
                 activeStopId={stopId}
                 accentColor={accentColor}
+                direction={direction}
                 onSelectStop={handleSelectStop}
                 mapReturnRoute="timetable"
-                locationSuggestion={locationSuggestion}
+                closestStopId={closestStopId}
+                userLocation={resolvedLocation}
+                onRequestLocation={handleRequestLocation}
                 showDirectionSwitch
-                addStopModal={{
-                  title:
-                    direction === "toKojori"
-                      ? t("timetableTbilisiStops")
-                      : t("timetableKojoriStops"),
-                  direction,
-                  favoriteIds,
-                  onToggle:
-                    direction === "toKojori"
-                      ? toggleTbilisiFavorite
-                      : toggleKojoriFavorite,
-                }}
                 label={t("stopTimetable")}
               />
             </View>

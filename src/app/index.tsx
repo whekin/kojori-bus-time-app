@@ -706,14 +706,11 @@ function DirectionDeparturesView({
   const { stops: routeStops } = useRouteStops(direction);
   const {
     closestStop,
-    distanceMeters: closestStopDistance,
     status: closestStopStatus,
+    resolvedLocation,
+    requestLocation: handleRequestLocation,
   } = useClosestStop(direction, activeStopId, isActive);
   const accentColor = direction === "toKojori" ? colors.route380 : colors.route316;
-  const stopPickerTitle =
-    direction === "toKojori"
-      ? t("timetableTbilisiStops")
-      : t("timetableKojoriStops");
   const favoriteStops = useMemo(
     () =>
       buildStopSelectorStops({
@@ -726,21 +723,11 @@ function DirectionDeparturesView({
       }),
     [activeStopId, favoriteIds, routeStops, stopNames, t],
   );
-  const locationSuggestion = useMemo(
-    () =>
-      closestStopStatus === "available" &&
-      closestStop &&
-      closestStopDistance != null
-        ? {
-            stop: {
-              ...closestStop,
-              label: stopNames[closestStop.id] ?? closestStop.label,
-            },
-            distanceMeters: closestStopDistance,
-          }
-        : undefined,
-    [closestStop, closestStopDistance, closestStopStatus, stopNames],
-  );
+  const closestStopId =
+    (closestStopStatus === "available" || closestStopStatus === "fallback") &&
+    closestStop
+      ? closestStop.id
+      : null;
 
   const {
     data: s380,
@@ -832,16 +819,13 @@ function DirectionDeparturesView({
             stops={favoriteStops}
             activeStopId={activeStopId}
             accentColor={accentColor}
+            direction={direction}
             onSelectStop={onSelectStop}
             mapReturnRoute="index"
-            locationSuggestion={locationSuggestion}
+            closestStopId={closestStopId}
+            userLocation={resolvedLocation}
+            onRequestLocation={handleRequestLocation}
             showDirectionSwitch
-            addStopModal={{
-              title: stopPickerTitle,
-              direction,
-              favoriteIds,
-              onToggle: onToggleFavorite,
-            }}
           />
 
           {isError && <ErrorBanner message={t("homeScheduleError")} />}

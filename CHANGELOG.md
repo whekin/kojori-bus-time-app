@@ -3,12 +3,16 @@
 ## v2026.8.15
 ### Improved
 
+- Picking a boarding stop is now done on a small map instead of from a list of names: your saved stops appear as markers, the active one is highlighted, and tapping another one switches to it.
+- The boarding stop control is shorter than the card it replaces, with the direction switch and the stop name sitting on the map rather than in rows above it.
+- The map centres itself on your stops and includes your own position when you are near them, so it needs no panning or zooming to be useful.
 - The start screen now leads with the departure itself: the next bus shows its time in large type with a full countdown, while the following bus sits underneath as a quiet second line.
 - Destination cards are taller and the headline is more compact, so the choice and the times get the space instead of the intro copy.
 - The location control moved into the page flow as a quiet row under the cards, with the toggle as the only tap target and the privacy note shown only once location is on.
 
 ### Fixed
 
+- Riders far from either route now get the direction's main stop suggested instead of nothing at all, both on the boarding stop control and when the app picks a side from your location on launch.
 - Destination cards now say when there are no more buses from the selected stop instead of showing an empty card with no explanation.
 - Refreshed the bundled offline timetable, which had aged out of its service dates and left cards blank on a fresh install without network.
 - The location control no longer overlaps the destination cards when its text wraps to two lines on wider phones.
