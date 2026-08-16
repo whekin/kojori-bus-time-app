@@ -10,7 +10,8 @@ export type MapRegion = {
 // Roughly 450m tall, so a lone stop does not zoom to maximum.
 export const MIN_SPAN_DELTA = 0.004;
 export const MAX_SPAN_DELTA = 0.06;
-const SPAN_PADDING = 1.35;
+// The active marker's radius plus a hair, so it sits fully on the map.
+const DEFAULT_MARGIN = 18;
 // Beyond this the rider is not "at" the stops, and framing them together
 // would zoom the stops themselves out of usefulness.
 const INCLUDE_USER_WITHIN_METERS = 3_000;
@@ -63,12 +64,47 @@ function roughDistanceMeters(a: Coordinate, b: Coordinate) {
  * Frames the boarding stops (and the rider, when they are close enough to be
  * useful) inside a card of the given aspect ratio.
  */
+export type Viewport = {
+  width: number;
+  height: number;
+  /** Space on the right taken by controls drawn over the map. */
+  insetRight?: number;
+  /** Space at the top taken by controls drawn over the map. */
+  insetTop?: number;
+  /** Space at the bottom reserved for the map provider's attribution. */
+  insetBottom?: number;
+  /** Breathing room around the outermost stops, in points. */
+  margin?: number;
+};
+
 export function buildPickerRegion(
   stops: RegionStop[],
   userLocation: Coordinate | null,
-  aspect: number,
+  viewport: Viewport,
 ): MapRegion | null {
   if (stops.length === 0) return null;
+
+  // Reserving more than this would leave too little map to frame stops in, and
+  // shrinking the target rect to near zero produces a region wider than the
+  // planet, which the native map rejects outright.
+  const insetRight = Math.min(viewport.insetRight ?? 0, viewport.width * 0.6);
+  const insetTop = Math.min(viewport.insetTop ?? 0, viewport.height * 0.5);
+  const insetBottom = Math.min(viewport.insetBottom ?? 0, viewport.height * 0.4);
+  const margin = Math.min(
+    viewport.margin ?? DEFAULT_MARGIN,
+    (viewport.width - insetRight) / 3,
+    (viewport.height - insetTop - insetBottom) / 3,
+  );
+
+  // The rect the stops have to land in, in view points. Margin is what a marker
+  // needs to sit fully on the map, and a marker's size does not shrink with
+  // zoom, so it belongs here rather than as a multiple of the stops' extent.
+  const left = Math.max(0, margin);
+  const top = Math.max(0, insetTop + margin);
+  const right = Math.max(left + 1, viewport.width - insetRight - margin);
+  const bottom = Math.max(top + 1, viewport.height - insetBottom - margin);
+  const rectWidth = right - left;
+  const rectHeight = bottom - top;
 
   const points: Coordinate[] = stops.map(stop => ({ latitude: stop.lat, longitude: stop.lon }));
 
@@ -86,24 +122,37 @@ export function buildPickerRegion(
   const minLon = Math.min(...longitudes);
   const maxLon = Math.max(...longitudes);
 
-  let latitudeDelta = (maxLat - minLat) * SPAN_PADDING;
-  let longitudeDelta = (maxLon - minLon) * SPAN_PADDING;
-
-  // Match the card's aspect ratio so Google renders the span we asked for
-  // instead of silently widening one axis to fit.
-  longitudeDelta = Math.max(longitudeDelta, latitudeDelta * aspect);
-  latitudeDelta = Math.max(latitudeDelta, longitudeDelta / aspect);
-
-  latitudeDelta = Math.min(MAX_SPAN_DELTA, Math.max(MIN_SPAN_DELTA, latitudeDelta));
-  longitudeDelta = Math.min(
-    MAX_SPAN_DELTA * aspect,
-    Math.max(MIN_SPAN_DELTA * aspect, longitudeDelta),
+  // Degrees of latitude per point, shared by both axes so the region's own
+  // aspect matches the view's — otherwise the map widens one axis to fit and
+  // shows a span we never asked for.
+  const scale = Math.max(
+    MIN_SPAN_DELTA / viewport.height,
+    Math.min(
+      MAX_SPAN_DELTA / viewport.height,
+      Math.max((maxLat - minLat) / rectHeight, (maxLon - minLon) / rectWidth),
+    ),
   );
 
+  // The region always covers the whole view; the centre shifts so the stops
+  // land in the target rect. The camera cannot be padded directly, because
+  // lite mode ignores mapPadding.
+  const offsetX = viewport.width / 2 - (left + right) / 2;
+  const offsetY = viewport.height / 2 - (top + bottom) / 2;
+
   return {
-    latitude: (minLat + maxLat) / 2,
-    longitude: (minLon + maxLon) / 2,
-    latitudeDelta,
-    longitudeDelta,
+    latitude: (minLat + maxLat) / 2 - offsetY * scale,
+    longitude: (minLon + maxLon) / 2 + offsetX * scale,
+    latitudeDelta: scale * viewport.height,
+    longitudeDelta: scale * viewport.width,
   };
+}
+
+/**
+ * Web Mercator zoom that shows `longitudeDelta` across a view `widthPx` wide.
+ * A region prop only asks the map to *cover* a box, and it rounds the zoom
+ * outwards to do so; a zoom says exactly what to show.
+ */
+export function zoomForRegion(region: MapRegion, widthPx: number) {
+  const TILE_SIZE = 256;
+  return Math.log2((360 * widthPx) / (TILE_SIZE * region.longitudeDelta));
 }

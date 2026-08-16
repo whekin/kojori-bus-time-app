@@ -4,7 +4,7 @@
 ### Improved
 
 - Picking a boarding stop is now done on a small map instead of from a list of names: your saved stops appear as markers, the active one is highlighted, and tapping another one switches to it.
-- The boarding stop control is shorter than the card it replaces, with the direction switch and the stop name sitting on the map rather than in rows above it.
+- The boarding stop control keeps its controls in a column down one side and the stop name in small type underneath, leaving the rest of the map to the stops themselves — enough room that the closely spaced Kojori stops no longer sit on top of each other.
 - The map centres itself on your stops and includes your own position when you are near them, so it needs no panning or zooming to be useful.
 - The start screen now leads with the departure itself: the next bus shows its time in large type with a full countdown, while the following bus sits underneath as a quiet second line.
 - Destination cards are taller and the headline is more compact, so the choice and the times get the space instead of the intro copy.

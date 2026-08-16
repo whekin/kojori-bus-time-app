@@ -1,9 +1,8 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import React, { useEffect, useRef, useState } from 'react';
-import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { PixelRatio, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import MapView from 'react-native-maps';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
-import Svg, { Defs, LinearGradient, Rect, Stop as SvgStop } from 'react-native-svg';
 
 import {
   GOOGLE_DARK_MINIMAL_MAP_STYLE,
@@ -17,16 +16,27 @@ import {
   buildPickerRegion,
   projectToView,
   regionsEqual,
+  zoomForRegion,
   type Coordinate,
   type MapRegion,
 } from '@/utils/map-region';
 
 const COLLAPSED_HEIGHT = 150;
 const EXPANDED_HEIGHT = 320;
-const DEFAULT_ASPECT = 360 / COLLAPSED_HEIGHT;
+const DEFAULT_VIEWPORT = { width: 360, height: COLLAPSED_HEIGHT };
 const MARKER_HIT_SIZE = 46;
+// Starting guess for the control column until it has measured itself.
+const CONTROL_COLUMN = 150;
+const COLUMN_GAP = 12;
+// Google's logo and attribution have to stay visible and unobstructed under the
+// Maps Platform terms, so the bottom-left corner is reserved, not used.
+const LOGO_INSET = 16;
+// Below this the framing is close enough that another correction would only
+// cost a redraw.
+const ZOOM_TOLERANCE = 0.05;
+const MAX_CALIBRATION_ROUNDS = 4;
 const USER_POINT_KEY = '__user__';
-const PROJECTION_SETTLE_MS = 120;
+const PROJECTION_SETTLE_MS = 160;
 const MARKER_FADE_MS = 130;
 const USER_DOT_SIZE = 24;
 const MONO = Platform.select({ android: 'monospace', ios: 'Menlo', default: 'monospace' });
@@ -85,7 +95,19 @@ export function StopMapPicker({
   // Set only when the map genuinely could not answer, so the approximate
   // fallback is a last resort rather than something shown while waiting.
   const [failedKey, setFailedKey] = useState<string | null>(null);
+  // Zoom is calibrated against what the map actually draws. The Web Mercator
+  // formula is off by a constant here — tile size and density conventions are
+  // not something to guess at — but the offset is stable, so one measured round
+  // settles it for every later framing.
+  const [zoomAdjust, setZoomAdjust] = useState(0);
+  // Calibration is a property of the device, not of the current framing, so it
+  // is applied a bounded number of times and then left alone. Re-deriving it on
+  // every direction change let a noisy estimate feed itself forever.
+  const calibrationRounds = useRef(0);
   const [cardSize, setCardSize] = useState({ width: 0, height: 0 });
+  // The switch is as wide as the destination name, which differs per direction
+  // and per language, so the column measures itself rather than being guessed.
+  const [columnSize, setColumnSize] = useState({ width: CONTROL_COLUMN, height: 0 });
   const [expanded, setExpanded] = useState(false);
   // Lite mode also reports a map press when a marker is hit, so a marker tap
   // must not toggle the size on its way to selecting the stop.
@@ -98,11 +120,33 @@ export function StopMapPicker({
   // the size it currently has, so re-framing has to happen after the resize has
   // landed. onLayout gives us exactly that edge, and since the size switches
   // between two fixed states it fires once per toggle rather than per frame.
-  const aspect = cardSize.width > 0 && cardSize.height > 0
-    ? cardSize.width / cardSize.height
-    : DEFAULT_ASPECT;
-  const region = useStableRegion(buildPickerRegion(geoStops, userLocation ?? null, aspect));
+  // The controls occupy the top-right corner, so the stops can be kept clear of
+  // them either by reserving a column down the side or a band across the top.
+  // Which one wastes less depends on how the stops are strung out: a column
+  // costs width, a band costs height. Build both and keep the tighter framing.
+  const measured = cardSize.width > 0 && cardSize.height > 0;
+  const base = measured
+    ? { width: cardSize.width, height: cardSize.height, insetBottom: LOGO_INSET }
+    : DEFAULT_VIEWPORT;
+  const asColumn = buildPickerRegion(geoStops, userLocation ?? null, {
+    ...base,
+    insetRight: measured ? columnSize.width + COLUMN_GAP : 0,
+  });
+  const asBand = measured && columnSize.height > 0
+    ? buildPickerRegion(geoStops, userLocation ?? null, {
+        ...base,
+        insetTop: columnSize.height + COLUMN_GAP,
+      })
+    : null;
+  const tightest = asBand && asColumn && asBand.latitudeDelta < asColumn.latitudeDelta
+    ? asBand
+    : asColumn;
+  const region = useStableRegion(tightest);
   const activeStop = stops.find(stop => stop.id === activeStopId) ?? stops[0];
+  // A region prop only asks the map to cover a box and rounds the zoom outwards
+  // to do it — measured at 1.6-1.8x on a card this short. A camera says exactly
+  // what to show, so the framing is the one we computed.
+  const requestedRegion = region;
 
   const projectionKey = [
     expanded,
@@ -111,6 +155,9 @@ export function StopMapPicker({
     region?.latitudeDelta,
     cardSize.width,
     cardSize.height,
+    columnSize.width,
+    columnSize.height,
+    zoomAdjust.toFixed(2),
     geoStops.map(stop => stop.id).join(','),
     userLocation?.latitude,
     userLocation?.longitude,
@@ -128,34 +175,52 @@ export function StopMapPicker({
     if (!mapReady || !region || cardSize.width <= 0) return undefined;
 
     let cancelled = false;
-    const targets: { key: string; coordinate: Coordinate }[] = geoStops.map(stop => ({
-      key: stop.id,
-      coordinate: { latitude: stop.lat, longitude: stop.lon },
-    }));
-    if (userLocation) targets.push({ key: USER_POINT_KEY, coordinate: userLocation });
 
-    // The camera applies a frame after the region prop lands, so asking any
-    // sooner returns positions for the previous view.
+    // One native call, not one per stop: pointForCoordinate runs on the UI
+    // thread, and a call per marker per direction change queued up enough work
+    // to hang the app outright. The visible bounds give the same answer, and
+    // the projection from them is ours and already covered by tests.
     const timeoutId = setTimeout(() => {
-      Promise.all(
-        targets.map(target =>
-          mapRef.current
-            ?.pointForCoordinate(target.coordinate)
-            .then(point => [target.key, point] as const)
-            .catch(() => null),
-        ),
-      ).then(results => {
-        if (cancelled) return;
-        const next: Record<string, { x: number; y: number }> = {};
-        for (const result of results) {
-          if (result) next[result[0]] = { x: result[1].x, y: result[1].y };
-        }
-        if (Object.keys(next).length > 0) {
+      mapRef.current
+        ?.getMapBoundaries()
+        .then(bounds => {
+          if (cancelled || !bounds?.northEast || !bounds?.southWest) return;
+
+          const shownLatitudeDelta = bounds.northEast.latitude - bounds.southWest.latitude;
+          const shownLongitudeDelta = bounds.northEast.longitude - bounds.southWest.longitude;
+          if (!(shownLatitudeDelta > 0) || !(shownLongitudeDelta > 0)) return;
+
+          const shown = {
+            latitude: (bounds.northEast.latitude + bounds.southWest.latitude) / 2,
+            longitude: (bounds.northEast.longitude + bounds.southWest.longitude) / 2,
+            latitudeDelta: shownLatitudeDelta,
+            longitudeDelta: shownLongitudeDelta,
+          };
+
+          const next: Record<string, { x: number; y: number }> = {};
+          for (const stop of geoStops) {
+            next[stop.id] = projectToView(
+              { latitude: stop.lat, longitude: stop.lon },
+              shown,
+              cardSize,
+            );
+          }
+          if (userLocation) {
+            next[USER_POINT_KEY] = projectToView(userLocation, shown, cardSize);
+          }
           setProjected({ key: projectionKey, points: next });
-        } else {
-          setFailedKey(projectionKey);
-        }
-      });
+
+          if (region && calibrationRounds.current < MAX_CALIBRATION_ROUNDS) {
+            const drift = Math.log2(shownLatitudeDelta / region.latitudeDelta);
+            calibrationRounds.current += 1;
+            if (Math.abs(drift) > ZOOM_TOLERANCE && Number.isFinite(drift)) {
+              setZoomAdjust(previous => Math.max(-6, Math.min(6, previous + drift)));
+            }
+          }
+        })
+        .catch(() => {
+          if (!cancelled) setFailedKey(projectionKey);
+        });
     }, PROJECTION_SETTLE_MS);
 
     return () => {
@@ -180,6 +245,7 @@ export function StopMapPicker({
   if (!region || !activeStop) return null;
 
   return (
+    <View>
     <View
       style={[
         styles.card,
@@ -199,8 +265,13 @@ export function StopMapPicker({
       }}>
       <MapView
         style={StyleSheet.absoluteFill}
-        liteMode
-        region={region}
+        camera={requestedRegion ? {
+          center: { latitude: requestedRegion.latitude, longitude: requestedRegion.longitude },
+          zoom: zoomForRegion(requestedRegion, cardSize.width * PixelRatio.get()) + zoomAdjust,
+          pitch: 0,
+          heading: 0,
+          altitude: 0,
+        } : undefined}
         userInterfaceStyle={colors.mode}
         customMapStyle={
           colors.mode === 'dark' ? GOOGLE_DARK_MINIMAL_MAP_STYLE : GOOGLE_LIGHT_MINIMAL_MAP_STYLE
@@ -294,29 +365,20 @@ export function StopMapPicker({
         ) : null}
       </Animated.View>
 
-      <Svg pointerEvents="none" style={styles.captionScrim} width="100%" height="46">
-        <Defs>
-          <LinearGradient id="stop-map-caption" x1="0" y1="0" x2="0" y2="1">
-            <SvgStop offset="0" stopColor={colors.bg} stopOpacity="0" />
-            <SvgStop offset="0.55" stopColor={colors.bg} stopOpacity="0.72" />
-            <SvgStop offset="1" stopColor={colors.bg} stopOpacity="0.93" />
-          </LinearGradient>
-        </Defs>
-        <Rect x="0" y="0" width="100%" height="46" fill="url(#stop-map-caption)" />
-      </Svg>
+      <View
+        style={styles.controlColumn}
+        onLayout={event => {
+          const { width, height } = event.nativeEvent.layout;
+          if (width <= 0 || height <= 0) return;
+          setColumnSize(previous =>
+            previous.width === width && previous.height === height
+              ? previous
+              : { width, height },
+          );
+        }}>
+        {directionSwitch}
 
-      <View pointerEvents="none" style={styles.caption}>
-        <Text style={[styles.captionName, { fontFamily: DISPLAY }]} numberOfLines={1}>
-          {activeStop.label}
-        </Text>
-        <Text style={[styles.captionCode, { fontFamily: MONO }]}>
-          {'#' + (activeStop.id.split(':')[1] ?? activeStop.id)}
-        </Text>
-      </View>
-
-      {directionSwitch ? <View style={styles.switchSlot}>{directionSwitch}</View> : null}
-
-      <View style={styles.cornerActions}>
+        <View style={styles.columnChips}>
         {!userLocation && onRequestLocation ? (
           <Pressable
             accessibilityRole="button"
@@ -364,9 +426,23 @@ export function StopMapPicker({
             },
           ]}>
           <MaterialCommunityIcons name="map-marker-radius" size={13} color={accentColor} />
-          <Text style={[styles.chipText, { color: accentColor }]}>{t('tabsMap')}</Text>
         </Pressable>
+        </View>
       </View>
+    </View>
+
+    <View style={styles.infoRow}>
+      <Text
+        style={[styles.captionName, { fontFamily: DISPLAY }]}
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        minimumFontScale={0.85}>
+        {activeStop.label}
+      </Text>
+      <Text style={[styles.captionCode, { fontFamily: MONO }]}>
+        {'#' + (activeStop.id.split(':')[1] ?? activeStop.id)}
+      </Text>
+    </View>
     </View>
   );
 }
@@ -413,16 +489,18 @@ function createStyles(C: AppColors) {
       borderRadius: 15,
       borderWidth: 3,
     },
+    // Deliberately small: the Kojori stops sit close enough together that a
+    // larger idle dot makes neighbours touch.
     markerDotIdle: {
-      width: 20,
-      height: 20,
-      borderRadius: 10,
-      borderWidth: 3,
+      width: 14,
+      height: 14,
+      borderRadius: 7,
+      borderWidth: 2.5,
     },
     closestHalo: {
       position: 'absolute',
-      width: 32,
-      height: 32,
+      width: 26,
+      height: 26,
       borderRadius: 16,
       borderWidth: 2,
     },
@@ -443,21 +521,19 @@ function createStyles(C: AppColors) {
       borderColor: '#FFFFFF',
       backgroundColor: '#3B82F6',
     },
-    captionScrim: { position: 'absolute', left: 0, right: 0, bottom: 0 },
-    caption: {
-      position: 'absolute',
-      left: 12,
-      right: 12,
-      bottom: 8,
+    infoRow: {
       flexDirection: 'row',
-      alignItems: 'baseline',
+      alignItems: 'center',
       gap: 7,
+      marginTop: 8,
+      paddingHorizontal: 2,
+      minHeight: 26,
     },
     captionName: {
       flexShrink: 1,
       color: C.text,
-      fontSize: 14,
-      lineHeight: 18,
+      fontSize: 13,
+      lineHeight: 17,
       fontWeight: '700',
     },
     captionCode: {
@@ -467,11 +543,14 @@ function createStyles(C: AppColors) {
       lineHeight: 14,
       fontWeight: '700',
     },
-    switchSlot: { position: 'absolute', left: 10, top: 10 },
-    cornerActions: {
+    controlColumn: {
       position: 'absolute',
       right: 10,
       top: 10,
+      alignItems: 'flex-end',
+      gap: 8,
+    },
+    columnChips: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 6,
@@ -485,7 +564,6 @@ function createStyles(C: AppColors) {
       borderRadius: 13,
       paddingHorizontal: 8,
     },
-    chipText: { fontSize: 11, lineHeight: 15, fontWeight: '800' },
   });
 }
 
