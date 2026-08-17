@@ -10,6 +10,7 @@ import {
   extractStopTimes,
   findStop,
   formatTime,
+  getSchedulePeriodForDate,
   parseTimeToMins,
   resolveTtcLookupStopId,
   ROUTES,
@@ -98,13 +99,6 @@ const WIDGET_FUTURE_DAYS = 7;
 const WIDGET_MAX_ITEMS = 400;
 const LATE_DEPARTURE_GRACE_MS = 5 * 60_000;
 
-function formatLocalServiceDate(date: Date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
-
 function buildWidgetItems(
   stopId: string,
   schedule380: SchedulePeriod[] | undefined,
@@ -128,9 +122,7 @@ function buildWidgetItems(
     for (let dayOffset = 0; dayOffset < WIDGET_FUTURE_DAYS; dayOffset += 1) {
       const serviceDate = new Date(baseDate);
       serviceDate.setDate(baseDate.getDate() + dayOffset);
-      const period =
-        schedule.find(candidate => candidate.serviceDates.includes(formatLocalServiceDate(serviceDate)))
-        ?? schedule[0];
+      const period = getSchedulePeriodForDate(schedule, serviceDate);
       if (!period) continue;
 
       const stopTimes = extractStopTimes(period, lookupStopId);

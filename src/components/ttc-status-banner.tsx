@@ -4,8 +4,8 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-nati
 
 import { alpha, type AppColors } from '@/constants/theme';
 import { useAppColors } from '@/hooks/use-app-colors';
-import { useEffectiveTtcHealth } from '@/hooks/use-effective-ttc-health';
 import { useI18n } from '@/hooks/use-i18n';
+import { useTtcStatusCopy } from '@/hooks/use-ttc-status-copy';
 import { useTtcStatusRefresh } from '@/hooks/use-ttc-status-refresh';
 
 function useStyles() {
@@ -39,54 +39,19 @@ function TtcStatusBannerBase({
   constrained?: boolean;
 }) {
   const { colors, styles } = useStyles();
-  const { t, formatRelativeDuration } = useI18n();
-  const { status, lastSuccessAt } = useEffectiveTtcHealth();
+  const { t } = useI18n();
+  const statusCopy = useTtcStatusCopy();
   const { isRefreshing, refreshTtcStatus } = useTtcStatusRefresh();
   const [expanded, setExpanded] = useState(false);
 
-  if (status === 'healthy') return null;
+  if (!statusCopy) return null;
 
-  const isOffline = status === 'offline';
-  const isDeviceOffline = status === 'device-offline';
-  const isRateLimited = status === 'rate-limited';
-  const isSevere = isOffline || isRateLimited || isDeviceOffline;
-  const accent = isSevere ? colors.error : colors.warning;
-  const textColor = isSevere ? colors.rose : colors.sand;
+  const accent = statusCopy.isSevere ? colors.error : colors.warning;
+  const textColor = statusCopy.isSevere ? colors.rose : colors.sand;
 
-  const timeAgo = lastSuccessAt
-    ? (() => {
-        const mins = Math.floor((Date.now() - lastSuccessAt) / 60000);
-        if (mins < 1) return t('ttcJustNow');
-        if (mins < 60) return formatRelativeDuration('past', 'minute', mins);
-        const hours = Math.floor(mins / 60);
-        return formatRelativeDuration('past', 'hour', hours);
-      })()
-    : null;
-
-  const baseLabel = isRateLimited
-    ? t('ttcRateLimited')
-    : isDeviceOffline
-      ? t('ttcDeviceOffline')
-      : isOffline
-        ? t('ttcOffline')
-        : t('ttcUnstable');
-
-  const label = constrained ? baseLabel : timeAgo ? `${baseLabel} · ${timeAgo}` : baseLabel;
-
-  const message = isRateLimited
-    ? t('ttcRateDetail')
-    : isDeviceOffline
-      ? t('ttcDeviceOfflineDetail')
-      : isOffline
-        ? t('ttcOfflineDetail')
-        : t('ttcUnstableDetail');
-
-  const freshness = lastSuccessAt
-    ? t('ttcLastUpdate', { time: new Date(lastSuccessAt).toLocaleTimeString('en-GB', {
-      hour: '2-digit',
-      minute: '2-digit',
-    }) })
-    : t('ttcNoResponse');
+  const label = constrained ? statusCopy.label : statusCopy.labelWithAge;
+  const message = statusCopy.detail;
+  const freshness = statusCopy.meta;
 
   return (
     <View

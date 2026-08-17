@@ -12,7 +12,8 @@ bun web                # Start on web
 bun lint               # Run ESLint via expo lint
 bun test               # Run unit tests (bun:test; *.test.ts next to sources)
 bun add <pkg>          # Add dependency (use instead of npm install)
-bun scripts/bake-ttc.ts  # Re-fetch static TTC data and write src/assets/ttc-baked.ts
+bun scripts/bake-ttc.ts  # Re-fetch static TTC data and write assets/ttc-baked.ts
+bun bake:check         # Fail if the baked timetable is about to run out of service days
 bun release            # Full release pipeline (see Releasing below)
 ```
 
@@ -22,7 +23,9 @@ Unit tests cover the TTC departure logic (`src/services/ttc.test.ts`, `ttc-offli
 
 Full pipeline: `bun release` (or `bun release 2026.5.1` for explicit version).
 
-Steps: preflight → changelog check → stamp version → prebuild → build APK → commit → tag → push → GitHub release with APK.
+Steps: preflight → changelog check → bake TTC data + freshness check → stamp version → prebuild → build APK → commit → tag → push → GitHub release with APK.
+
+**Baked data freshness**: `bun bake:check` fails when `assets/ttc-baked.ts` does not cover today plus at least 3 more service days. Baked `serviceDates` only run ~a week from the bake. Past that the app keeps serving the period matching the weekday (see `getSchedulePeriodForDate` in `src/services/ttc.ts`) and flags it as unconfirmed, but the shipped data should still be current. The release runs the check after baking (including on `--continue`, where the bake step is skipped), and `release:android:preflight` runs it too.
 
 **Versioning**: Date-based `YYYY.M.D` (e.g. `2026.4.15`). Build number is `YYYYMMDD00` — last two digits for same-day re-releases. In dev, `app.config.ts` auto-computes version from today's date. Production builds use stamped values from `app.json`.
 

@@ -52,6 +52,7 @@ import { useTtcOfflineStatus } from '@/hooks/use-ttc-offline';
 import { findStop, StopInfo } from '@/services/ttc';
 import {
     clearAllTtcCache,
+    getBakedScheduleCoverageEnd,
     refreshTtcOfflineDataset,
     ROUTE_POLYLINES_CACHE_TTL,
     ROUTE_STOPS_CACHE_TTL,
@@ -233,6 +234,16 @@ function formatBakedAt(timestamp: string, language: 'en' | 'ka' | 'ru') {
     year: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
+  });
+}
+
+function formatBakedCoverageEnd(serviceDate: string | null, language: 'en' | 'ka' | 'ru') {
+  if (!serviceDate) return '—';
+  const [year, month, day] = serviceDate.split('-').map(Number);
+  return new Date(year, month - 1, day).toLocaleDateString(languageDateLocale(language), {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
   });
 }
 
@@ -1352,6 +1363,7 @@ export default function SettingsScreen({ isActive = true }: { isActive?: boolean
     { value: 'offline', label: t('ttcOffline'), caption: t('settingsTtcDemoOfflineNote') },
     { value: 'rate-limited', label: t('ttcRateLimited'), caption: t('settingsTtcDemoRateNote') },
     { value: 'device-offline', label: t('ttcDeviceOffline'), caption: t('settingsTtcDemoDeviceNote') },
+    { value: 'schedule-stale', label: t('ttcScheduleStale'), caption: t('settingsTtcDemoScheduleNote') },
   ];
   const activeLanguageLabel = languageOptions.find(option => option.value === resolvedLanguage)?.label ?? t('commonEnglish');
   const activeLanguageDetail = settings.language === 'system' ? t('commonSystem') : t('settingsPinnedLanguage');
@@ -2025,6 +2037,13 @@ export default function SettingsScreen({ isActive = true }: { isActive?: boolean
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>{t('settingsBakedAsset')}</Text>
             <Text style={[styles.infoValue, styles.infoValueWrap]}>{formatBakedAt(BAKED_AT, resolvedLanguage)}</Text>
+          </View>
+          <View style={styles.itemDivider} />
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>{t('settingsBakedCoverage')}</Text>
+            <Text style={[styles.infoValue, styles.infoValueWrap]}>
+              {formatBakedCoverageEnd(getBakedScheduleCoverageEnd(), resolvedLanguage)}
+            </Text>
           </View>
         </View>
 

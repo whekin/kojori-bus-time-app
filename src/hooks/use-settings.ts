@@ -32,7 +32,7 @@ export type SharedDirection = 'toKojori' | 'toTbilisi';
  * - 'remember': bypass the start screen and resume the last chosen direction.
  */
 export type LaunchBehavior = 'ask' | 'smart' | 'remember';
-export type TtcHealthDemo = 'off' | 'degraded' | 'offline' | 'rate-limited' | 'device-offline';
+export type TtcHealthDemo = 'off' | 'degraded' | 'offline' | 'rate-limited' | 'device-offline' | 'schedule-stale';
 
 export interface Settings {
   /** Stop IDs shown as chips on home screen (→ Tbilisi direction) */

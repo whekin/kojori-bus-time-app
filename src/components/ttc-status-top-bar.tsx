@@ -4,12 +4,13 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-nati
 
 import { alpha, type AppColors } from '@/constants/theme';
 import { useAppColors } from '@/hooks/use-app-colors';
-import { useEffectiveTtcHealth } from '@/hooks/use-effective-ttc-health';
 import { useI18n } from '@/hooks/use-i18n';
+import { useTtcStatusCopy } from '@/hooks/use-ttc-status-copy';
 import { useTtcStatusRefresh } from '@/hooks/use-ttc-status-refresh';
 
 type StatusBarItem = {
   key: string;
+  icon: React.ComponentProps<typeof MaterialCommunityIcons>['name'];
   modeLabel: string;
   label: string;
   detail: string;
@@ -23,60 +24,25 @@ type StatusBarItem = {
 export function TtcStatusTopBar() {
   const colors = useAppColors();
   const styles = useStyles(colors);
-  const { t, formatRelativeDuration } = useI18n();
-  const { status, lastSuccessAt } = useEffectiveTtcHealth();
+  const { t } = useI18n();
+  const statusCopy = useTtcStatusCopy();
   const { isRefreshing, refreshTtcStatus } = useTtcStatusRefresh();
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
 
   let item: StatusBarItem | null = null;
 
-  if (status !== 'healthy') {
-    const isOffline = status === 'offline';
-    const isDeviceOffline = status === 'device-offline';
-    const isRateLimited = status === 'rate-limited';
-    const isSevere = isOffline || isRateLimited || isDeviceOffline;
-    const accent = isSevere ? colors.error : colors.warning;
-    const textColor = isSevere ? colors.rose : colors.sand;
-    const baseLabel = isRateLimited
-      ? t('ttcRateLimited')
-      : isDeviceOffline
-        ? t('ttcDeviceOffline')
-        : isOffline
-          ? t('ttcOffline')
-          : t('ttcUnstable');
-    const timeAgo = lastSuccessAt
-      ? (() => {
-          const mins = Math.floor((Date.now() - lastSuccessAt) / 60000);
-          if (mins < 1) return t('ttcJustNow');
-          if (mins < 60) return formatRelativeDuration('past', 'minute', mins);
-          const hours = Math.floor(mins / 60);
-          return formatRelativeDuration('past', 'hour', hours);
-        })()
-      : null;
-
+  if (statusCopy) {
     item = {
       key: 'ttc',
-      modeLabel: t('ttcOfflineMode'),
-      label: timeAgo ? `${baseLabel} · ${timeAgo}` : baseLabel,
-      detail: isRateLimited
-        ? t('ttcRateDetail')
-        : isDeviceOffline
-          ? t('ttcDeviceOfflineDetail')
-          : isOffline
-            ? t('ttcOfflineDetail')
-            : t('ttcUnstableDetail'),
-      meta: lastSuccessAt
-        ? t('ttcLastUpdate', {
-            time: new Date(lastSuccessAt).toLocaleTimeString('en-GB', {
-              hour: '2-digit',
-              minute: '2-digit',
-            }),
-          })
-        : t('ttcNoResponse'),
+      icon: statusCopy.status === 'schedule-stale' ? 'calendar-alert' : 'cloud-alert',
+      modeLabel: statusCopy.status === 'schedule-stale' ? t('ttcScheduleStaleMode') : t('ttcOfflineMode'),
+      label: statusCopy.labelWithAge,
+      detail: statusCopy.detail,
+      meta: statusCopy.meta,
       actionLabel: t('commonRefresh'),
       onAction: refreshTtcStatus,
-      accentColor: accent,
-      textColor,
+      accentColor: statusCopy.isSevere ? colors.error : colors.warning,
+      textColor: statusCopy.isSevere ? colors.rose : colors.sand,
     };
   }
 
@@ -118,7 +84,7 @@ export function TtcStatusTopBar() {
               backgroundColor: alpha(primaryItem.accentColor, '14'),
             },
           ]}>
-          <MaterialCommunityIcons name="cloud-alert" size={15} color={primaryItem.textColor} />
+          <MaterialCommunityIcons name={primaryItem.icon} size={15} color={primaryItem.textColor} />
         </View>
         <Text style={[styles.statusBarMode, { color: primaryItem.textColor }]} numberOfLines={1}>
           {primaryItem.modeLabel}

@@ -15,6 +15,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 
 import { SettingsSwitch } from '@/components/settings-switch';
+import { TtcStatusChip } from '@/components/ttc-status-banner';
 import { alpha, type AppColors } from '@/constants/theme';
 import { useActiveDirection } from '@/hooks/use-active-direction';
 import { useAppColors } from '@/hooks/use-app-colors';
@@ -274,6 +275,7 @@ export function StartScreen({ onDone }: { onDone: () => void }) {
             <Image source={APP_ICON} style={styles.brandIcon} />
             <Text style={styles.brandName} numberOfLines={1}>Kojoring Time</Text>
           </View>
+          <TtcStatusChip constrained />
         </View>
 
         <View style={styles.header}>

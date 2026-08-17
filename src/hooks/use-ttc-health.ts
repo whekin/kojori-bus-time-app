@@ -1,6 +1,13 @@
 import { useSyncExternalStore } from 'react';
 
-export type TtcHealthStatus = 'healthy' | 'degraded' | 'offline' | 'rate-limited' | 'device-offline';
+export type TtcHealthStatus =
+  | 'healthy'
+  | 'degraded'
+  | 'offline'
+  | 'rate-limited'
+  | 'device-offline'
+  /** Bundled/cached timetable ran past its serviceDates — no departures can be shown. */
+  | 'schedule-stale';
 
 interface TtcHealthState {
   lastSuccessAt: number | null;

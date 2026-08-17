@@ -386,11 +386,52 @@ export async function fetchVehiclePositions(
 
 // ── Schedule helpers ──────────────────────────────────────────────────────────
 
-function serviceDateString(date: Date): string {
+/** Local "YYYY-MM-DD" key matching the serviceDates entries in TTC schedules. */
+export function serviceDateString(date: Date): string {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
   const day = String(date.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
+}
+
+/** True when any period lists this date, i.e. the schedule can produce departures for it. */
+export function scheduleCoversDate(periods: SchedulePeriod[] | undefined, date = new Date()): boolean {
+  if (!periods?.length) return false;
+  const serviceDate = serviceDateString(date);
+  return periods.some(period => period.serviceDates.includes(serviceDate));
+}
+
+/** Last date any period covers, as "YYYY-MM-DD", or null when the schedule is empty. */
+export function scheduleCoverageEnd(periods: SchedulePeriod[] | undefined): string | null {
+  const dates = (periods ?? []).flatMap(period => period.serviceDates);
+  if (!dates.length) return null;
+  return dates.reduce((latest, date) => (date > latest ? date : latest));
+}
+
+export interface ScheduleCoverage {
+  /** False once every known schedule has run past its serviceDates — times still show, but they are unconfirmed. */
+  coversToday: boolean;
+  /** Last service date any known schedule covers, as "YYYY-MM-DD". */
+  coverageEnd: string | null;
+}
+
+/** Coverage across the schedules in play (live, cached, or bundled). */
+export function combinedScheduleCoverage(
+  schedules: (SchedulePeriod[] | undefined)[],
+  now = new Date(),
+): ScheduleCoverage {
+  const known = schedules.filter((periods): periods is SchedulePeriod[] => Boolean(periods?.length));
+
+  // Nothing loaded yet — unknown, not expired.
+  if (known.length === 0) return { coversToday: true, coverageEnd: null };
+
+  return {
+    coversToday: known.some(periods => scheduleCoversDate(periods, now)),
+    coverageEnd: known
+      .map(periods => scheduleCoverageEnd(periods))
+      .filter((date): date is string => date !== null)
+      .reduce<string | null>((latest, date) => (latest === null || date > latest ? date : latest), null),
+  };
 }
 
 function addServiceDays(date: Date, days: number): Date {
@@ -400,20 +441,61 @@ function addServiceDays(date: Date, days: number): Date {
   return next;
 }
 
-function getSchedulePeriodForDate(
+const SERVICE_DAYS = [
+  'SUNDAY',
+  'MONDAY',
+  'TUESDAY',
+  'WEDNESDAY',
+  'THURSDAY',
+  'FRIDAY',
+  'SATURDAY',
+] as const;
+
+function hasKnownDayRange(period: SchedulePeriod): boolean {
+  return (
+    SERVICE_DAYS.includes(period.fromDay as (typeof SERVICE_DAYS)[number]) &&
+    SERVICE_DAYS.includes(period.toDay as (typeof SERVICE_DAYS)[number])
+  );
+}
+
+/** True when the period's fromDay–toDay range (wrapping over the weekend) contains this weekday. */
+function periodCoversWeekday(period: SchedulePeriod, date: Date): boolean {
+  if (!hasKnownDayRange(period)) return false;
+
+  const from = SERVICE_DAYS.indexOf(period.fromDay as (typeof SERVICE_DAYS)[number]);
+  const to = SERVICE_DAYS.indexOf(period.toDay as (typeof SERVICE_DAYS)[number]);
+  const weekday = date.getDay();
+
+  return from <= to ? weekday >= from && weekday <= to : weekday >= from || weekday <= to;
+}
+
+/**
+ * Period to read times from for a date. TTC only lists ~a week of serviceDates, so once
+ * those lapse we keep serving the period whose weekday range matches instead of showing
+ * nothing — both Kojori routes run MONDAY–SUNDAY, so the times stay right and the status
+ * bar says they are no longer confirmed. A weekday no period covers is still a real gap.
+ */
+export function getSchedulePeriodForDate(
   periods: SchedulePeriod[] | undefined,
   date: Date,
 ): SchedulePeriod | undefined {
   if (!periods?.length) return undefined;
+
   const serviceDate = serviceDateString(date);
-  return periods.find(p => p.serviceDates.includes(serviceDate));
+  const exactMatch = periods.find(p => p.serviceDates.includes(serviceDate));
+  if (exactMatch) return exactMatch;
+
+  const weekdayMatch = periods.find(p => periodCoversWeekday(p, date));
+  if (weekdayMatch) return weekdayMatch;
+
+  // Day ranges are usable, so "no match" means this route genuinely does not run today.
+  // Only fall back blindly when the payload carries no readable day range at all.
+  return periods.some(hasKnownDayRange) ? undefined : periods[0];
 }
 
-/** Returns the schedule period valid for today, falling back to first period. */
+/** Returns the schedule period valid for today, falling back to the weekday's period. */
 export function getTodayPeriod(periods: SchedulePeriod[], now = new Date()): SchedulePeriod | undefined {
-  if (!periods.length) return undefined;
-  const today = serviceDateString(now);
-  return periods.find(p => p.serviceDates.includes(today)) ?? periods[0];
+  return getSchedulePeriodForDate(periods, now);
 }
 
 /** Extracts and returns raw time strings for a specific stop from a schedule period. */

@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * Full release pipeline: preflight → changelog → bake TTC data → stamp version → prebuild → build APK → commit → tag → push → GitHub release → EAS update.
+ * Full release pipeline: preflight → changelog → bake TTC data (+ freshness check) → stamp version → prebuild → build APK → commit → tag → push → GitHub release → EAS update.
  * Release notes are pulled from CHANGELOG.md. During normal development,
  * add notes under "## [UNRELEASED]"; release renames that heading to the
  * concrete version tag.
@@ -373,15 +373,19 @@ if (!isDone(state, 'changelog')) {
 
 // ── 3. Bake TTC data ────────────────────────────────────────────────────────
 
-step('3/9  Bake TTC data');
+step('3/9  Bake TTC data + freshness check');
 
 if (!isDone(state, 'bake_ttc')) {
   run('bun run bake:ttc');
   console.log('Fresh TTC data baked ✓');
   markDone(state, 'bake_ttc');
 } else {
-  console.log('Already completed ✓');
+  console.log('Bake already completed ✓');
 }
+
+// Always verified, including on --continue runs where the bake itself was skipped:
+// shipping a timetable that has already run out of service days leaves the app empty.
+run('bun run bake:check');
 
 // ── 4. Stamp version ────────────────────────────────────────────────────────
 

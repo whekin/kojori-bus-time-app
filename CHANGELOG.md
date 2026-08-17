@@ -1,5 +1,17 @@
 # Changelog
 
+## [UNRELEASED]
+### Fixed
+
+- Departure times keep showing after the saved timetable passes the week of dates TTC confirmed. Both routes run the same times every day, so the app now serves the timetable for that weekday instead of emptying every card and list until it can reach TTC again.
+- The status bar says when the timetable is no longer confirmed, with the last confirmed date and a refresh button, so old times are labelled rather than silent. The start screen shows the same badge.
+- A route that genuinely does not run on a given weekday still shows its real next departure instead of pretending it runs.
+
+### Infra
+
+- Releases now verify the bundled timetable after baking it: `bun bake:check` fails the release (and the Android preflight) when the baked data does not cover today plus three more service days, so a build no longer ships a timetable that is already unconfirmed.
+- Settings lists the last date the bundled timetable is confirmed to, next to the bake timestamp.
+
 ## v2026.8.15
 ### Improved
 

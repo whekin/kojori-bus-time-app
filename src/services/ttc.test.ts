@@ -3,6 +3,7 @@ import { describe, expect, it } from 'bun:test';
 
 import type { ArrivalTime, Departure, SchedulePeriod } from './ttc';
 import {
+  combinedScheduleCoverage,
   computeUpcomingDepartures,
   getDepartureServiceBoundary,
   getLastDepartureToday,
@@ -13,6 +14,8 @@ import {
   isFinalDepartureToday,
   mergeArrivalsIntoSchedule,
   resolveTtcLookupStopId,
+  scheduleCoverageEnd,
+  scheduleCoversDate,
 } from './ttc';
 
 function makeDeparture(bus: '380' | '316', minsUntil: number, time: string): Departure {
@@ -674,15 +677,17 @@ describe('service boundary helpers', () => {
     expect(boundary.nextServiceDeparture?.time).toBe('08:30');
   });
 
-  it('finds the next available service when there is no service today', () => {
-    const schedule380 = makeSchedule(['2026-04-17'], { '1:stop': '09:15' });
-    const schedule316 = makeSchedule(['2026-04-18'], { '1:stop': '08:00' });
+  it('finds the next available service when the route does not run today', () => {
+    // Weekend-only service: 2026-04-15 is a Wednesday, so the next run is Saturday.
+    const schedule380: SchedulePeriod[] = [
+      { ...makeSchedule(['2026-04-18'], { '1:stop': '09:15' })[0], fromDay: 'SATURDAY', toDay: 'SUNDAY' },
+    ];
     const now = new Date(2026, 3, 15, 10, 0);
 
-    const nextService = getNextServiceDeparture(schedule380, schedule316, '1:stop', now);
+    const nextService = getNextServiceDeparture(schedule380, undefined, '1:stop', now);
 
-    expect(nextService?.date).toBe('2026-04-17');
-    expect(nextService?.daysUntil).toBe(2);
+    expect(nextService?.date).toBe('2026-04-18');
+    expect(nextService?.daysUntil).toBe(3);
     expect(nextService?.time).toBe('09:15');
   });
 
@@ -799,5 +804,112 @@ describe('computeUpcomingDepartures', () => {
     );
 
     expect(result.map(dep => dep.time)).toEqual(['15:10']);
+  });
+});
+
+describe('schedule coverage', () => {
+  const schedule = makeSchedule(['2026-08-15', '2026-08-16', '2026-08-17'], { '1:3932': '08:00,09:00' });
+
+  it('reports whether a schedule covers a given local date', () => {
+    expect(scheduleCoversDate(schedule, new Date(2026, 7, 16, 23, 30))).toBe(true);
+    expect(scheduleCoversDate(schedule, new Date(2026, 7, 18, 0, 30))).toBe(false);
+    expect(scheduleCoversDate(undefined, new Date(2026, 7, 16))).toBe(false);
+  });
+
+  it('reports the last covered service date', () => {
+    expect(scheduleCoverageEnd(schedule)).toBe('2026-08-17');
+    expect(scheduleCoverageEnd([])).toBeNull();
+    expect(scheduleCoverageEnd(undefined)).toBeNull();
+  });
+
+  it('treats an unloaded schedule set as unknown rather than expired', () => {
+    expect(combinedScheduleCoverage([undefined, []], new Date(2026, 7, 20))).toEqual({
+      coversToday: true,
+      coverageEnd: null,
+    });
+  });
+
+  it('covers today when any loaded schedule still lists it', () => {
+    const expired = makeSchedule(['2026-08-01'], { '1:3932': '08:00' });
+
+    expect(combinedScheduleCoverage([expired, schedule], new Date(2026, 7, 17, 6, 0))).toEqual({
+      coversToday: true,
+      coverageEnd: '2026-08-17',
+    });
+  });
+
+  it('flags expiry once every loaded schedule has run past its service dates', () => {
+    expect(combinedScheduleCoverage([schedule], new Date(2026, 7, 18, 6, 0))).toEqual({
+      coversToday: false,
+      coverageEnd: '2026-08-17',
+    });
+  });
+});
+
+describe('schedule period fallback past serviceDates', () => {
+  it('keeps returning departures after the baked service dates lapse', () => {
+    const schedule380 = makeSchedule(['2026-08-15', '2026-08-16'], { '1:3932': '08:00,09:00' });
+
+    const departures = getUpcomingServiceDepartures(
+      schedule380,
+      undefined,
+      '1:3932',
+      new Date(2026, 7, 30, 7, 0),
+      2,
+    );
+
+    expect(departures.map(dep => dep.time)).toEqual(['08:00', '09:00']);
+    expect(departures[0].date).toBe('2026-08-30');
+  });
+
+  it('prefers the period whose weekday range matches the date', () => {
+    const weekdays: SchedulePeriod[] = [
+      { ...makeSchedule(['2026-08-17'], { '1:3932': '08:00' })[0], fromDay: 'MONDAY', toDay: 'FRIDAY' },
+      { ...makeSchedule(['2026-08-22'], { '1:3932': '10:00' })[0], fromDay: 'SATURDAY', toDay: 'SUNDAY' },
+    ];
+
+    // 2026-08-30 is a Sunday, well past both periods' serviceDates.
+    const sunday = getUpcomingServiceDepartures(weekdays, undefined, '1:3932', new Date(2026, 7, 30, 6, 0), 1);
+    expect(sunday.map(dep => dep.time)).toEqual(['10:00']);
+
+    // 2026-08-31 is a Monday.
+    const monday = getUpcomingServiceDepartures(weekdays, undefined, '1:3932', new Date(2026, 7, 31, 6, 0), 1);
+    expect(monday.map(dep => dep.time)).toEqual(['08:00']);
+  });
+
+  it('treats a MONDAY-SUNDAY period as covering every weekday', () => {
+    const everyDay = makeSchedule(['2026-08-15'], { '1:3932': '07:30' });
+
+    for (let dayOffset = 0; dayOffset < 7; dayOffset += 1) {
+      const departures = getUpcomingServiceDepartures(
+        everyDay,
+        undefined,
+        '1:3932',
+        new Date(2026, 8, 1 + dayOffset, 6, 0),
+        1,
+      );
+      expect(departures.map(dep => dep.time)).toEqual(['07:30']);
+    }
+  });
+
+  it('leaves a real gap on a weekday no period covers, even past the service dates', () => {
+    const weekendOnly: SchedulePeriod[] = [
+      { ...makeSchedule(['2026-04-18'], { '1:3932': '09:15' })[0], fromDay: 'SATURDAY', toDay: 'SUNDAY' },
+    ];
+
+    // 2026-09-02 is a Wednesday, months past the listed service date.
+    const departures = getUpcomingServiceDepartures(weekendOnly, undefined, '1:3932', new Date(2026, 8, 2, 6, 0), 1);
+
+    expect(departures[0].date).toBe('2026-09-05');
+    expect(departures[0].daysUntil).toBe(3);
+  });
+
+  it('still reports the timetable as unconfirmed while it serves those times', () => {
+    const schedule = makeSchedule(['2026-08-15', '2026-08-16'], { '1:3932': '08:00' });
+
+    expect(combinedScheduleCoverage([schedule], new Date(2026, 7, 30))).toEqual({
+      coversToday: false,
+      coverageEnd: '2026-08-16',
+    });
   });
 });

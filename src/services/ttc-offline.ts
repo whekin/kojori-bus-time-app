@@ -21,6 +21,8 @@ import {
     PolylinePoint,
     RouteGeometrySource,
     ROUTES,
+    scheduleCoverageEnd,
+    scheduleCoversDate,
     SchedulePeriod,
     StopInfo,
 } from '@/services/ttc';
@@ -410,12 +412,19 @@ export function getTtcOfflineSnapshot() {
   return snapshot;
 }
 
-/** True when today's date is covered by at least one baked schedule's serviceDates. */
-export function isBakedScheduleCurrent(): boolean {
-  const today = new Date().toISOString().split('T')[0];
-  return Object.values(BAKED_SCHEDULES).some((periods: unknown) =>
-    (periods as { serviceDates: string[] }[]).some(p => p.serviceDates.includes(today)),
+/** True when the given date is covered by at least one baked schedule's serviceDates. */
+export function isBakedScheduleCurrent(now = new Date()): boolean {
+  return Object.values(BAKED_SCHEDULES).some(periods =>
+    scheduleCoversDate(periods as unknown as SchedulePeriod[], now),
   );
+}
+
+/** Last service date the bundled schedules cover, as "YYYY-MM-DD". */
+export function getBakedScheduleCoverageEnd(): string | null {
+  return Object.values(BAKED_SCHEDULES)
+    .map(periods => scheduleCoverageEnd(periods as unknown as SchedulePeriod[]))
+    .filter((date): date is string => date !== null)
+    .reduce<string | null>((latest, date) => (latest === null || date > latest ? date : latest), null);
 }
 
 /**
