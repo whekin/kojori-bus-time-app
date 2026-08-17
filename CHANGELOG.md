@@ -1,6 +1,6 @@
 # Changelog
 
-## [UNRELEASED]
+## v2026.8.17
 ### Fixed
 
 - Departure times keep showing after the saved timetable passes the week of dates TTC confirmed. Both routes run the same times every day, so the app now serves the timetable for that weekday instead of emptying every card and list until it can reach TTC again.
