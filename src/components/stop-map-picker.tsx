@@ -35,6 +35,12 @@ const LOGO_INSET = 16;
 // cost a redraw.
 const ZOOM_TOLERANCE = 0.05;
 const MAX_CALIBRATION_ROUNDS = 4;
+
+// How far the map's own zoom sits from the Web Mercator figure. It is a
+// property of the device, not of any one framing, so it is measured once and
+// shared: two pickers are mounted at a time and each calibrating separately
+// meant a redundant round trip to the native map.
+const zoomCalibration = { offset: 0, rounds: 0 };
 const USER_POINT_KEY = '__user__';
 const PROJECTION_SETTLE_MS = 160;
 const MARKER_FADE_MS = 130;
@@ -99,11 +105,7 @@ export function StopMapPicker({
   // formula is off by a constant here — tile size and density conventions are
   // not something to guess at — but the offset is stable, so one measured round
   // settles it for every later framing.
-  const [zoomAdjust, setZoomAdjust] = useState(0);
-  // Calibration is a property of the device, not of the current framing, so it
-  // is applied a bounded number of times and then left alone. Re-deriving it on
-  // every direction change let a noisy estimate feed itself forever.
-  const calibrationRounds = useRef(0);
+  const [zoomAdjust, setZoomAdjust] = useState(zoomCalibration.offset);
   const [cardSize, setCardSize] = useState({ width: 0, height: 0 });
   // The switch is as wide as the destination name, which differs per direction
   // and per language, so the column measures itself rather than being guessed.
@@ -210,13 +212,17 @@ export function StopMapPicker({
           }
           setProjected({ key: projectionKey, points: next });
 
-          if (region && calibrationRounds.current < MAX_CALIBRATION_ROUNDS) {
+          if (region && zoomCalibration.rounds < MAX_CALIBRATION_ROUNDS) {
             const drift = Math.log2(shownLatitudeDelta / region.latitudeDelta);
-            calibrationRounds.current += 1;
+            zoomCalibration.rounds += 1;
             if (Math.abs(drift) > ZOOM_TOLERANCE && Number.isFinite(drift)) {
-              setZoomAdjust(previous => Math.max(-6, Math.min(6, previous + drift)));
+              zoomCalibration.offset = Math.max(-6, Math.min(6, zoomCalibration.offset + drift));
             }
           }
+
+          // Picks up a calibration another instance settled after this one
+          // mounted; React drops the update when the value has not moved.
+          setZoomAdjust(zoomCalibration.offset);
         })
         .catch(() => {
           if (!cancelled) setFailedKey(projectionKey);
