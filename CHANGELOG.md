@@ -1,5 +1,10 @@
 # Changelog
 
+## v2026.8.21
+### Improved
+
+- Widget rows keep their relative countdown past the one-hour mark: departures further out now read "in 2h 15m" instead of dropping the countdown and showing only the clock time. Narrow widgets still hide it, and mid-width ones keep the compact form.
+
 ## v2026.8.17
 ### Fixed
 

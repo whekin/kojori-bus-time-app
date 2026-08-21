@@ -241,19 +241,19 @@ class WidgetListFactory(
   // compact countdown that survives long localized copy like Russian
   // "через {minutes} мин"; wide widgets show the localized label.
   private fun countdownLabel(remainingMins: Int?): String {
-    if (countdownMode == CountdownMode.HIDDEN || remainingMins == null || remainingMins >= 60) return ""
+    if (countdownMode == CountdownMode.HIDDEN || remainingMins == null) return ""
     if (remainingMins <= 0) return localizedString("now", "now")
-    if (countdownMode == CountdownMode.SHORT) {
-      return localizedString("countdownCompactMinutes", "+{minutes}m")
-        .replace("{minutes}", remainingMins.toString())
-    }
-    return localizedString("inMinutes", "in {minutes} mins")
-      .replace("{minutes}", remainingMins.toString())
+    return relativeLabel(remainingMins, countdownMode != CountdownMode.FULL)
   }
 
   private fun featuredCountdownLabel(remainingMins: Int?): String {
     if (remainingMins == null || remainingMins <= 0) return localizedString("now", "now")
-    val compact = countdownMode != CountdownMode.FULL
+    return relativeLabel(remainingMins, countdownMode != CountdownMode.FULL)
+  }
+
+  // Departures an hour or more out still get a countdown — the list spans a
+  // rolling 24 hours, so hiding them left most rows without one.
+  private fun relativeLabel(remainingMins: Int, compact: Boolean): String {
     if (remainingMins < 60) {
       val key = if (compact) "countdownCompactMinutes" else "inMinutes"
       val fallback = if (compact) "+{minutes}m" else "in {minutes} mins"
