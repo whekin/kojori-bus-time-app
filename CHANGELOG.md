@@ -1,6 +1,6 @@
 # Changelog
 
-## [UNRELEASED]
+## v2026.8.26
 ### Improved
 
 - Route lines on the map are drawn on a contrasting casing and thicken as you zoom in, so both routes stay readable over the pale and the dark basemap instead of thinning out against road fill.
