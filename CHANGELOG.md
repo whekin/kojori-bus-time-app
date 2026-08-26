@@ -14,6 +14,14 @@
 ### Fixed
 
 - Tapping a stop no longer opens a bubble repeating the stop's name over the map — the card at the bottom already carries it, and the bubble covered the highlight around the stop.
+- The iOS app icon is no longer blank. The shared icon is a white drawing on transparency, meant to sit on the dark Android adaptive-icon background; iOS flattens transparency onto white, so the home-screen icon came out white-on-white. iOS now gets its own icon on the dark brand background, plus a dark-appearance variant.
+- The iOS launch screen shows the app logo instead of a bare dark rectangle — the splash image was only configured for Android.
+
+### Infra
+
+- iOS no longer asks for the "always" location permission strings it never uses: the Info.plist now carries only the when-in-use description, and background location is explicitly off on both platforms.
+- iOS builds declare `ITSAppUsesNonExemptEncryption: false`, so TestFlight uploads stop stalling on the export-compliance question.
+- `eas.json` gained iOS simulator profiles for `development` and `preview`, so the iOS side can be built without a local Xcode.
 
 ## v2026.8.21
 ### Improved

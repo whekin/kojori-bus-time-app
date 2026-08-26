@@ -17,7 +17,14 @@
     "ios": {
       "bundleIdentifier": "com.whekin.kojoribus",
       "buildNumber": "2026081702",
-      "supportsTablet": false
+      "supportsTablet": false,
+      "icon": {
+        "light": "./assets/images/ios-icon.png",
+        "dark": "./assets/images/icon.png"
+      },
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "package": "com.whekin.kojoribus",
@@ -57,7 +64,11 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "Allow Kojoring Time to suggest whether you're closer to Kojori or Tbilisi."
+          "locationWhenInUsePermission": "Allow Kojoring Time to suggest whether you're closer to Kojori or Tbilisi.",
+          "locationAlwaysAndWhenInUsePermission": false,
+          "locationAlwaysPermission": false,
+          "isIosBackgroundLocationEnabled": false,
+          "isAndroidBackgroundLocationEnabled": false
         }
       ],
       [
@@ -65,6 +76,10 @@
         {
           "backgroundColor": "#111316",
           "android": {
+            "image": "./assets/images/splash-icon.png",
+            "imageWidth": 128
+          },
+          "ios": {
             "image": "./assets/images/splash-icon.png",
             "imageWidth": 128
           }
