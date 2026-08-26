@@ -1,6 +1,6 @@
 # Changelog
 
-## [UNRELEASED]
+## v2026.8.27
 ### Improved
 
 - Opening the Timetable and Settings tabs no longer stalls: both screens are now built quietly in the background shortly after launch, so the first tap swaps pages instead of constructing the whole screen on the spot.
