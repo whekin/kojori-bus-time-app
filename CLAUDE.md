@@ -27,9 +27,11 @@ Steps: preflight → changelog check → bake TTC data + freshness check → sta
 
 **Baked data freshness**: `bun bake:check` fails when `assets/ttc-baked.ts` does not cover today plus at least 3 more service days. Baked `serviceDates` only run ~a week from the bake. Past that the app keeps serving the period matching the weekday (see `getSchedulePeriodForDate` in `src/services/ttc.ts`) and flags it as unconfirmed, but the shipped data should still be current. The release runs the check after baking (including on `--continue`, where the bake step is skipped), and `release:android:preflight` runs it too.
 
+**Runtime guard**: `scripts/check-runtime-version.js` fails the release when native/runtime files (`app.json` native keys, `bun.lock`, `modules/`, `android/`, `ios/`, `plugins/`, icon and splash assets) changed since the last `v*` tag without `expo.runtimeVersion` moving. Bump `runtimeVersion` when the JS bundle actually needs a new binary — that also stops the EAS OTA reaching installs on the old runtime. When the native drift genuinely does not need a new runtime (no native module added or removed, JS still runs against the shipped binary), narrow the comparison with `bun release --runtime-base=<ref>` or drop the check with `bun release --skip-runtime-check`.
+
 **Versioning**: Date-based `YYYY.M.D` (e.g. `2026.4.15`). Build number is `YYYYMMDD00` — last two digits for same-day re-releases. In dev, `app.config.ts` auto-computes version from today's date. Production builds use stamped values from `app.json`.
 
-**CHANGELOG.md**: Must have a `## vX.Y.Z` section matching the release version. The release script extracts this section for GitHub release notes. Always update CHANGELOG.md when making user-facing changes — group under `### New`, `### Improved`, `### Fixed`, `### Infra` as appropriate.
+**CHANGELOG.md**: Write notes under the literal `## [UNRELEASED]` heading while developing — the release script matches that exact string and renames it to `## vX.Y.Z` when it stamps the version. A pre-existing `## vX.Y.Z` section matching the release version also works. The release script extracts whichever it finds for the GitHub release notes. Always update CHANGELOG.md when making user-facing changes — group under `### New`, `### Improved`, `### Fixed`, `### Infra` as appropriate.
 
 ## Architecture
 

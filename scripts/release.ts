@@ -10,6 +10,16 @@
  *   bun scripts/release.ts 2026.5.1
  *   bun scripts/release.ts --continue
  *   bun scripts/release.ts 2026.5.1 --continue
+ *   bun scripts/release.ts --runtime-base=<ref>
+ *   bun scripts/release.ts --skip-runtime-check
+ *
+ * The runtime guard compares the working tree against the latest release tag and
+ * insists on a runtimeVersion bump when native files moved. Two escape hatches,
+ * for when the native drift genuinely does not need a new JS runtime:
+ * --runtime-base=<ref> narrows what the guard diffs against, and
+ * --skip-runtime-check drops it entirely. Reach for either only after checking
+ * that no native module was added or removed and that the JS bundle still runs
+ * against the shipped binary; otherwise bump expo.runtimeVersion instead.
  *
  * If the requested date tag already exists, the script re-releases that version:
  * it bumps the Android build suffix, force-updates the tag, replaces the GitHub
@@ -226,6 +236,7 @@ function checkRuntimeVersion(baseRef: string) {
 }
 
 function getRuntimeCheckBase() {
+  if (runtimeBaseArg) return runtimeBaseArg;
   return String(
     run('git describe --tags --match "v*" --abbrev=0 || git rev-parse HEAD', { stdio: 'pipe' }) ?? ''
   ).trim();
@@ -269,7 +280,9 @@ function createBuildMetadata(version: string, rerelease: boolean) {
 
 const args = process.argv.slice(2);
 const continueMode = args.includes('--continue');
-const versionArg = args.find(a => a !== '--continue');
+const skipRuntimeCheck = args.includes('--skip-runtime-check');
+const runtimeBaseArg = args.find(a => a.startsWith('--runtime-base='))?.slice('--runtime-base='.length);
+const versionArg = args.find(a => !a.startsWith('--'));
 
 const now = new Date();
 let version = versionArg ?? `${now.getFullYear()}.${now.getMonth() + 1}.${now.getDate()}`;
@@ -316,7 +329,7 @@ console.log(`Tag:         ${tag}`);
 console.log(`Mode:        ${state.rerelease ? 're-release existing tag' : 'new release'}`);
 console.log(`Continue:    ${continueMode ? 'yes' : 'no'}`);
 
-const runtimeCheckBase = continueMode ? null : getRuntimeCheckBase();
+const runtimeCheckBase = continueMode || skipRuntimeCheck ? null : getRuntimeCheckBase();
 
 // ── 1. Preflight ────────────────────────────────────────────────────────────
 
@@ -347,7 +360,11 @@ if (!isDone(state, 'preflight')) {
   } else {
     console.log(`Tag ${tag} available ✓`);
   }
-  if (runtimeCheckBase) checkRuntimeVersion(runtimeCheckBase);
+  if (runtimeCheckBase) {
+    checkRuntimeVersion(runtimeCheckBase);
+  } else if (skipRuntimeCheck && !continueMode) {
+    console.log('Runtime guard skipped by --skip-runtime-check.');
+  }
   markDone(state, 'preflight');
 } else {
   console.log('Already completed ✓');
