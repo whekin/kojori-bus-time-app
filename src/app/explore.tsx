@@ -1,7 +1,7 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import * as Location from 'expo-location';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, BackHandler, Easing, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Animated, BackHandler, Easing, Pressable, StyleSheet, Text, useWindowDimensions, View, type StyleProp, type ViewStyle } from 'react-native';
 import MapView, { Callout, Marker, Polyline, type MapMarker, type MapPressEvent, type Region } from 'react-native-maps';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -133,6 +133,18 @@ const PROMOTED_STOP_DECLUTTER_PX = {
 };
 const KOJORI_CENTER_STOP_ID = '1:3078';
 const ROUTE_LINE_SIMPLIFY_TOLERANCE_METERS = 12;
+// Route lines thicken as you zoom in, and each sits on a contrasting casing
+// so the accent stays readable over both the cream and the near-black basemap.
+const ROUTE_LINE_WIDTH_BY_TIER: Record<StopMarkerZoomTier, number> = {
+  overview: 3.5,
+  mid: 4.5,
+  close: 6,
+};
+const ROUTE_CASING_EXTRA_WIDTH = 3;
+const ROUTE_CASING_COLOR = {
+  dark: '#000000A6',
+  light: '#FFFFFFD9',
+};
 const SHARED_ROUTE_STRIPE_METERS = 260;
 const LIVE_VEHICLE_TICK_MS = 800;
 const LIVE_VEHICLE_ACTIVATION_DELAY_MS = 750;
@@ -156,6 +168,33 @@ const TBILISI_TRAFFIC_ANCHOR_STOP_ID = '1:845';
 const TBILISI_TRAFFIC_SPEED_KMH = 22;
 const CITY_SPEED_KMH = 25;
 const KOJORI_SPEED_KMH = 45;
+const LOCATE_BUTTON_TRAY_LIFT = 166;
+const MAP_OVERLAY_ENTRANCE_MS = 260;
+const MAP_OVERLAY_EXIT_MS = 170;
+// Stop markers are bitmap snapshots on Android, so they cannot cross-fade
+// through a view transform without a per-frame icon recapture. The native
+// marker `opacity` prop is a plain alpha the map applies to the existing
+// bitmap, so a handful of stepped commits buys the fade for almost nothing.
+const MARKER_REVEAL_STEPS = [0.15, 0.5, 0.8, 1];
+const MARKER_REVEAL_STEP_MS = 55;
+// Same trick for the focused stop's halo: one extra marker whose alpha
+// breathes, driven by a slow timer rather than by redrawing the icon.
+const FOCUSED_HALO_CANVAS_SIZE = 96;
+const FOCUSED_HALO_RING_SIZE = 74;
+// The focused pin hangs above its coordinate: its 50dp box is anchored at the
+// bottom, so the 42dp core's centre lands half the box up. The halo centres
+// its ring on that point rather than on the coordinate itself. Verified on
+// device — a least-squares fit of the rendered ring puts its centre within a
+// pixel of the pin core's.
+const FOCUSED_HALO_CENTER_LIFT = 25;
+const FOCUSED_HALO_STEP_MS = 80;
+const FOCUSED_HALO_CYCLE_MS = 2200;
+const FOCUSED_HALO_MIN_OPACITY = 0.18;
+const FOCUSED_HALO_MAX_OPACITY = 0.62;
+// `onRegionChange` fires continuously through a gesture. Sampled at this
+// interval, and committed only when the marker tier actually flips, so a
+// pinch re-tiers live instead of waiting for the fingers to lift.
+const REGION_SAMPLE_THROTTLE_MS = 150;
 const REGION_CENTER_EPSILON = 0.00035;
 const REGION_DELTA_EPSILON = 0.0015;
 
@@ -181,47 +220,11 @@ type VehicleSample = {
 type VehicleRouteTrack = {
   metrics: PolylineMetrics;
   trafficAnchorMeters: number | null;
+  // Projecting a stop onto the route walks every polyline point. The ETA
+  // readout asks for the same boarding stop once per vehicle per render, so
+  // the answer is memoised on the track it belongs to.
+  stopMetersCache: Map<string, number | null>;
 };
-
-function StopMarkerCallout({
-  stop,
-  iconColor,
-  stopNumberLabel,
-  tapHint,
-  styles,
-}: {
-  stop: StopInfo;
-  iconColor: string;
-  stopNumberLabel: string;
-  tapHint: string;
-  styles: ReturnType<typeof createStyles>;
-}) {
-  return (
-    <Callout tooltip>
-      <View style={styles.stopCallout}>
-        <View
-          style={[
-            styles.stopCalloutIcon,
-            {
-              backgroundColor: alpha(iconColor, '14'),
-              borderColor: iconColor,
-            },
-          ]}>
-          <StopPostGlyph size={20} color={iconColor} />
-        </View>
-        <View style={styles.stopCalloutCopy}>
-          <Text style={styles.stopCalloutLabel} numberOfLines={2}>
-            {stop.label}
-          </Text>
-          <Text style={styles.stopCalloutCode}>{stopNumberLabel}</Text>
-          <Text style={styles.stopCalloutHint} numberOfLines={1}>
-            {tapHint}
-          </Text>
-        </View>
-      </View>
-    </Callout>
-  );
-}
 
 function StopMapMarker({
   direction,
@@ -229,9 +232,7 @@ function StopMapMarker({
   isPromoted,
   isSimpleOrdinaryStop,
   markerColor,
-  calloutIconColor,
-  stopNumberLabel,
-  tapHint,
+  revealOpacity,
   styles,
   resolvedThemeMode,
   colors,
@@ -242,9 +243,7 @@ function StopMapMarker({
   isPromoted: boolean;
   isSimpleOrdinaryStop: boolean;
   markerColor: string;
-  calloutIconColor: string;
-  stopNumberLabel: string;
-  tapHint: string;
+  revealOpacity: number;
   styles: ReturnType<typeof createStyles>;
   resolvedThemeMode: ReturnType<typeof useResolvedAppThemeMode>;
   colors: ReturnType<typeof useAppColors>;
@@ -261,7 +260,6 @@ function StopMapMarker({
     isPromoted ? 'promoted' : 'ordinary',
     isSimpleOrdinaryStop ? 'simple' : 'full',
     markerColor,
-    calloutIconColor,
     resolvedThemeMode,
   ].join(':');
 
@@ -271,16 +269,6 @@ function StopMapMarker({
     return () => clearTimeout(timeoutId);
   }, [markerVisualStateKey]);
 
-  const stopMarker = (
-    <StopMarkerCallout
-      stop={stop}
-      iconColor={calloutIconColor}
-      stopNumberLabel={stopNumberLabel}
-      tapHint={tapHint}
-      styles={styles}
-    />
-  );
-
   if (isPromoted) {
     return (
       <Marker
@@ -288,8 +276,7 @@ function StopMapMarker({
         coordinate={{ latitude: stop.lat!, longitude: stop.lon! }}
         anchor={STOP_MARKER_ANCHOR}
         tracksViewChanges={trackMarkerViewChanges}
-        title={stop.label}
-        description={stopNumberLabel}
+        opacity={revealOpacity}
         onPress={onPress}
         zIndex={6}>
         <View
@@ -316,7 +303,6 @@ function StopMapMarker({
             <StopPostGlyph size={20} color={markerColor} />
           </View>
         </View>
-        {stopMarker}
       </Marker>
     );
   }
@@ -327,8 +313,10 @@ function StopMapMarker({
       coordinate={{ latitude: stop.lat!, longitude: stop.lon! }}
       anchor={STOP_MARKER_ANCHOR}
       tracksViewChanges={trackMarkerViewChanges}
-      title={stop.label}
-      description={stopNumberLabel}
+      // Baked into the native alpha rather than the view: a view-level
+      // opacity is captured into the icon, so it cannot be stepped without
+      // redrawing the bitmap.
+      opacity={revealOpacity * (isSimpleOrdinaryStop ? 0.78 : 0.82)}
       onPress={onPress}
       zIndex={4}>
       <View
@@ -340,7 +328,6 @@ function StopMapMarker({
             height: hitSize,
             borderRadius: hitSize / 2,
             backgroundColor: 'transparent',
-            opacity: isSimpleOrdinaryStop ? 0.78 : 0.82,
           },
         ]}>
         <View
@@ -360,7 +347,6 @@ function StopMapMarker({
           )}
         </View>
       </View>
-      {stopMarker}
     </Marker>
   );
 }
@@ -527,6 +513,15 @@ function vehicleArrowSectorAt(sample: VehicleSample, track: VehicleRouteTrack | 
 // Rough ETA from a live vehicle to a stop further along its route, using the
 // same segment speed model that drives the marker animation. Returns null
 // when the bus is off-route, at, or already past the stop.
+function stopMetersOnTrack(track: VehicleRouteTrack, stopId: string): number | null {
+  const cached = track.stopMetersCache.get(stopId);
+  if (cached !== undefined) return cached;
+
+  const meters = projectStopToRoute(findStop(stopId), track.metrics)?.distanceMeters ?? null;
+  track.stopMetersCache.set(stopId, meters);
+  return meters;
+}
+
 function estimateVehicleEtaMinutes(
   sample: VehicleSample,
   track: VehicleRouteTrack | undefined,
@@ -535,10 +530,8 @@ function estimateVehicleEtaMinutes(
 ): number | null {
   if (!sample.onRoute || !track) return null;
 
-  const stopProjection = projectStopToRoute(findStop(stopId), track.metrics);
-  if (!stopProjection) return null;
-
-  const stopMeters = stopProjection.distanceMeters;
+  const stopMeters = stopMetersOnTrack(track, stopId);
+  if (stopMeters == null) return null;
   if (stopMeters <= sample.routeMeters + 30) return null;
 
   let meters = sample.routeMeters;
@@ -812,6 +805,154 @@ function AnimatedVehicleMarker({
   );
 }
 
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+
+// Ramps a shared alpha from near-invisible to full whenever `revealKey`
+// changes. One value drives every stop marker, so a zoom tier crossing costs
+// a fixed three commits instead of one per marker.
+function useSteppedReveal(revealKey: string, enabled: boolean) {
+  const lastStepIndex = MARKER_REVEAL_STEPS.length - 1;
+  const [stepIndex, setStepIndex] = useState(lastStepIndex);
+
+  useEffect(() => {
+    if (!enabled) {
+      setStepIndex(lastStepIndex);
+      return;
+    }
+
+    setStepIndex(0);
+    let current = 0;
+    const intervalId = setInterval(() => {
+      current += 1;
+      setStepIndex(current);
+      if (current >= lastStepIndex) clearInterval(intervalId);
+    }, MARKER_REVEAL_STEP_MS);
+
+    return () => clearInterval(intervalId);
+  }, [enabled, lastStepIndex, revealKey]);
+
+  return MARKER_REVEAL_STEPS[Math.min(stepIndex, lastStepIndex)];
+}
+
+// A second marker under the focused pin whose native alpha breathes. Its icon
+// is captured once; only the alpha is stepped, so nothing is redrawn.
+function FocusedStopHalo({
+  coordinate,
+  accent,
+  reduceMotion,
+  styles,
+}: {
+  coordinate: { latitude: number; longitude: number };
+  accent: string;
+  reduceMotion: boolean;
+  styles: ReturnType<typeof createStyles>;
+}) {
+  const [opacity, setOpacity] = useState(FOCUSED_HALO_MAX_OPACITY);
+
+  useEffect(() => {
+    if (reduceMotion) {
+      setOpacity(FOCUSED_HALO_MAX_OPACITY);
+      return;
+    }
+
+    const startedAt = Date.now();
+    const intervalId = setInterval(() => {
+      const phase = ((Date.now() - startedAt) % FOCUSED_HALO_CYCLE_MS) / FOCUSED_HALO_CYCLE_MS;
+      const swell = (1 - Math.cos(phase * 2 * Math.PI)) / 2;
+      setOpacity(
+        FOCUSED_HALO_MIN_OPACITY + swell * (FOCUSED_HALO_MAX_OPACITY - FOCUSED_HALO_MIN_OPACITY),
+      );
+    }, FOCUSED_HALO_STEP_MS);
+
+    return () => clearInterval(intervalId);
+  }, [reduceMotion]);
+
+  return (
+    <Marker
+      coordinate={coordinate}
+      anchor={{
+        x: 0.5,
+        y: (FOCUSED_HALO_CANVAS_SIZE / 2 + FOCUSED_HALO_CENTER_LIFT) / FOCUSED_HALO_CANVAS_SIZE,
+      }}
+      tracksViewChanges={false}
+      opacity={opacity}
+      zIndex={29}>
+      <View collapsable={false} style={styles.focusedStopHaloCanvas}>
+        <View style={[styles.focusedStopHaloRing, { borderColor: accent, backgroundColor: alpha(accent, '1F') }]} />
+      </View>
+    </Marker>
+  );
+}
+
+// Map overlays (the focused-stop tray, the location pill) used to appear and
+// vanish in a single frame. This wrapper rises them in and slides them back
+// out; `visible` going false keeps the last content mounted, and inert, until
+// the exit finishes.
+function MapOverlayTransition({
+  visible,
+  reduceMotion,
+  style,
+  children,
+}: {
+  visible: boolean;
+  reduceMotion: boolean;
+  style: StyleProp<ViewStyle>;
+  children: React.ReactNode;
+}) {
+  const progress = useRef(new Animated.Value(reduceMotion ? 1 : 0)).current;
+  const [settledHidden, setSettledHidden] = useState(!visible);
+
+  useEffect(() => {
+    if (visible) setSettledHidden(false);
+    if (reduceMotion) {
+      progress.setValue(visible ? 1 : 0);
+      setSettledHidden(!visible);
+      return;
+    }
+
+    const animation = Animated.timing(progress, {
+      toValue: visible ? 1 : 0,
+      duration: visible ? MAP_OVERLAY_ENTRANCE_MS : MAP_OVERLAY_EXIT_MS,
+      easing: visible ? Easing.out(Easing.cubic) : Easing.in(Easing.cubic),
+      useNativeDriver: true,
+    });
+    animation.start(({ finished }) => {
+      if (finished && !visible) setSettledHidden(true);
+    });
+
+    return () => animation.stop();
+  }, [progress, reduceMotion, visible]);
+
+  if (!visible && settledHidden) return null;
+
+  return (
+    <Animated.View
+      pointerEvents={visible ? 'auto' : 'none'}
+      style={[
+        style,
+        {
+          opacity: progress,
+          transform: [
+            {
+              translateY: progress.interpolate({
+                inputRange: [0, 1],
+                outputRange: [16, 0],
+              }),
+            },
+            {
+              scale: progress.interpolate({
+                inputRange: [0, 1],
+                outputRange: [0.97, 1],
+              }),
+            },
+          ],
+        },
+      ]}>
+      {children}
+    </Animated.View>
+  );
+}
+
 export default function ExploreScreen({
   isActive = false,
   suspendNativeMap = false,
@@ -830,12 +971,12 @@ export default function ExploreScreen({
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const mapRef = useRef<MapView>(null);
-  const focusedStopMarkerRef = useRef<MapMarker | null>(null);
   const { activeDirection, selectDirection } = useActiveDirection();
   const { settings, update, toggleKojoriFavorite, toggleTbilisiFavorite } = useSettings();
   const { focusedStop, clearStopFocus, requestStopFocus, requestStopSheetReturn } = useMapFocus();
   const navigateToTab = useTabNav();
   const lastFitKeyRef = useRef<string | null>(null);
+  const lastRegionSampleAtRef = useRef(0);
 
   const [mapReady, setMapReady] = useState(false);
   const [mapTimedOut, setMapTimedOut] = useState(false);
@@ -917,6 +1058,29 @@ export default function ExploreScreen({
     }
   }, [isFetching, reduceMotion, spinAnim]);
 
+  // The tray slides the locate button up rather than teleporting it: the
+  // offset is a transform so the whole move stays on the native driver.
+  const locateButtonLift = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const target = focusedStop ? -LOCATE_BUTTON_TRAY_LIFT : 0;
+    if (reduceMotion) {
+      locateButtonLift.setValue(target);
+      return;
+    }
+
+    const animation = Animated.spring(locateButtonLift, {
+      toValue: target,
+      damping: 20,
+      stiffness: 180,
+      mass: 0.9,
+      useNativeDriver: true,
+    });
+    animation.start();
+
+    return () => animation.stop();
+  }, [focusedStop, locateButtonLift, reduceMotion]);
+
   const spinRotation = spinAnim.interpolate({
     inputRange: [0, 1],
     outputRange: ['0deg', '360deg'],
@@ -943,35 +1107,89 @@ export default function ExploreScreen({
 
       const metrics = buildPolylineMetrics(points);
       const trafficAnchorMeters = projectStopToRoute(findStop(TBILISI_TRAFFIC_ANCHOR_STOP_ID), metrics)?.distanceMeters ?? null;
-      tracks[bus] = { metrics, trafficAnchorMeters };
+      tracks[bus] = { metrics, trafficAnchorMeters, stopMetersCache: new Map() };
       return tracks;
     }, {});
   }, [routePolylines]);
   const vehicleSamples = useMemo(() => {
     return positions.map(position => buildVehicleSample(position, vehicleRouteTracks[position.bus]));
   }, [positions, vehicleRouteTracks]);
+  // The boarding stop for this direction: toKojori boards in Tbilisi.
+  const boardingStopId = direction === 'toKojori'
+    ? settings.activeTbilisiStopId
+    : settings.activeKojoriStopId;
+  // ETA walks the route in 500m chunks per vehicle. Kept out of the render
+  // body so panning and zooming (which commit `currentRegion`) never redo it.
+  const vehicleMarkers = useMemo(() => {
+    const destination = direction === 'toKojori' ? t('cityKojori') : t('cityTbilisi');
+
+    return vehicleSamples.map(sample => {
+      const track = vehicleRouteTracks[sample.bus];
+      const etaMinutes = estimateVehicleEtaMinutes(sample, track, direction, boardingStopId);
+
+      return {
+        sample,
+        track,
+        accent: routeAccent(sample.bus, colors),
+        title: `${sample.bus} ${t('directionTo')}${destination}`,
+        subtitle: etaMinutes != null
+          ? t('mapVehicleEta', { minutes: etaMinutes })
+          : t('mapVehicle', { id: sample.vehicleId }),
+      };
+    });
+  }, [boardingStopId, colors, direction, t, vehicleRouteTracks, vehicleSamples]);
+  // The tray animates out after the focus is cleared, so it renders from the
+  // last stop that was focused rather than from the live one — reading the
+  // live value would empty the tray mid-exit and collapse its height.
+  const [trayStop, setTrayStop] = useState(focusedStop);
+  const focusedLiveArrivals = useMemo(
+    () => focusedStopArrivals
+      .filter(arrival => arrival.realtime && isTrackedBusLine(arrival.shortName))
+      .slice(0, 3),
+    [focusedStopArrivals],
+  );
+  const [trayArrivals, setTrayArrivals] = useState({
+    arrivals: focusedLiveArrivals,
+    isFetching: isFetchingFocusedStopArrivals,
+  });
+
+  useEffect(() => {
+    if (!focusedStop) return;
+    setTrayStop(focusedStop);
+  }, [focusedStop]);
+
+  useEffect(() => {
+    if (!focusedStop) return;
+    setTrayArrivals({
+      arrivals: focusedLiveArrivals,
+      isFetching: isFetchingFocusedStopArrivals,
+    });
+  }, [focusedLiveArrivals, focusedStop, isFetchingFocusedStopArrivals]);
+
+  // Two accents, deliberately: map layers follow the live focus, because the
+  // halo captures its icon once and would otherwise bake in the accent of the
+  // previously focused stop (`trayStop` lags by a render). The tray follows
+  // the held stop so it keeps its colour while animating out.
   const focusedStopAccent = focusedStop?.direction === 'toKojori' ? colors.route380 : colors.route316;
-  const focusedStopIsSaved = focusedStop
-    ? focusedStop.direction === 'toKojori'
-      ? settings.tbilisiFavorites.includes(focusedStop.id)
-      : settings.kojoriFavorites.includes(focusedStop.id)
+  const trayAccent = trayStop?.direction === 'toKojori' ? colors.route380 : colors.route316;
+  const focusedStopIsSaved = trayStop
+    ? trayStop.direction === 'toKojori'
+      ? settings.tbilisiFavorites.includes(trayStop.id)
+      : settings.kojoriFavorites.includes(trayStop.id)
     : false;
-  const focusedStopFavoriteCount = focusedStop?.direction === 'toKojori'
+  const focusedStopFavoriteCount = trayStop?.direction === 'toKojori'
     ? settings.tbilisiFavorites.length
     : settings.kojoriFavorites.length;
   const focusedStopSaveDisabled = focusedStopIsSaved && focusedStopFavoriteCount <= 1;
-  const focusedStopIsActive = focusedStop
-    ? focusedStop.direction === 'toKojori'
-      ? settings.activeTbilisiStopId === focusedStop.id
-      : settings.activeKojoriStopId === focusedStop.id
+  const focusedStopIsActive = trayStop
+    ? trayStop.direction === 'toKojori'
+      ? settings.activeTbilisiStopId === trayStop.id
+      : settings.activeKojoriStopId === trayStop.id
     : false;
   const focusedStopCoordinate =
     typeof focusedStop?.lat === 'number' && typeof focusedStop.lon === 'number'
       ? { latitude: focusedStop.lat, longitude: focusedStop.lon }
       : null;
-  const focusedLiveArrivals = focusedStopArrivals
-    .filter(arrival => arrival.realtime && isTrackedBusLine(arrival.shortName))
-    .slice(0, 3);
 
   const splitPolylines = useMemo(() => {
     if (!routePolylines) return null;
@@ -979,10 +1197,18 @@ export default function ExploreScreen({
     const polyline380 = routePolylines['380'] ?? [];
     const polyline316 = routePolylines['316'] ?? [];
 
+    // The casing runs under the full line of each route — exclusive stretches
+    // and the shared zebra alike — so the stripes never sit bare on the map.
+    const casing = {
+      '380': simplifyPolyline(polyline380, ROUTE_LINE_SIMPLIFY_TOLERANCE_METERS),
+      '316': simplifyPolyline(polyline316, ROUTE_LINE_SIMPLIFY_TOLERANCE_METERS),
+    };
+
     if (polyline380.length < 2 || polyline316.length < 2) {
       return {
-        '380': { exclusive: simplifyPolyline(polyline380, ROUTE_LINE_SIMPLIFY_TOLERANCE_METERS) },
-        '316': { exclusive: simplifyPolyline(polyline316, ROUTE_LINE_SIMPLIFY_TOLERANCE_METERS) },
+        '380': { exclusive: casing['380'] },
+        '316': { exclusive: casing['316'] },
+        casing,
         sharedZebra: [],
       };
     }
@@ -992,6 +1218,7 @@ export default function ExploreScreen({
     return {
       '380': { exclusive: simplifyPolyline(split.route1.exclusive, ROUTE_LINE_SIMPLIFY_TOLERANCE_METERS) },
       '316': { exclusive: simplifyPolyline(split.route2.exclusive, ROUTE_LINE_SIMPLIFY_TOLERANCE_METERS) },
+      casing,
       sharedZebra: split.sharedZebra
         .map(segment => ({
           ...segment,
@@ -1010,6 +1237,15 @@ export default function ExploreScreen({
     return currentRegion.latitudeDelta < 0.5;
   }, [currentRegion.latitudeDelta]);
   const stopMarkerZoomTier = getStopMarkerZoomTier(currentRegion.latitudeDelta);
+  // One shared alpha ramp for the whole stop layer: crossing a zoom tier or
+  // flipping direction swaps a lot of markers at once, and fading them in
+  // together costs three commits instead of one per marker.
+  const stopMarkerRevealOpacity = useSteppedReveal(
+    `${direction}:${stopMarkerZoomTier}`,
+    isActive && !reduceMotion,
+  );
+  const routeLineWidth = ROUTE_LINE_WIDTH_BY_TIER[stopMarkerZoomTier];
+  const routeCasingColor = ROUTE_CASING_COLOR[resolvedThemeMode === 'dark' ? 'dark' : 'light'];
   const showOrdinaryStopMarkers = stopMarkerZoomTier !== 'overview';
   const favoriteStopIds = direction === 'toKojori' ? settings.tbilisiFavorites : settings.kojoriFavorites;
   const curatedStopIds = getCuratedStopIds(direction);
@@ -1136,18 +1372,6 @@ export default function ExploreScreen({
   }, [focusedRouteData?.polylines, focusedStop, isActive, mapReady]);
 
   useEffect(() => {
-    if (!isActive || !mapReady || typeof focusedStop?.lat !== 'number' || typeof focusedStop.lon !== 'number') {
-      return;
-    }
-
-    const timeoutId = setTimeout(() => {
-      focusedStopMarkerRef.current?.showCallout();
-    }, 700);
-
-    return () => clearTimeout(timeoutId);
-  }, [focusedStop?.lat, focusedStop?.lon, focusedStop?.requestedAt, isActive, mapReady]);
-
-  useEffect(() => {
     if (!isActive || !focusedStop) return;
 
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
@@ -1236,6 +1460,24 @@ export default function ExploreScreen({
     ));
   }
 
+  // Mid-gesture sampling. `onRegionChangeComplete` still owns the clamping and
+  // the authoritative region; this only re-tiers the marker layer while the
+  // fingers are still down, and bails unless the tier actually flipped.
+  function handleRegionChangeSample(region: Region) {
+    const now = Date.now();
+    if (now - lastRegionSampleAtRef.current < REGION_SAMPLE_THROTTLE_MS) return;
+    lastRegionSampleAtRef.current = now;
+
+    setCurrentRegion(previousRegion => {
+      const tierChanged =
+        getStopMarkerZoomTier(previousRegion.latitudeDelta) !== getStopMarkerZoomTier(region.latitudeDelta);
+      const markerVisibilityChanged =
+        previousRegion.latitudeDelta < 0.5 !== region.latitudeDelta < 0.5;
+
+      return tierChanged || markerVisibilityChanged ? region : previousRegion;
+    });
+  }
+
   function handleMapPress(event: MapPressEvent) {
     if (event.nativeEvent.action === 'marker-press') return;
     clearStopFocus();
@@ -1298,11 +1540,26 @@ export default function ExploreScreen({
           setMapReady(true);
           setMapTimedOut(false);
         }}
+        onRegionChange={handleRegionChangeSample}
         onRegionChangeComplete={handleRegionChange}
         onPress={handleMapPress}>
         {splitPolylines
           ? (
             <>
+              {(['316', '380'] as const).map((bus) => {
+                const casing = splitPolylines.casing[bus];
+                return casing.length >= 2 ? (
+                  <Polyline
+                    key={`route-${bus}-casing`}
+                    coordinates={casing}
+                    strokeColor={routeCasingColor}
+                    strokeWidth={routeLineWidth + ROUTE_CASING_EXTRA_WIDTH}
+                    zIndex={1}
+                    lineCap="round"
+                    lineJoin="round"
+                  />
+                ) : null;
+              })}
               {(['316', '380'] as const).map((bus) => {
                 const { exclusive } = splitPolylines[bus];
                 const color = routeAccent(bus, colors);
@@ -1311,22 +1568,27 @@ export default function ExploreScreen({
                     key={`route-${bus}-exclusive`}
                     coordinates={exclusive}
                     strokeColor={color}
-                    strokeWidth={4}
+                    strokeWidth={routeLineWidth}
                     zIndex={2}
                     lineCap="round"
                     lineJoin="round"
                   />
                 ) : null;
               })}
+              {/* Round caps, not butt: consecutive stripes share an endpoint,
+                  and at a bend two butt-capped strokes leave the outside of
+                  the turn uncovered — a notch the casing shows straight
+                  through. The half-width the caps add overlaps into the
+                  neighbouring stripe, which is exactly what closes it. */}
               {splitPolylines.sharedZebra.map((seg, i) => (
                 <Polyline
                   key={`zebra-${i}`}
                   coordinates={seg.coords}
                   strokeColor={routeAccent(seg.colorIndex === 0 ? '380' : '316', colors)}
-                  strokeWidth={4}
+                  strokeWidth={routeLineWidth}
                   zIndex={3}
-                  lineCap="butt"
-                  lineJoin="miter"
+                  lineCap="round"
+                  lineJoin="round"
                 />
               ))}
             </>
@@ -1341,8 +1603,6 @@ export default function ExploreScreen({
         ].map(({ stop, isPromoted, compact }) => {
           const isSimpleOrdinaryStop = compact || (!isPromoted && stopMarkerZoomTier === 'mid');
           const stopAccent = direction === 'toKojori' ? colors.route380 : colors.route316;
-          const calloutIconColor = isPromoted || compact ? stopAccent : colors.map;
-          const stopNumberLabel = t('commonStopNumber', { id: stop.id.split(':')[1] ?? stop.id });
 
           return (
             <StopMapMarker
@@ -1352,9 +1612,7 @@ export default function ExploreScreen({
               isPromoted={isPromoted}
               isSimpleOrdinaryStop={isSimpleOrdinaryStop}
               markerColor={stopAccent}
-              calloutIconColor={calloutIconColor}
-              stopNumberLabel={stopNumberLabel}
-              tapHint={t('mapStopTapActions')}
+              revealOpacity={stopMarkerRevealOpacity}
               styles={styles}
               resolvedThemeMode={resolvedThemeMode}
               colors={colors}
@@ -1362,40 +1620,31 @@ export default function ExploreScreen({
             />
           );
         })}
-        {showMarkers && vehicleSamples.map(sample => {
-          const accent = routeAccent(sample.bus, colors);
-          const destination = direction === 'toKojori' ? t('cityKojori') : t('cityTbilisi');
-          // Boarding stop for this direction: toKojori boards in Tbilisi.
-          const boardingStopId = direction === 'toKojori'
-            ? settings.activeTbilisiStopId
-            : settings.activeKojoriStopId;
-          const etaMinutes = estimateVehicleEtaMinutes(
-            sample,
-            vehicleRouteTracks[sample.bus],
-            direction,
-            boardingStopId,
-          );
-
-          return (
-            <AnimatedVehicleMarker
-              key={`${sample.bus}-${sample.vehicleId}`}
-              sample={sample}
-              track={vehicleRouteTracks[sample.bus]}
-              direction={direction}
-              isActive={isActive}
-              reduceMotion={reduceMotion}
-              accent={accent}
-              title={`${sample.bus} ${t('directionTo')}${destination}`}
-              subtitle={etaMinutes != null
-                ? t('mapVehicleEta', { minutes: etaMinutes })
-                : t('mapVehicle', { id: sample.vehicleId })}
-              styles={styles}
-            />
-          );
-        })}
+        {showMarkers && vehicleMarkers.map(({ sample, track, accent, title, subtitle }) => (
+          <AnimatedVehicleMarker
+            key={`${sample.bus}-${sample.vehicleId}`}
+            sample={sample}
+            track={track}
+            direction={direction}
+            isActive={isActive}
+            reduceMotion={reduceMotion}
+            accent={accent}
+            title={title}
+            subtitle={subtitle}
+            styles={styles}
+          />
+        ))}
+        {focusedStop && focusedStopCoordinate ? (
+          <FocusedStopHalo
+            key={`focused-stop-halo-${focusedStop.id}-${focusedStopAccent}`}
+            coordinate={focusedStopCoordinate}
+            accent={focusedStopAccent}
+            reduceMotion={reduceMotion}
+            styles={styles}
+          />
+        ) : null}
         {focusedStop && focusedStopCoordinate ? (
           <Marker
-            ref={focusedStopMarkerRef}
             key={`focused-stop-${focusedStop.id}-${focusedStop.requestedAt}-${focusedStopAccent}`}
             coordinate={focusedStopCoordinate}
             anchor={{ x: 0.5, y: 1 }}
@@ -1404,7 +1653,6 @@ export default function ExploreScreen({
             zIndex={30}
           >
             <View collapsable={false} style={styles.focusedStopMarker}>
-              <View style={[styles.focusedStopMarkerHalo, { backgroundColor: alpha(focusedStopAccent, '22') }]} />
               <View
                 style={[
                   styles.focusedStopMarkerCore,
@@ -1416,28 +1664,6 @@ export default function ExploreScreen({
                 <StopPostGlyph size={26} color={focusedStopAccent} />
               </View>
             </View>
-            <Callout tooltip>
-              <View style={styles.focusedStopCallout}>
-                <View
-                  style={[
-                    styles.focusedStopCalloutIcon,
-                    {
-                      backgroundColor: alpha(focusedStopAccent, '14'),
-                      borderColor: focusedStopAccent,
-                    },
-                  ]}>
-                  <StopPostGlyph size={26} color={focusedStopAccent} />
-                </View>
-                <View style={styles.focusedStopCalloutCopy}>
-                  <Text style={styles.focusedStopCalloutLabel} numberOfLines={2}>
-                    {focusedStop.label}
-                  </Text>
-                  <Text style={styles.focusedStopCalloutCode}>
-                    {t('commonStopNumber', { id: focusedStop.id.split(':')[1] ?? focusedStop.id })}
-                  </Text>
-                </View>
-              </View>
-            </Callout>
           </Marker>
         ) : null}
       </MapView>
@@ -1495,18 +1721,15 @@ export default function ExploreScreen({
       </View>
 
       {/* Locate me — bottom right */}
-      <Pressable
+      <AnimatedPressable
         accessibilityRole="button"
         accessibilityLabel={isLocating ? t('mapLocatingMe') : t('mapLocateMe')}
         accessibilityState={{ busy: isLocating, disabled: isLocating }}
         style={[
           styles.locateButton,
-          {
-            bottom: focusedStop
-              ? insets.bottom + BottomTabInset + 190
-              : insets.bottom + BottomTabInset + 24,
-          },
+          { bottom: insets.bottom + BottomTabInset + 24 },
           isLocating && styles.locateButtonActive,
+          { transform: [{ translateY: locateButtonLift }] },
         ]}
         onPress={handleLocateMe}
         disabled={isLocating}>
@@ -1515,39 +1738,47 @@ export default function ExploreScreen({
           size={20}
           color={isLocating ? colors.primary : colors.text}
         />
-      </Pressable>
+      </AnimatedPressable>
 
       {locationMessage ? (
-        <View style={[styles.bottomPillContainer, { bottom: insets.bottom + BottomTabInset + 18 }]}>
+        <MapOverlayTransition
+          key={`location-message-${locationMessage}`}
+          visible
+          reduceMotion={reduceMotion}
+          style={[styles.bottomPillContainer, { bottom: insets.bottom + BottomTabInset + 18 }]}>
           <View style={styles.bottomPill}>
             <Text style={styles.bottomPillText}>{locationMessage}</Text>
           </View>
-        </View>
+        </MapOverlayTransition>
       ) : null}
 
-      {focusedStop ? (
-        <View style={[styles.focusedStopTrayWrap, { bottom: insets.bottom + BottomTabInset + 18 }]}>
+      {trayStop ? (
+        <MapOverlayTransition
+          key={`focused-stop-tray-${trayStop.id}-${trayStop.requestedAt}`}
+          visible={Boolean(focusedStop)}
+          reduceMotion={reduceMotion}
+          style={[styles.focusedStopTrayWrap, { bottom: insets.bottom + BottomTabInset + 18 }]}>
           <View
             style={[
               styles.focusedStopTray,
               {
-                borderColor: alpha(focusedStopAccent, '42'),
+                borderColor: alpha(trayAccent, '42'),
                 backgroundColor: alpha(colors.panel, resolvedThemeMode === 'dark' ? 'F2' : 'FA'),
               },
             ]}
           >
-            <View style={[styles.focusedStopTrayRail, { backgroundColor: focusedStopAccent }]} />
+            <View style={[styles.focusedStopTrayRail, { backgroundColor: trayAccent }]} />
             <View style={styles.focusedStopTrayContent}>
               <View style={styles.focusedStopTrayHeader}>
                 <View style={styles.focusedStopTrayCopy}>
                   <Text style={styles.focusedStopTrayEyebrow}>
-                    {focusedStop.direction === 'toKojori' ? t('cityKojori') : t('cityTbilisi')}
+                    {trayStop.direction === 'toKojori' ? t('cityKojori') : t('cityTbilisi')}
                   </Text>
                   <Text style={styles.focusedStopTrayTitle} numberOfLines={1}>
-                    {focusedStop.label}
+                    {trayStop.label}
                   </Text>
-                  <Text style={[styles.focusedStopTrayCode, { color: focusedStopAccent }]}>
-                    #{focusedStop.id.split(':')[1] ?? focusedStop.id}
+                  <Text style={[styles.focusedStopTrayCode, { color: trayAccent }]}>
+                    #{trayStop.id.split(':')[1] ?? trayStop.id}
                   </Text>
                 </View>
                 {focusedStopIsActive ? (
@@ -1555,19 +1786,19 @@ export default function ExploreScreen({
                     style={[
                       styles.focusedStopTrayBadge,
                       {
-                        borderColor: alpha(focusedStopAccent, '36'),
-                        backgroundColor: alpha(focusedStopAccent, '16'),
+                        borderColor: alpha(trayAccent, '36'),
+                        backgroundColor: alpha(trayAccent, '16'),
                       },
                     ]}>
-                    <Text style={[styles.focusedStopTrayBadgeText, { color: focusedStopAccent }]}>
+                    <Text style={[styles.focusedStopTrayBadgeText, { color: trayAccent }]}>
                       {t('commonSelected')}
                     </Text>
                   </View>
                 ) : null}
               </View>
-              {focusedLiveArrivals.length > 0 || isFetchingFocusedStopArrivals ? (
+              {trayArrivals.arrivals.length > 0 || trayArrivals.isFetching ? (
                 <View style={styles.focusedStopLiveArrivals}>
-                  {focusedLiveArrivals.length > 0 ? focusedLiveArrivals.map(arrival => {
+                  {trayArrivals.arrivals.length > 0 ? trayArrivals.arrivals.map(arrival => {
                     const bus = arrival.shortName as '380' | '316';
                     const busAccent = routeAccent(bus, colors);
                     const minutes = Math.max(0, Math.round(arrival.realtimeArrivalMinutes));
@@ -1594,9 +1825,9 @@ export default function ExploreScreen({
                       </View>
                     );
                   }) : (
-                    <View style={[styles.focusedStopLiveArrivalChip, { borderColor: alpha(focusedStopAccent, '30') }]}>
-                      <MaterialCommunityIcons name="sync" size={13} color={focusedStopAccent} />
-                      <Text style={[styles.focusedStopLiveArrivalText, { color: focusedStopAccent }]}>
+                    <View style={[styles.focusedStopLiveArrivalChip, { borderColor: alpha(trayAccent, '30') }]}>
+                      <MaterialCommunityIcons name="sync" size={13} color={trayAccent} />
+                      <Text style={[styles.focusedStopLiveArrivalText, { color: trayAccent }]}>
                         {t('liveEstimate')}
                       </Text>
                     </View>
@@ -1604,23 +1835,23 @@ export default function ExploreScreen({
                 </View>
               ) : null}
               <View
-                accessibilityLabel={t('mapStopActionsFor', { stop: focusedStop.label })}
+                accessibilityLabel={t('mapStopActionsFor', { stop: trayStop.label })}
                 style={styles.focusedStopTrayActions}>
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel={
                     focusedStopIsSaved
-                      ? t('mapRemoveSavedStopA11y', { stop: focusedStop.label })
-                      : t('mapSaveStopA11y', { stop: focusedStop.label })
+                      ? t('mapRemoveSavedStopA11y', { stop: trayStop.label })
+                      : t('mapSaveStopA11y', { stop: trayStop.label })
                   }
                   accessibilityState={{ selected: focusedStopIsSaved, disabled: focusedStopSaveDisabled }}
                   onPress={handleToggleFocusedStopSaved}
                   disabled={focusedStopSaveDisabled}
                   style={[
                     styles.focusedStopTrayAction,
-                    { borderColor: alpha(focusedStopAccent, '42') },
+                    { borderColor: alpha(trayAccent, '42') },
                     focusedStopIsSaved && {
-                      backgroundColor: alpha(focusedStopAccent, '12'),
+                      backgroundColor: alpha(trayAccent, '12'),
                     },
                     focusedStopSaveDisabled && styles.focusedStopTrayActionDisabled,
                   ]}
@@ -1628,20 +1859,20 @@ export default function ExploreScreen({
                   <MaterialCommunityIcons
                     name={focusedStopIsSaved ? 'star' : 'star-outline'}
                     size={15}
-                    color={focusedStopAccent}
+                    color={trayAccent}
                   />
-                  <Text style={[styles.focusedStopTrayActionText, { color: focusedStopAccent }]}>
+                  <Text style={[styles.focusedStopTrayActionText, { color: trayAccent }]}>
                     {focusedStopIsSaved ? t('mapRemoveSavedStop') : t('mapSaveStop')}
                   </Text>
                 </Pressable>
                 <Pressable
                   accessibilityRole="button"
-                  accessibilityLabel={t('mapShowNextBusesA11y', { stop: focusedStop.label })}
+                  accessibilityLabel={t('mapShowNextBusesA11y', { stop: trayStop.label })}
                   onPress={handleShowFocusedStopDepartures}
                   style={[
                     styles.focusedStopTrayAction,
                     styles.focusedStopTrayPrimaryAction,
-                    { backgroundColor: focusedStopAccent, borderColor: focusedStopAccent },
+                    { backgroundColor: trayAccent, borderColor: trayAccent },
                   ]}
                 >
                   <MaterialCommunityIcons name="clock-fast" size={15} color="#FFFFFF" />
@@ -1649,18 +1880,18 @@ export default function ExploreScreen({
                     {t('mapShowNextBuses')}
                   </Text>
                 </Pressable>
-                {focusedStop.returnRoute ? (
+                {trayStop.returnRoute ? (
                   <Pressable
                     accessibilityRole="button"
                     accessibilityLabel={t('mapBackToPicker')}
                     onPress={() => {
                       requestStopSheetReturn();
-                      navigateToTab?.(focusedStop.returnRoute ?? 'index');
+                      navigateToTab?.(trayStop.returnRoute ?? 'index');
                     }}
-                    style={[styles.focusedStopTrayAction, { borderColor: alpha(focusedStopAccent, '42') }]}
+                    style={[styles.focusedStopTrayAction, { borderColor: alpha(trayAccent, '42') }]}
                   >
-                    <MaterialCommunityIcons name="chevron-up" size={15} color={focusedStopAccent} />
-                    <Text style={[styles.focusedStopTrayActionText, { color: focusedStopAccent }]}>
+                    <MaterialCommunityIcons name="chevron-up" size={15} color={trayAccent} />
+                    <Text style={[styles.focusedStopTrayActionText, { color: trayAccent }]}>
                       {t('mapBackToPicker')}
                     </Text>
                   </Pressable>
@@ -1668,7 +1899,7 @@ export default function ExploreScreen({
               </View>
             </View>
           </View>
-        </View>
+        </MapOverlayTransition>
       ) : null}
 
       {mapTimedOut ? (
@@ -1693,6 +1924,11 @@ function createStyles(C: ReturnType<typeof useAppColors>) {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    // The legend drops to its own line rather than overflowing the row: its
+    // chips are fixed-width, so without this the row shrank under them and
+    // they spilled back over the direction switch.
+    flexWrap: 'wrap',
+    rowGap: 8,
   },
   topPanelCompact: {
     left: 12,
@@ -1715,9 +1951,11 @@ function createStyles(C: ReturnType<typeof useAppColors>) {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    marginLeft: 'auto',
-    minWidth: 0,
-    flexShrink: 1,
+    // Grows to push itself to the right edge on whichever line it lands on,
+    // and refuses to shrink so the row wraps instead of overlapping.
+    flexGrow: 1,
+    flexShrink: 0,
+    justifyContent: 'flex-end',
   },
   legendRowCompact: {
     gap: 4,
@@ -1953,56 +2191,6 @@ function createStyles(C: ReturnType<typeof useAppColors>) {
     shadowOffset: { width: 0, height: 1 },
     elevation: 1,
   },
-  stopCallout: {
-    width: 272,
-    minHeight: 72,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: C.border,
-    paddingHorizontal: 16,
-    paddingVertical: 13,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    backgroundColor: `${C.panel}F2`,
-    shadowColor: '#000',
-    shadowOpacity: 0.22,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 5 },
-    elevation: 7,
-  },
-  stopCalloutIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: 9,
-    borderWidth: 1.5,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-  },
-  stopCalloutCopy: {
-    flex: 1,
-    minWidth: 0,
-    gap: 3,
-  },
-  stopCalloutLabel: {
-    color: C.text,
-    fontSize: 16,
-    lineHeight: 20,
-    fontWeight: '700',
-  },
-  stopCalloutCode: {
-    color: C.textDim,
-    fontSize: 13,
-    lineHeight: 16,
-    fontWeight: '600',
-  },
-  stopCalloutHint: {
-    color: C.textFaint,
-    fontSize: 12,
-    lineHeight: 15,
-    fontWeight: '600',
-  },
   promotedStopMarkerOuter: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -2168,11 +2356,17 @@ function createStyles(C: ReturnType<typeof useAppColors>) {
     alignItems: 'center',
     justifyContent: 'center',
   },
-  focusedStopMarkerHalo: {
-    position: 'absolute',
-    width: 50,
-    height: 50,
-    borderRadius: 15,
+  focusedStopHaloCanvas: {
+    width: FOCUSED_HALO_CANVAS_SIZE,
+    height: FOCUSED_HALO_CANVAS_SIZE,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  focusedStopHaloRing: {
+    width: FOCUSED_HALO_RING_SIZE,
+    height: FOCUSED_HALO_RING_SIZE,
+    borderRadius: FOCUSED_HALO_RING_SIZE / 2,
+    borderWidth: 2,
   },
   focusedStopMarkerCore: {
     width: 38,
@@ -2186,50 +2380,6 @@ function createStyles(C: ReturnType<typeof useAppColors>) {
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 4 },
     elevation: 7,
-  },
-  focusedStopCallout: {
-    width: 340,
-    minHeight: 86,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: C.borderStrong,
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 18,
-    backgroundColor: `${C.panel}F5`,
-    shadowColor: '#000',
-    shadowOpacity: 0.24,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 8,
-  },
-  focusedStopCalloutIcon: {
-    width: 42,
-    height: 42,
-    borderRadius: 11,
-    borderWidth: 2,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-  },
-  focusedStopCalloutCopy: {
-    flex: 1,
-    minWidth: 0,
-    gap: 4,
-  },
-  focusedStopCalloutLabel: {
-    color: C.text,
-    fontSize: 21,
-    lineHeight: 26,
-    fontWeight: '700',
-  },
-  focusedStopCalloutCode: {
-    color: C.textDim,
-    fontSize: 15,
-    lineHeight: 18,
-    fontWeight: '600',
   },
   configOverlay: {
     position: 'absolute',

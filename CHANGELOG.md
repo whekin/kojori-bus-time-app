@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+### Improved
+
+- Route lines on the map are drawn on a contrasting casing and thicken as you zoom in, so both routes stay readable over the pale and the dark basemap instead of thinning out against road fill.
+- The stop tray and the location message rise into place instead of appearing in one frame, and the locate button now slides out of the tray's way rather than jumping.
+- Panning and zooming the map no longer re-runs the live bus arrival estimates, and the underlying route maths dropped its per-segment trigonometry — matching a bus to the route is roughly 30x faster, which keeps the moving bus markers smooth while the map is being handled.
+- Stop markers fade in together instead of popping, and they now re-tier while you are still pinching rather than waiting for you to lift your fingers.
+- The focused stop gets a slowly breathing halo, and its tray slides back out when you dismiss it instead of vanishing.
+- Where both routes share a road, the alternating stripes join cleanly instead of leaving a pale notch at every bend.
+- The direction switch and the route chips no longer overlap each other: the chips drop to their own line when the row runs out of width, so the destination label stays whole.
+
+### Fixed
+
+- Tapping a stop no longer opens a bubble repeating the stop's name over the map — the card at the bottom already carries it, and the bubble covered the highlight around the stop.
+
 ## v2026.8.21
 ### Improved
 
