@@ -73,6 +73,10 @@ export function StopPickerModal({
     return all.filter(s => s.label.toLowerCase().includes(query) || s.id.includes(query));
   }, [direction, enriched, query, stopNames]);
 
+  // The sheet already renders nothing while hidden; bail before building the
+  // stop rows so a host screen's render does not walk the full stop list.
+  if (!visible) return null;
+
   return (
     <ScrollableBottomSheet
       visible={visible}

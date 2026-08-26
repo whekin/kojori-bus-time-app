@@ -16,6 +16,7 @@ import { useI18n } from '@/hooks/use-i18n';
 import { useMapFocus } from '@/hooks/use-map-focus';
 import { useTabNav, type TabRoute } from '@/hooks/use-tab-nav';
 import type { StopInfo } from '@/services/ttc';
+import { createThemedStyles } from '@/utils/themed-styles';
 
 const MONO = Platform.select({ android: 'monospace', ios: 'Menlo', default: 'monospace' });
 
@@ -47,7 +48,7 @@ export function StopChoiceRow({
   mapReturnRoute?: TabRoute;
 }) {
   const colors = useAppColors();
-  const styles = createStyles(colors);
+  const styles = getStopChoiceRowStyles(colors);
   const { resolvedLanguage, t } = useI18n();
   const { requestStopFocus } = useMapFocus();
   const navigateToTab = useTabNav();
@@ -185,6 +186,8 @@ export function StopChoiceRow({
     </Pressable>
   );
 }
+
+const getStopChoiceRowStyles = createThemedStyles(createStyles);
 
 function createStyles(C: AppColors) {
   return StyleSheet.create({

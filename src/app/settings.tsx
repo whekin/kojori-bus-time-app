@@ -50,6 +50,7 @@ import { useStopNames } from '@/hooks/use-stop-names';
 import { useTtcQueryLogSnapshot } from '@/hooks/use-ttc-query-log';
 import { useTtcOfflineStatus } from '@/hooks/use-ttc-offline';
 import { findStop, StopInfo } from '@/services/ttc';
+import { createThemedStyles } from '@/utils/themed-styles';
 import {
     clearAllTtcCache,
     getBakedScheduleCoverageEnd,
@@ -160,12 +161,17 @@ function formatLegalMarkdown(markdown: string) {
     .trim();
 }
 
+const getSettingsStyles = createThemedStyles(createStyles);
+const getSettingsModalStyles = createThemedStyles(createModalStyles);
+
 function useStyles() {
   const colors = useAppColors();
-  const styles = useMemo(() => createStyles(colors), [colors]);
-  const modalStyles = useMemo(() => createModalStyles(colors), [colors]);
 
-  return { colors, styles, modalStyles };
+  return {
+    colors,
+    styles: getSettingsStyles(colors),
+    modalStyles: getSettingsModalStyles(colors),
+  };
 }
 
 function formatTtl(ms: number) {
@@ -789,6 +795,10 @@ function SingleStopPickerModal({
     return all.filter(s => s.label.toLowerCase().includes(query) || s.id.includes(query));
   }, [direction, enriched, query, stopNames]);
 
+  // The sheet already renders nothing while hidden; bail before building the
+  // stop rows so a settings render does not walk the full stop list.
+  if (!visible) return null;
+
   return (
     <ScrollableBottomSheet
       visible={visible}
@@ -1119,6 +1129,10 @@ export default function SettingsScreen({ isActive = true }: { isActive?: boolean
   }, [activeSection]);
 
   useEffect(() => {
+    // The screen is mounted ahead of time so the tab switch stays cheap; keep
+    // the bundled-asset reads off the prewarm path.
+    if (!isActive) return;
+
     let cancelled = false;
 
     async function loadLegalDocs() {
@@ -1143,7 +1157,7 @@ export default function SettingsScreen({ isActive = true }: { isActive?: boolean
     return () => {
       cancelled = true;
     };
-  }, [t]);
+  }, [isActive, t]);
 
   const liveQueryMetrics = useMemo(
     () => calculateTtcQueryMetrics(queryLog.entries, queryMetricsNow),
@@ -1168,6 +1182,7 @@ export default function SettingsScreen({ isActive = true }: { isActive?: boolean
   }, [paletteIndex]);
 
   useEffect(() => {
+    if (!isActive) return;
     if (weeklyRefreshStartedRef.current) return;
     if (offlineStatus.status === 'hydrating' || offlineStatus.status === 'warming') return;
     if (!offlineStatus.lastHydratedAt) return;
@@ -1178,7 +1193,7 @@ export default function SettingsScreen({ isActive = true }: { isActive?: boolean
     void warmTtcOfflineData(queryClient).finally(() => {
       setRefreshingDataset(current => current === 'weekly' ? null : current);
     });
-  }, [offlineStatus.lastHydratedAt, offlineStatus.lastSyncAt, offlineStatus.status, queryClient]);
+  }, [isActive, offlineStatus.lastHydratedAt, offlineStatus.lastSyncAt, offlineStatus.status, queryClient]);
 
   function handleRefreshDataset(dataset: TtcOfflineDataset) {
     if (offlineStatus.status === 'warming' || refreshingDataset) return;
@@ -2351,7 +2366,9 @@ function LegalModal({
 }) {
   const insets = useSafeAreaInsets();
   const { t } = useI18n();
-  const modalStyles = createModalStyles(colors);
+  const modalStyles = getSettingsModalStyles(colors);
+
+  if (!visible) return null;
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>

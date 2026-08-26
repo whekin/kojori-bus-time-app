@@ -1,5 +1,12 @@
 # Changelog
 
+## [UNRELEASED]
+### Improved
+
+- Opening the Timetable and Settings tabs no longer stalls: both screens are now built quietly in the background shortly after launch, so the first tap swaps pages instead of constructing the whole screen on the spot.
+- Switching tabs only re-renders the screens whose state actually changed, instead of re-rendering the map and settings screens every time.
+- Stop lists, stop rows and the timetable rows share one prepared set of styles per theme rather than rebuilding them for every row, and hidden stop pickers no longer build their full list of stops in the background.
+
 ## v2026.8.26
 ### Improved
 

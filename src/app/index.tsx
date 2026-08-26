@@ -31,6 +31,7 @@ import { useReducedMotion } from "@/hooks/use-reduced-motion";
 import { useSettings } from "@/hooks/use-settings";
 import { useStopNames } from "@/hooks/use-stop-names";
 import { useVehiclePositions } from "@/hooks/use-vehicle-positions";
+import { createThemedStyles } from "@/utils/themed-styles";
 import {
   BusLine,
   computeUpcomingDepartures,
@@ -1403,7 +1404,8 @@ function createStyles(C: AppColors) {
   });
 }
 
+const getHomeStyles = createThemedStyles(createStyles);
+
 function useHomeStyles() {
-  const colors = useAppColors();
-  return useMemo(() => createStyles(colors), [colors]);
+  return getHomeStyles(useAppColors());
 }

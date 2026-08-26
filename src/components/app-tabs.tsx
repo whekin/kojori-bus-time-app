@@ -31,7 +31,6 @@ type TabItem = {
   route: TabRoute;
   title: string;
   icon: React.ComponentProps<typeof MaterialCommunityIcons>["name"];
-  render: (isActive: boolean) => React.ReactNode;
 };
 
 const NAV_GAP = 6;
@@ -39,11 +38,24 @@ const NAV_PADDING = 5;
 const NAV_HIGHLIGHT_EXTRA = 2;
 const NAV_PROGRESS_TIMING = { duration: 220 };
 const NAV_PROGRESS_REDUCED_TIMING = { duration: 1 };
-const MAP_PREWARM_DELAY_MS = 500;
 const TAB_ROUTES: TabRoute[] = ["index", "explore", "timetable", "settings"];
+// Mount the non-default screens while the app is idle, so the first press on a
+// tab is a page swap instead of a synchronous mount of a large screen.
+const TAB_PREWARM_SCHEDULE: { index: number; delayMs: number }[] = [
+  { index: 1, delayMs: 500 },
+  { index: 2, delayMs: 1200 },
+  { index: 3, delayMs: 1900 },
+];
 
 const AnimatedIcon = Animated.createAnimatedComponent(MaterialCommunityIcons);
 const AnimatedPagerView = Animated.createAnimatedComponent(PagerView);
+
+// Without memo every tab switch re-renders all four mounted screens, because the
+// pager children are recreated whenever `activeIndex` changes.
+const MemoHomeScreen = React.memo(HomeScreen);
+const MemoExploreScreen = React.memo(ExploreScreen);
+const MemoTimetableScreen = React.memo(TimetableScreen);
+const MemoSettingsScreen = React.memo(SettingsScreen);
 
 function usePagerScrollHandler(
   onPageScroll: (event: { position: number; offset: number }) => void,
@@ -180,35 +192,10 @@ export default function AppTabs({
   const reduceMotion = useReducedMotion();
   const navProgressTiming = reduceMotion ? NAV_PROGRESS_REDUCED_TIMING : NAV_PROGRESS_TIMING;
   const tabs: TabItem[] = [
-    {
-      route: "index",
-      title: t("tabsDepartures"),
-      icon: "bus-clock",
-      render: (isActive) => <HomeScreen isActive={isActive} />,
-    },
-    {
-      route: "explore",
-      title: t("tabsMap"),
-      icon: "map-marker-radius",
-      render: (isActive) => (
-        <ExploreScreen
-          isActive={isActive}
-          suspendNativeMap={activeIndex === 3}
-        />
-      ),
-    },
-    {
-      route: "timetable",
-      title: t("tabsTimetable"),
-      icon: "table-clock",
-      render: (isActive) => <TimetableScreen isActive={isActive} />,
-    },
-    {
-      route: "settings",
-      title: t("tabsSettings"),
-      icon: "cog",
-      render: (isActive) => <SettingsScreen isActive={isActive} />,
-    },
+    { route: "index", title: t("tabsDepartures"), icon: "bus-clock" },
+    { route: "explore", title: t("tabsMap"), icon: "map-marker-radius" },
+    { route: "timetable", title: t("tabsTimetable"), icon: "table-clock" },
+    { route: "settings", title: t("tabsSettings"), icon: "cog" },
   ];
 
   const mountTab = useCallback((index: number) => {
@@ -238,14 +225,20 @@ export default function AppTabs({
   useEffect(() => {
     if (deferInactiveTabs) return;
 
-    let idleTask: ReturnType<typeof scheduleIdleTask> | undefined;
-    const delayId = setTimeout(() => {
-      idleTask = scheduleIdleTask(() => mountTab(1));
-    }, MAP_PREWARM_DELAY_MS);
+    const timeouts: ReturnType<typeof setTimeout>[] = [];
+    const idleTasks: ReturnType<typeof scheduleIdleTask>[] = [];
+
+    for (const { index, delayMs } of TAB_PREWARM_SCHEDULE) {
+      timeouts.push(
+        setTimeout(() => {
+          idleTasks.push(scheduleIdleTask(() => mountTab(index)));
+        }, delayMs),
+      );
+    }
 
     return () => {
-      clearTimeout(delayId);
-      idleTask?.cancel();
+      for (const timeout of timeouts) clearTimeout(timeout);
+      for (const idleTask of idleTasks) idleTask.cancel();
     };
   }, [deferInactiveTabs, mountTab]);
 
@@ -376,15 +369,29 @@ export default function AppTabs({
         setActiveIndex(nextIndex);
       }}
     >
-      {tabs.map((tab, index) => {
-        return (
-          <View key={tab.route} style={styles.page}>
-            {mountedIndexes.has(index)
-              ? tab.render(activeIndex === index)
-              : null}
-          </View>
-        );
-      })}
+      <View key="index" style={styles.page}>
+        {mountedIndexes.has(0) ? (
+          <MemoHomeScreen isActive={activeIndex === 0} />
+        ) : null}
+      </View>
+      <View key="explore" style={styles.page}>
+        {mountedIndexes.has(1) ? (
+          <MemoExploreScreen
+            isActive={activeIndex === 1}
+            suspendNativeMap={activeIndex === 3}
+          />
+        ) : null}
+      </View>
+      <View key="timetable" style={styles.page}>
+        {mountedIndexes.has(2) ? (
+          <MemoTimetableScreen isActive={activeIndex === 2} />
+        ) : null}
+      </View>
+      <View key="settings" style={styles.page}>
+        {mountedIndexes.has(3) ? (
+          <MemoSettingsScreen isActive={activeIndex === 3} />
+        ) : null}
+      </View>
     </AnimatedPagerView>
   );
 

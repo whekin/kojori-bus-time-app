@@ -21,6 +21,7 @@ import { useRouteStops } from "@/hooks/use-route-stops";
 import { useSchedule } from "@/hooks/use-schedule";
 import { useSettings } from "@/hooks/use-settings";
 import { useStopNames } from "@/hooks/use-stop-names";
+import { createThemedStyles } from "@/utils/themed-styles";
 import {
   BusLine,
   extractStopTimes,
@@ -509,7 +510,8 @@ function createStyles(C: AppColors) {
   });
 }
 
+const getTimetableStyles = createThemedStyles(createStyles);
+
 function useTimetableStyles() {
-  const colors = useAppColors();
-  return useMemo(() => createStyles(colors), [colors]);
+  return getTimetableStyles(useAppColors());
 }

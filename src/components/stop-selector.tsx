@@ -19,6 +19,7 @@ import { useI18n } from '@/hooks/use-i18n';
 import { useMapFocus } from '@/hooks/use-map-focus';
 import { useTabNav, type TabRoute } from '@/hooks/use-tab-nav';
 import { type SharedDirection } from '@/hooks/use-settings';
+import { createThemedStyles } from '@/utils/themed-styles';
 
 const MONO = Platform.select({ android: 'monospace', ios: 'Menlo', default: 'monospace' });
 const DISPLAY = Platform.select({ android: 'serif', ios: 'Georgia', default: 'serif' });
@@ -289,6 +290,8 @@ function createStyles(C: ReturnType<typeof useAppColors>) {
   });
 }
 
+const getStopSelectorStyles = createThemedStyles(createStyles);
+
 function useStopSelectorStyles() {
-  return createStyles(useAppColors());
+  return getStopSelectorStyles(useAppColors());
 }
