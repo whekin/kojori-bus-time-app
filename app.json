@@ -16,7 +16,7 @@
     },
     "ios": {
       "bundleIdentifier": "com.whekin.kojoribus",
-      "buildNumber": "2026082700",
+      "buildNumber": "2026082701",
       "supportsTablet": false,
       "icon": {
         "light": "./assets/images/ios-icon.png",
@@ -45,7 +45,7 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "backgroundColor": "#0F0B10",
-      "versionCode": 2026082700,
+      "versionCode": 2026082701,
       "predictiveBackGestureEnabled": false
     },
     "web": {
