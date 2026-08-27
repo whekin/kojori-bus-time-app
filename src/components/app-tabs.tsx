@@ -46,6 +46,9 @@ const TAB_PREWARM_SCHEDULE: { index: number; delayMs: number }[] = [
   { index: 2, delayMs: 1200 },
   { index: 3, delayMs: 1900 },
 ];
+// Mounting or tearing down the native map view blocks the UI thread, so the
+// suspension follows the tab switch instead of riding along with it.
+const MAP_SUSPEND_SETTLE_MS = 400;
 
 const AnimatedIcon = Animated.createAnimatedComponent(MaterialCommunityIcons);
 const AnimatedPagerView = Animated.createAnimatedComponent(PagerView);
@@ -187,6 +190,7 @@ export default function AppTabs({
     () => new Set([0]),
   );
   const [navWidth, setNavWidth] = useState(0);
+  const [mapSuspended, setMapSuspended] = useState(false);
   const pagerProgress = useSharedValue(0);
   const { t } = useI18n();
   const reduceMotion = useReducedMotion();
@@ -241,6 +245,28 @@ export default function AppTabs({
       for (const idleTask of idleTasks) idleTask.cancel();
     };
   }, [deferInactiveTabs, mountTab]);
+
+  useEffect(() => {
+    const shouldSuspend = activeIndex === 3;
+    if (shouldSuspend === mapSuspended) return;
+
+    // Opening the map itself already skips the page animation, so remount the
+    // native view right away rather than showing an empty page first.
+    if (activeIndex === 1) {
+      setMapSuspended(false);
+      return;
+    }
+
+    let idleTask: ReturnType<typeof scheduleIdleTask> | undefined;
+    const timeout = setTimeout(() => {
+      idleTask = scheduleIdleTask(() => setMapSuspended(shouldSuspend));
+    }, MAP_SUSPEND_SETTLE_MS);
+
+    return () => {
+      clearTimeout(timeout);
+      idleTask?.cancel();
+    };
+  }, [activeIndex, mapSuspended]);
 
   const switchToTabIndex = useCallback((
     nextIndex: number,
@@ -378,7 +404,7 @@ export default function AppTabs({
         {mountedIndexes.has(1) ? (
           <MemoExploreScreen
             isActive={activeIndex === 1}
-            suspendNativeMap={activeIndex === 3}
+            suspendNativeMap={mapSuspended}
           />
         ) : null}
       </View>

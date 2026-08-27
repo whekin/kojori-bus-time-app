@@ -1,5 +1,10 @@
 # Changelog
 
+## [UNRELEASED]
+### Improved
+
+- Switching between the Timetable and Settings tabs no longer stutters: the map is now put to sleep and woken up once the switch has finished, instead of tearing down and rebuilding the native map in the middle of the page animation.
+
 ## v2026.8.27
 ### Improved
 
