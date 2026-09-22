@@ -11,7 +11,6 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { StopSelector } from "@/components/stop-selector";
-import { TtcStatusTopBar } from "@/components/ttc-status-top-bar";
 import { alpha, BottomTabInset, type AppColors } from "@/constants/theme";
 import { useActiveDirection } from "@/hooks/use-active-direction";
 import { useAppColors } from "@/hooks/use-app-colors";
@@ -266,8 +265,6 @@ export default function TimetableScreen({ isActive = true }: { isActive?: boolea
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
-      <TtcStatusTopBar />
-
       <SectionList
         sections={sections}
         keyExtractor={(item, i) => `${item.bus}-${item.time}-${i}`}

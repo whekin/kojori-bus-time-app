@@ -6,7 +6,7 @@ export type TtcHealthStatus =
   | 'offline'
   | 'rate-limited'
   | 'device-offline'
-  /** Bundled/cached timetable ran past its serviceDates — no departures can be shown. */
+  /** Preview-only status for testing the unconfirmed timetable UI. */
   | 'schedule-stale';
 
 interface TtcHealthState {

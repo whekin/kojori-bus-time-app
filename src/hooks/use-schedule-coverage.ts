@@ -2,8 +2,8 @@ import { useSchedule } from '@/hooks/use-schedule';
 import { combinedScheduleCoverage, ROUTES, type ScheduleCoverage } from '@/services/ttc';
 
 /**
- * Coverage of the schedules actually in play (live, cached, or bundled). Once these
- * age out, every stop resolves zero departures, so the status surface can say so.
+ * Coverage of the schedules actually in play (cached or bundled). Departure times
+ * continue to follow the weekly pattern after the listed service dates end.
  */
 export function useScheduleCoverage(): ScheduleCoverage {
   const toKojori380 = useSchedule(ROUTES['380'].id, ROUTES['380'].toKojori);

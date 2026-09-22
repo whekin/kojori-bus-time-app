@@ -1,10 +1,9 @@
-import { useScheduleCoverage } from '@/hooks/use-schedule-coverage';
 import { useSettings, type TtcHealthDemo } from '@/hooks/use-settings';
 import { useTtcHealth, type TtcHealthSnapshot } from '@/hooks/use-ttc-health';
 import { serviceDateString } from '@/services/ttc';
 
 export interface EffectiveTtcHealth extends TtcHealthSnapshot {
-  /** Last service date the timetable covers, as "YYYY-MM-DD". Null when unknown. */
+  /** Last service date shown by the schedule-stale debug preview. */
   scheduleCoverageEnd: string | null;
 }
 
@@ -69,21 +68,17 @@ function demoCoverageEnd(now: number) {
 export function useEffectiveTtcHealth(): EffectiveTtcHealth {
   const liveHealth = useTtcHealth();
   const { settings } = useSettings();
-  const coverage = useScheduleCoverage();
-
   const now = Date.now();
   const demo = demoSnapshot(settings.ttcHealthDemo, now);
 
   if (demo) {
     return {
       ...demo,
-      scheduleCoverageEnd: demo.status === 'schedule-stale' ? demoCoverageEnd(now) : coverage.coverageEnd,
+      scheduleCoverageEnd: demo.status === 'schedule-stale' ? demoCoverageEnd(now) : null,
     };
   }
 
-  // An expired timetable outranks connection trouble: it is why the screens are
-  // empty, and the fix (get back online so fresh schedules download) is the same.
-  const status = coverage.coversToday ? liveHealth.status : 'schedule-stale';
-
-  return { ...liveHealth, status, scheduleCoverageEnd: coverage.coverageEnd };
+  // The saved timetable repeats by weekday after TTC's listed service dates end.
+  // Those dates alone are not a connection or timetable failure.
+  return { ...liveHealth, scheduleCoverageEnd: null };
 }
