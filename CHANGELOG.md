@@ -1,6 +1,6 @@
 # Changelog
 
-## [UNRELEASED]
+## v2026.9.23
 ### Fixed
 
 - Expired TTC confirmation dates no longer show a persistent timetable warning. Saved weekly departure times remain available, and live connection errors are still reported where live data is used.
