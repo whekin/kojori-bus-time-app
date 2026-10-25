@@ -1,5 +1,11 @@
 # Changelog
 
+## [UNRELEASED]
+
+### Infra
+
+- Added an experimental GitHub Actions build of an unsigned iPhone IPA for SideStore, with embedded JavaScript, OTA updates disabled for that build, and downloadable IPA and build logs.
+
 ## v2026.9.23
 ### Fixed
 

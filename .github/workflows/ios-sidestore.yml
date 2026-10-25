@@ -1,0 +1,129 @@
+name: Experimental iOS IPA (SideStore)
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - codex/experiment-sidestore-ipa
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-sidestore-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ipa:
+    runs-on: macos-26
+    timeout-minutes: 60
+    env:
+      CI: '1'
+      EXPO_NO_TELEMETRY: '1'
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.4.4'
+
+      - name: Show build tools
+        run: |
+          xcodebuild -version
+          xcodebuild -showsdks
+          bun --version
+          pod --version
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Check source
+        run: |
+          bun run lint
+          bun run typecheck
+
+      - name: Configure standalone experimental build
+        run: |
+          # Modify only this disposable checkout, leaving release config unchanged.
+          # The IPA uses its embedded JS rather than receiving production OTAs.
+          bun -e '
+            const config = await Bun.file("app.json").json();
+            config.expo.updates.enabled = false;
+            config.expo.ios.buildNumber = `1.${process.env.GITHUB_RUN_NUMBER}.${process.env.GITHUB_RUN_ATTEMPT}`;
+            await Bun.write("app.json", JSON.stringify(config, null, 2) + "\n");
+          '
+
+      - name: Generate iOS project
+        env:
+          NODE_ENV: production
+        run: bunx expo prebuild --platform ios --no-install
+
+      - name: Install CocoaPods dependencies
+        run: pod install --project-directory=ios 2>&1 | tee "$RUNNER_TEMP/ios-pods.log"
+
+      - name: Archive unsigned device app
+        env:
+          NODE_ENV: production
+        run: |
+          xcodebuild archive \
+            -workspace ios/KojoringTime.xcworkspace \
+            -scheme KojoringTime \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/KojoringTime.xcarchive" \
+            -derivedDataPath "$RUNNER_TEMP/ios-derived-data" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY='' \
+            DEVELOPMENT_TEAM='' \
+            2>&1 | tee "$RUNNER_TEMP/ios-build.log"
+
+      - name: Package and verify IPA
+        run: |
+          set -euo pipefail
+          app="$RUNNER_TEMP/KojoringTime.xcarchive/Products/Applications/KojoringTime.app"
+          test -s "$app/main.jsbundle"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleSupportedPlatforms:0' "$app/Info.plist")" = iPhoneOS
+          executable=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$app/Info.plist")
+          file "$app/$executable" | grep arm64
+
+          mkdir -p "$RUNNER_TEMP/sidestore/Payload" "$RUNNER_TEMP/ios-artifacts"
+          ditto "$app" "$RUNNER_TEMP/sidestore/Payload/KojoringTime.app"
+          ditto -c -k --keepParent "$RUNNER_TEMP/sidestore/Payload" "$RUNNER_TEMP/ios-artifacts/KojoringTime-sidestore.ipa"
+          unzip -tq "$RUNNER_TEMP/ios-artifacts/KojoringTime-sidestore.ipa"
+          (cd "$RUNNER_TEMP/ios-artifacts" && shasum -a 256 KojoringTime-sidestore.ipa > SHA256SUMS.txt)
+          {
+            echo '### Experimental SideStore IPA'
+            echo 'Download the **sidestore-ipa** artifact, extract the ZIP, and import the `.ipa` into SideStore.'
+            echo 'Unsigned arm64 Release build with embedded JS and OTA updates disabled. No Apple credentials or Expo login used.'
+            echo "Source commit: $GITHUB_SHA"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: sidestore-ipa
+          path: ${{ runner.temp }}/ios-artifacts/
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
+
+      - name: Upload build logs
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-build-logs
+          path: |
+            ${{ runner.temp }}/ios-pods.log
+            ${{ runner.temp }}/ios-build.log
+          if-no-files-found: ignore
+          retention-days: 7

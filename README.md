@@ -93,6 +93,28 @@ What they do:
 
 `bun run release` creates the date-based release for today. If that date tag already exists, it treats the run as a re-release: the visible app version stays the same, the Android build suffix/versionCode increments, the existing GitHub release APK and notes are replaced, and a new EAS update is published.
 
+## Experimental SideStore IPA
+
+The `Experimental iOS IPA (SideStore)` GitHub Actions workflow builds an unsigned
+arm64 Release app on macOS for installation through SideStore. It runs on pushes
+to `codex/experiment-sidestore-ipa` and supports `workflow_dispatch` once the workflow
+exists on the default branch. No Apple certificates, paid developer account,
+Expo login, or repository secrets are required for the build.
+
+Open the branch's run in GitHub Actions, download the `sidestore-ipa` artifact,
+extract the ZIP, and import `KojoringTime-sidestore.ipa` into SideStore. The artifact
+also includes `SHA256SUMS.txt`; build logs are uploaded separately. Artifacts expire
+after seven days. To retry before merging the workflow, use GitHub's **Re-run jobs**
+on an existing run or push another commit to the experimental branch.
+
+The workflow generates the ignored iOS project from Expo config, archives for a
+physical iPhone with code signing disabled, and packages `Payload/KojoringTime.app`
+as an IPA. It checks that the app contains its JS bundle and an arm64 executable.
+OTA updates are disabled only in the disposable CI checkout, so this experimental
+app keeps the code embedded in its IPA. The map uses the default Apple Maps provider
+on iOS; the home-screen widget is Android-only. Successful compilation still needs
+an installation and launch check on a real iPhone.
+
 ## Updates
 
 EAS Updates use the manual runtime in `app.json` (`kojori-android-1`) instead of the date-based app version. This lets daily releases and JS-only fixes update existing compatible installs automatically.
