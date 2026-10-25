@@ -325,6 +325,7 @@ export function StartScreen({ onDone }: { onDone: () => void }) {
             return (
               <Pressable
                 key={mode}
+                testID={`start-${mode}`}
                 accessibilityRole="button"
                 accessibilityLabel={accessibilityLabel}
                 onPress={() => handlePick(mode)}

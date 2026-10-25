@@ -15,6 +15,7 @@
 
 - Added an experimental GitHub Actions build of an unsigned iPhone IPA for SideStore, with embedded JavaScript, OTA updates disabled for that build, and downloadable IPA and build logs.
 - iOS CI also builds a simulator app and checks native widget schedule behavior across midnight and weekday boundaries.
+- iOS simulator smoke checks cover boarding-stop markers and the Settings back gesture, with screenshots available as CI artifacts.
 
 ## v2026.9.23
 ### Fixed

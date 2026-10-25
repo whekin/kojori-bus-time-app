@@ -155,6 +155,43 @@ jobs:
           retention-days: 7
           compression-level: 0
 
+      - name: Set up Java for iOS UI checks
+        if: matrix.target == 'simulator'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install Maestro CLI
+        if: matrix.target == 'simulator'
+        run: |
+          curl -fL --retry 3 https://github.com/mobile-dev-inc/maestro/releases/download/cli-2.11.0/maestro.zip -o "$RUNNER_TEMP/maestro.zip"
+          unzip -q "$RUNNER_TEMP/maestro.zip" -d "$RUNNER_TEMP/maestro"
+          echo "$RUNNER_TEMP/maestro/maestro/bin" >> "$GITHUB_PATH"
+
+      - name: Run iPhone interface checks
+        if: matrix.target == 'simulator'
+        env:
+          MAESTRO_CLI_NO_ANALYTICS: '1'
+          MAESTRO_CLI_ANALYSIS_NOTIFICATION_DISABLED: 'true'
+        run: |
+          set -euo pipefail
+          runtime=$(xcrun simctl list runtimes -j | python3 -c 'import json,sys; print(next(r["identifier"] for r in json.load(sys.stdin)["runtimes"] if r.get("isAvailable") and "SimRuntime.iOS" in r["identifier"]))')
+          simulator=$(xcrun simctl create KojoringUITest com.apple.CoreSimulator.SimDeviceType.iPhone-16 "$runtime")
+          xcrun simctl boot "$simulator"
+          xcrun simctl bootstatus "$simulator" -b
+          xcrun simctl install "$simulator" "$RUNNER_TEMP/KojoringTime.xcarchive/Products/Applications/KojoringTime.app"
+          maestro --device "$simulator" test .maestro/ios-smoke.yml --test-output-dir "$RUNNER_TEMP/ios-ui-checks" --format junit --output "$RUNNER_TEMP/ios-ui-checks/results.xml"
+
+      - name: Upload iOS screenshots and UI results
+        if: ${{ always() && matrix.target == 'simulator' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-ui-checks
+          path: ${{ runner.temp }}/ios-ui-checks/
+          if-no-files-found: ignore
+          retention-days: 7
+
       - name: Upload build logs
         if: ${{ always() }}
         uses: actions/upload-artifact@v4

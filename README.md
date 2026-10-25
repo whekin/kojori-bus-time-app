@@ -122,6 +122,9 @@ the IPA to update its timetable. Widget settings are independent of the Android
 widget preferences in the app; no shared App Group or native network calls are
 needed. CI also uploads `ios-simulator`, containing a zipped `.app` that can be
 installed with `xcrun simctl install booted <path-to-app>` after extracting it.
+The simulator job also boots an iPhone and runs `.maestro/ios-smoke.yml`, checking
+that boarding-stop markers appear and that an edge swipe returns from nested
+Settings sections. Screenshots and results are uploaded as `ios-ui-checks`.
 Successful compilation still needs
 an installation and launch check on a real iPhone.
 

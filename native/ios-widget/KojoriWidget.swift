@@ -83,6 +83,38 @@ struct BusWidgetView: View {
             .background(.tint.opacity(0.15), in: Capsule())
     }
 
+    func nextDeparture(_ next: WidgetDeparture) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(next.time).font(.system(size: family == .systemSmall ? 32 : 38, weight: .semibold, design: .rounded))
+                    .monospacedDigit().minimumScaleFactor(0.7).lineLimit(1)
+                if family == .systemLarge { badge(next.bus) }
+            }
+            HStack(spacing: 5) {
+                if family != .systemLarge { badge(next.bus) }
+                Text(next.date, style: .relative).font(.caption).foregroundStyle(.secondary)
+            }
+            if !WidgetSchedule.calendar.isDate(next.date, inSameDayAs: entry.date) {
+                Text(WidgetCopy.text("tomorrow")).font(.caption2).foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    func followingDepartures(limit: Int) -> some View {
+        VStack(spacing: 6) {
+            ForEach(Array(entry.departures.dropFirst().prefix(limit))) { departure in
+                HStack {
+                    badge(departure.bus)
+                    Text(departure.time).font(.system(.body, design: .rounded).monospacedDigit())
+                    if family == .systemLarge {
+                        Spacer()
+                        Text(departure.date, style: .relative).font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+            }
+        }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: family == .systemSmall ? 6 : 8) {
             HStack(spacing: 5) {
@@ -93,27 +125,15 @@ struct BusWidgetView: View {
             Text(entry.stop?.name ?? "Kojoring Time")
                 .font(.caption).foregroundStyle(.secondary).lineLimit(1)
             if let next = entry.departures.first {
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text(next.time).font(.system(size: family == .systemSmall ? 32 : 38, weight: .semibold, design: .rounded))
-                        .monospacedDigit().minimumScaleFactor(0.7).lineLimit(1)
-                    if family != .systemSmall { badge(next.bus) }
-                }
-                HStack {
-                    if family == .systemSmall { badge(next.bus) }
-                    Text(next.date, style: .relative).font(.caption).foregroundStyle(.secondary)
-                    if !WidgetSchedule.calendar.isDate(next.date, inSameDayAs: entry.date) {
-                        Text(WidgetCopy.text("tomorrow")).font(.caption2).foregroundStyle(.secondary)
+                if family == .systemMedium {
+                    HStack(alignment: .top) {
+                        nextDeparture(next)
+                        Spacer(minLength: 8)
+                        followingDepartures(limit: 3)
                     }
-                }
-                if family != .systemSmall {
-                    ForEach(Array(entry.departures.dropFirst().prefix(family == .systemLarge ? 5 : 1))) { departure in
-                        HStack {
-                            badge(departure.bus)
-                            Text(departure.time).font(.system(.body, design: .rounded).monospacedDigit())
-                            Spacer()
-                            Text(departure.date, style: .relative).font(.caption).foregroundStyle(.secondary)
-                        }
-                    }
+                } else {
+                    nextDeparture(next)
+                    if family == .systemLarge { followingDepartures(limit: 5) }
                 }
                 Spacer(minLength: 0)
                 Text(WidgetCopy.text(next.confirmed ? "schedule" : "saved"))
@@ -125,7 +145,7 @@ struct BusWidgetView: View {
             }
         }
         .containerBackground(.background, for: .widget)
-        .widgetURL(URL(string: "kojoribs://"))
+        .widgetURL(entry.stop?.deepLink ?? URL(string: "kojoribs://"))
     }
 }
 

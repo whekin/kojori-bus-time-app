@@ -9,6 +9,10 @@ enum WidgetScheduleTests {
         let stop = WidgetStop(id: "test", stopId: "1:1", direction: "toKojori", names: ["en": "Test"],
                               routes: ["380": [weekday, weekend], "316": [weekday]])
         let schedule = WidgetSchedule(schemaVersion: 1, bakedAt: "", stops: [stop])
+        let link = URLComponents(url: stop.deepLink!, resolvingAgainstBaseURL: false)!
+        assert(link.scheme == "kojoribs")
+        assert(link.queryItems?.first { $0.name == "widgetMode" }?.value == "kojori")
+        assert(link.queryItems?.first { $0.name == "widgetStopId" }?.value == "1:1")
         // Sunday 23:55 in Tbilisi: yesterday's 24:15 remains a valid departure.
         let sunday = schedule.departures(after: date("2026-10-25T19:55:00Z"), stopID: "test")
         assert(sunday.first?.date == date("2026-10-25T20:15:00Z"))

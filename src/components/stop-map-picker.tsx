@@ -91,6 +91,7 @@ export function StopMapPicker({
   const markersOpacity = useSharedValue(0);
   const mapRef = useRef<MapView>(null);
   const [mapReady, setMapReady] = useState(false);
+  const [mapRevision, setMapRevision] = useState(0);
   // Screen positions come from the map's own projection. Google snaps to its
   // own zoom levels, so the span it actually shows is not the span we asked
   // for, and anything we compute ourselves drifts further the further a stop
@@ -185,11 +186,18 @@ export function StopMapPicker({
       mapRef.current
         ?.getMapBoundaries()
         .then(bounds => {
-          if (cancelled || !bounds?.northEast || !bounds?.southWest) return;
+          if (cancelled) return;
+          if (!bounds?.northEast || !bounds?.southWest) {
+            setFailedKey(projectionKey);
+            return;
+          }
 
           const shownLatitudeDelta = bounds.northEast.latitude - bounds.southWest.latitude;
           const shownLongitudeDelta = bounds.northEast.longitude - bounds.southWest.longitude;
-          if (!(shownLatitudeDelta > 0) || !(shownLongitudeDelta > 0)) return;
+          if (!(shownLatitudeDelta > 0) || !(shownLongitudeDelta > 0)) {
+            setFailedKey(projectionKey);
+            return;
+          }
 
           const shown = {
             latitude: (bounds.northEast.latitude + bounds.southWest.latitude) / 2,
@@ -233,7 +241,7 @@ export function StopMapPicker({
       clearTimeout(timeoutId);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mapReady, projectionKey]);
+  }, [mapReady, projectionKey, mapRevision]);
 
   // Fades in on arrival but hides instantly: easing the markers out would put
   // back the two-step read this replaced.
@@ -290,6 +298,7 @@ export function StopMapPicker({
         showsTraffic={false}
         ref={mapRef}
         onMapReady={() => setMapReady(true)}
+        onRegionChangeComplete={Platform.OS === 'ios' ? () => setMapRevision(value => value + 1) : undefined}
         onPress={() => {
           if (Date.now() - markerTappedAt.current < 400) return;
           setExpanded(previous => !previous);
@@ -313,6 +322,7 @@ export function StopMapPicker({
           return (
             <Pressable
               key={stop.id}
+              testID={`boarding-stop-${stop.id}`}
               accessibilityRole="button"
               accessibilityState={{ selected: isActive }}
               accessibilityLabel={stop.label}

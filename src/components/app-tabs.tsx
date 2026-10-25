@@ -136,6 +136,7 @@ function TabButton({
 
   return (
     <Pressable
+      testID={`tab-${tab.route}`}
       style={styles.navButton}
       android_ripple={{ color: "transparent" }}
       accessibilityRole="tab"

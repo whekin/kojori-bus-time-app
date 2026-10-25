@@ -22,6 +22,16 @@ struct WidgetStop: Codable, Identifiable {
 
     var name: String { names[WidgetCopy.language] ?? names["en"] ?? stopId }
     var destination: String { WidgetCopy.text(direction) }
+    var deepLink: URL? {
+        var url = URLComponents()
+        url.scheme = "kojoribs"
+        url.host = ""
+        url.queryItems = [
+            URLQueryItem(name: "widgetMode", value: direction == "toKojori" ? "kojori" : "tbilisi"),
+            URLQueryItem(name: "widgetStopId", value: stopId),
+        ]
+        return url.url
+    }
 }
 
 struct WidgetDeparture: Identifiable {

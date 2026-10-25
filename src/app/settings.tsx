@@ -1460,6 +1460,7 @@ export default function SettingsScreen({ isActive = true, onSubmenuChange }: {
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={t('settingsOpenSectionA11y', { section: title, summary })}
+        testID={`settings-section-${section}`}
         onPress={() => openSection(section)}
         style={({ pressed }) => [
           styles.sectionCard,
@@ -1525,7 +1526,10 @@ export default function SettingsScreen({ isActive = true, onSubmenuChange }: {
   }
 
   return (
-    <View {...backGesture.panHandlers} style={[styles.screen, { paddingTop: insets.top }]}>
+    <View
+      testID={activeSection ? `settings-page-${activeSection}` : 'settings-root'}
+      {...backGesture.panHandlers}
+      style={[styles.screen, { paddingTop: insets.top }]}>
       <View style={styles.header}>
         {activeSection ? (
           <Pressable

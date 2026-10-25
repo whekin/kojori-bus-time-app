@@ -10,7 +10,7 @@ module.exports = function withIosWidget(config) {
     const root = mod.modRequest.projectRoot;
     const folder = path.join(mod.modRequest.platformProjectRoot, TARGET);
     fs.mkdirSync(folder, { recursive: true });
-    for (const file of ['WidgetSchedule.swift', 'KojoriWidget.swift']) {
+    for (const file of ['WidgetSchedule.swift', 'KojoriWidget.swift', 'Localizable.xcstrings']) {
       fs.copyFileSync(path.join(root, 'native/ios-widget', file), path.join(folder, file));
     }
     execFileSync('bun', [path.join(root, 'scripts/build-ios-widget-data.ts'), path.join(folder, 'timetable.json')], { cwd: root });
@@ -44,6 +44,16 @@ module.exports = function withIosWidget(config) {
       project.addToPbxResourcesBuildPhase(resource);
     }
 
+    const group = Object.entries(project.hash.project.objects.PBXGroup)
+      .find(([, item]) => item?.name?.replaceAll('"', '') === TARGET)[0];
+    const localization = project.addFile('Localizable.xcstrings', group, { lastKnownFileType: 'text.json.xcstrings' });
+    if (localization) {
+      localization.uuid = project.generateUuid();
+      localization.target = Object.entries(project.pbxNativeTargetSection()).find(([, item]) => item === nativeTarget)[0];
+      project.addToPbxBuildFileSection(localization);
+      project.addToPbxResourcesBuildPhase(localization);
+    }
+
     const configurations = project.pbxXCBuildConfigurationSection();
     const list = project.pbxXCConfigurationList()[nativeTarget.buildConfigurationList];
     for (const item of list.buildConfigurations) {
@@ -72,6 +82,13 @@ module.exports = function withIosWidget(config) {
 <key>NSExtension</key><dict>
 <key>NSExtensionPointIdentifier</key><string>com.apple.widgetkit-extension</string>
 </dict></dict></plist>`);
+    // node-xcode otherwise serializes missing file metadata as literal "undefined".
+    for (const file of Object.values(project.pbxFileReferenceSection())) {
+      if (!file || typeof file !== 'object') continue;
+      for (const key of Object.keys(file)) {
+        if (file[key] === undefined || file[key] === 'undefined') delete file[key];
+      }
+    }
     return mod;
   });
 };

@@ -1,0 +1,30 @@
+{
+  "sourceLanguage": "en",
+  "strings": {
+    "Next bus": {
+      "localizations": {
+        "ru": { "stringUnit": { "state": "translated", "value": "Ближайший автобус" } },
+        "ka": { "stringUnit": { "state": "translated", "value": "შემდეგი ავტობუსი" } }
+      }
+    },
+    "Stop": {
+      "localizations": {
+        "ru": { "stringUnit": { "state": "translated", "value": "Остановка" } },
+        "ka": { "stringUnit": { "state": "translated", "value": "გაჩერება" } }
+      }
+    },
+    "Routes": {
+      "localizations": {
+        "ru": { "stringUnit": { "state": "translated", "value": "Маршруты" } },
+        "ka": { "stringUnit": { "state": "translated", "value": "მარშრუტები" } }
+      }
+    },
+    "Choose a boarding stop and bus routes.": {
+      "localizations": {
+        "ru": { "stringUnit": { "state": "translated", "value": "Выбери остановку и маршруты автобусов." } },
+        "ka": { "stringUnit": { "state": "translated", "value": "აირჩიეთ გაჩერება და ავტობუსის მარშრუტები." } }
+      }
+    }
+  },
+  "version": "1.0"
+}

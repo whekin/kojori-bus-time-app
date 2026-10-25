@@ -1,0 +1,45 @@
+appId: com.whekin.kojoribus
+---
+- launchApp:
+    clearState: true
+    permissions:
+      all: deny
+- extendedWaitUntil:
+    visible:
+      id: start-kojori
+    timeout: 30000
+- tapOn:
+    id: start-kojori
+- extendedWaitUntil:
+    visible:
+      id: boarding-stop-1:2994
+    timeout: 30000
+- takeScreenshot: home-boarding-map
+- tapOn:
+    id: tab-settings
+- tapOn:
+    id: settings-section-commute
+- assertVisible:
+    id: settings-page-commute
+- swipe:
+    start: 2%, 45%
+    end: 75%, 45%
+    duration: 450
+- assertVisible:
+    id: settings-root
+- takeScreenshot: settings-after-back-swipe
+- scrollUntilVisible:
+    element:
+      id: settings-section-widget
+    direction: DOWN
+- tapOn:
+    id: settings-section-widget
+- assertVisible:
+    id: settings-page-widget
+- takeScreenshot: widget-settings
+- swipe:
+    start: 2%, 45%
+    end: 75%, 45%
+    duration: 450
+- assertVisible:
+    id: settings-root
