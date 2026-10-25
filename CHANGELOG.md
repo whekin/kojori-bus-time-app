@@ -4,12 +4,14 @@
 
 ### New
 
-- iPhone Home Screen widgets in three sizes show offline departures for a chosen stop and routes 380/316. Edit each widget to choose its stop; times stay in the Tbilisi timezone.
+- iPhone Home Screen widgets show offline departures for a chosen stop and routes 380/316 in small, medium, large, and full-page portrait sizes (portrait requires iOS 27). Edit each widget to choose its stop; times stay in the Tbilisi timezone.
 
 ### Fixed
 
 - The boarding-stop mini-map now uses Apple Maps framing on iOS instead of a zero-altitude Google camera.
 - Swiping right from the left edge inside an iPhone Settings section returns to the Settings menu instead of switching tabs.
+- Settings sections open at the top instead of inheriting the previous menu's scroll position.
+- Widget labels follow the widget's selected localization, matching the system's localized countdown and configuration controls.
 
 ### Infra
 

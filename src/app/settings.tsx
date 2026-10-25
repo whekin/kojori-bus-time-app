@@ -1246,6 +1246,9 @@ export default function SettingsScreen({ isActive = true, onSubmenuChange }: {
   function openSection(section: SettingsSection, scrollTarget?: SettingsScrollTarget) {
     pendingScrollTargetRef.current = scrollTarget ?? null;
     setActiveSection(section);
+    if (!scrollTarget) {
+      requestAnimationFrame(() => settingsScrollRef.current?.scrollTo({ y: 0, animated: false }));
+    }
   }
 
   function flushPendingScrollTarget(target: SettingsScrollTarget, y: number) {

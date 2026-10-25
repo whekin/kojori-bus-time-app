@@ -3,6 +3,12 @@ import Foundation
 @main
 enum WidgetScheduleTests {
     static func main() throws {
+        assert(WidgetCopy.resolvedLanguage(bundleLanguages: ["ru"], systemLanguages: ["en-US"]) == "ru")
+        assert(WidgetCopy.resolvedLanguage(bundleLanguages: ["ru_RU"], systemLanguages: ["en-US"]) == "ru")
+        assert(WidgetCopy.resolvedLanguage(bundleLanguages: ["ka"], systemLanguages: ["en-US"]) == "ka")
+        assert(WidgetCopy.resolvedLanguage(bundleLanguages: ["Base"], systemLanguages: ["ka-GE"]) == "ka")
+        assert(WidgetCopy.resolvedLanguage(bundleLanguages: [], systemLanguages: ["de-DE"]) == "en")
+        assert(WidgetCopy.text("toTbilisi", language: "ru") == "В Тбилиси")
         func date(_ value: String) -> Date { ISO8601DateFormatter().date(from: value)! }
         let weekday = WidgetPeriod(fromDay: "MONDAY", toDay: "FRIDAY", serviceDates: [], minutes: [70, 600])
         let weekend = WidgetPeriod(fromDay: "SATURDAY", toDay: "SUNDAY", serviceDates: [], minutes: [1455])

@@ -15,13 +15,14 @@ concurrency:
 
 jobs:
   ipa:
-    runs-on: macos-26
+    runs-on: xcode-27
     strategy:
       fail-fast: false
       matrix:
         target: [device, simulator]
     timeout-minutes: 60
     env:
+      DEVELOPER_DIR: /Applications/Xcode_27.1.app/Contents/Developer
       CI: '1'
       EXPO_NO_TELEMETRY: '1'
     defaults:
@@ -176,8 +177,8 @@ jobs:
           MAESTRO_CLI_ANALYSIS_NOTIFICATION_DISABLED: 'true'
         run: |
           set -euo pipefail
-          runtime=$(xcrun simctl list runtimes -j | python3 -c 'import json,sys; print(next(r["identifier"] for r in json.load(sys.stdin)["runtimes"] if r.get("isAvailable") and "SimRuntime.iOS" in r["identifier"]))')
-          simulator=$(xcrun simctl create KojoringUITest com.apple.CoreSimulator.SimDeviceType.iPhone-16 "$runtime")
+          read -r runtime device_type < <(xcrun simctl list runtimes -j | python3 scripts/ios-simulator-device.py)
+          simulator=$(xcrun simctl create KojoringUITest "$device_type" "$runtime")
           xcrun simctl boot "$simulator"
           xcrun simctl bootstatus "$simulator" -b
           xcrun simctl install "$simulator" "$RUNNER_TEMP/KojoringTime.xcarchive/Products/Applications/KojoringTime.app"

@@ -100,11 +100,18 @@ struct WidgetSchedule: Codable {
 }
 
 enum WidgetCopy {
-    static var language: String {
-        let language = Locale.preferredLanguages.first?.prefix(2) ?? "en"
-        return ["en", "ru", "ka"].contains(String(language)) ? String(language) : "en"
+    static func resolvedLanguage(bundleLanguages: [String], systemLanguages: [String]) -> String {
+        for identifier in bundleLanguages + systemLanguages {
+            let language = String(identifier.prefix(2))
+            if ["en", "ru", "ka"].contains(language) { return language }
+        }
+        return "en"
     }
-    static func text(_ key: String) -> String {
+    static var language: String {
+        resolvedLanguage(bundleLanguages: Bundle.main.preferredLocalizations,
+                         systemLanguages: Locale.preferredLanguages)
+    }
+    static func text(_ key: String, language: String = WidgetCopy.language) -> String {
         let values: [String: [String]] = [
             "toKojori": ["To Kojori", "В Коджори", "კოჯრისკენ"],
             "toTbilisi": ["To Tbilisi", "В Тбилиси", "თბილისისკენ"],
@@ -112,6 +119,7 @@ enum WidgetCopy {
             "saved": ["Saved timetable", "Сохранённое расписание", "შენახული განრიგი"],
             "empty": ["No departures", "Нет отправлений", "რეისები არ არის"],
             "tomorrow": ["Tomorrow", "Завтра", "ხვალ"],
+            "later": ["Following departures", "Следующие рейсы", "შემდეგი რეისები"],
         ]
         return values[key]?[["en": 0, "ru": 1, "ka": 2][language] ?? 0] ?? key
     }

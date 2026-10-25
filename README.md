@@ -115,14 +115,15 @@ app keeps the code embedded in its IPA. The map uses the default Apple Maps prov
 on iOS. The IPA includes a native WidgetKit extension for iOS 17 and later; keep
 app extensions when SideStore asks during installation. Open the app once, then
 add Kojoring Time from the Home Screen widget gallery. Edit the widget to choose
-its stop (both directions are listed) and routes. Small, medium and large sizes
-are supported. Each widget bundles the same offline timetable as the app, shows
+its stop (both directions are listed) and routes. Small, medium, large and
+full-page portrait (iOS 27+) sizes are supported. Each widget bundles the same offline timetable as the app, shows
 Tbilisi time, and uses the device language (English, Georgian or Russian). Update
 the IPA to update its timetable. Widget settings are independent of the Android
 widget preferences in the app; no shared App Group or native network calls are
 needed. CI also uploads `ios-simulator`, containing a zipped `.app` that can be
 installed with `xcrun simctl install booted <path-to-app>` after extracting it.
-The simulator job also boots an iPhone and runs `.maestro/ios-smoke.yml`, checking
+CI uses Xcode 27.1 to compile the portrait family and automatically selects an
+iPhone that the installed simulator runtime supports. The simulator job runs `.maestro/ios-smoke.yml`, checking
 that boarding-stop markers appear and that an edge swipe returns from nested
 Settings sections. Screenshots and results are uploaded as `ios-ui-checks`.
 Successful compilation still needs
