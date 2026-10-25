@@ -49,6 +49,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     plugins: [
       ...(config.plugins ?? []),
       'expo-localization',
+      './plugins/with-ios-widget',
       [
         'react-native-maps',
         {

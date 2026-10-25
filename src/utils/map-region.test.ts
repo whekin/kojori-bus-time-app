@@ -6,12 +6,33 @@ import {
   MAX_SPAN_DELTA,
   MIN_SPAN_DELTA,
   projectToView,
+  pickerMapViewProps,
   regionsEqual,
 } from './map-region';
 
 const AKHVLEDIANI = { lat: 41.697618, lon: 44.809107 };
 const BARATASHVILI = { lat: 41.694, lon: 44.807 };
 const VIEW = { width: 360, height: 150 };
+
+describe('boarding map native provider contract', () => {
+  const region = buildPickerRegion([AKHVLEDIANI, BARATASHVILI], null, VIEW)!;
+
+  it('frames the iOS map with a nonzero region, rather than a zero-altitude Google camera', () => {
+    const props = pickerMapViewProps('ios', region, VIEW.width, 3);
+    expect(props.region).toEqual(region);
+    expect(props.camera).toBeUndefined();
+  });
+
+  it('never sends an infinite Google zoom before the first layout', () => {
+    const props = pickerMapViewProps('android', region, 0, 3);
+    expect(Number.isFinite(props.camera?.zoom)).toBe(true);
+  });
+
+  it('keeps Android camera framing calibrated in physical pixels', () => {
+    const props = pickerMapViewProps('android', region, VIEW.width, 3, 1.5);
+    expect(props.camera?.zoom).toBeCloseTo(Math.log2(360 * 1080 / (256 * region.longitudeDelta)) + 1.5);
+  });
+});
 
 describe('buildPickerRegion', () => {
   it('returns null without stops', () => {

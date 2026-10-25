@@ -15,8 +15,8 @@ import { useReducedMotion } from '@/hooks/use-reduced-motion';
 import {
   buildPickerRegion,
   projectToView,
+  pickerMapViewProps,
   regionsEqual,
-  zoomForRegion,
   type Coordinate,
   type MapRegion,
 } from '@/utils/map-region';
@@ -148,7 +148,6 @@ export function StopMapPicker({
   // A region prop only asks the map to cover a box and rounds the zoom outwards
   // to do it — measured at 1.6-1.8x on a card this short. A camera says exactly
   // what to show, so the framing is the one we computed.
-  const requestedRegion = region;
 
   const projectionKey = [
     expanded,
@@ -212,7 +211,7 @@ export function StopMapPicker({
           }
           setProjected({ key: projectionKey, points: next });
 
-          if (region && zoomCalibration.rounds < MAX_CALIBRATION_ROUNDS) {
+          if (Platform.OS === 'android' && zoomCalibration.rounds < MAX_CALIBRATION_ROUNDS) {
             const drift = Math.log2(shownLatitudeDelta / region.latitudeDelta);
             zoomCalibration.rounds += 1;
             if (Math.abs(drift) > ZOOM_TOLERANCE && Number.isFinite(drift)) {
@@ -271,13 +270,7 @@ export function StopMapPicker({
       }}>
       <MapView
         style={StyleSheet.absoluteFill}
-        camera={requestedRegion ? {
-          center: { latitude: requestedRegion.latitude, longitude: requestedRegion.longitude },
-          zoom: zoomForRegion(requestedRegion, cardSize.width * PixelRatio.get()) + zoomAdjust,
-          pitch: 0,
-          heading: 0,
-          altitude: 0,
-        } : undefined}
+        {...pickerMapViewProps(Platform.OS, region, cardSize.width, PixelRatio.get(), zoomAdjust)}
         userInterfaceStyle={colors.mode}
         customMapStyle={
           colors.mode === 'dark' ? GOOGLE_DARK_MINIMAL_MAP_STYLE : GOOGLE_LIGHT_MINIMAL_MAP_STYLE

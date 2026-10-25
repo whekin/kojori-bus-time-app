@@ -16,6 +16,10 @@ concurrency:
 jobs:
   ipa:
     runs-on: macos-26
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [device, simulator]
     timeout-minutes: 60
     env:
       CI: '1'
@@ -50,6 +54,13 @@ jobs:
         run: |
           bun run lint
           bun run typecheck
+          bun test
+
+      - name: Check native widget schedule
+        run: |
+          bun scripts/build-ios-widget-data.ts "$RUNNER_TEMP/timetable.json"
+          swiftc native/ios-widget/WidgetSchedule.swift native/ios-widget/WidgetScheduleTests.swift -o "$RUNNER_TEMP/widget-schedule-tests"
+          "$RUNNER_TEMP/widget-schedule-tests" "$RUNNER_TEMP/timetable.json"
 
       - name: Configure standalone experimental build
         run: |
@@ -70,15 +81,20 @@ jobs:
       - name: Install CocoaPods dependencies
         run: pod install --project-directory=ios 2>&1 | tee "$RUNNER_TEMP/ios-pods.log"
 
-      - name: Archive unsigned device app
+      - name: Archive unsigned app
         env:
           NODE_ENV: production
+          BUILD_TARGET: ${{ matrix.target }}
         run: |
+          destination='generic/platform=iOS'
+          if [ "$BUILD_TARGET" = simulator ]; then
+            destination='generic/platform=iOS Simulator'
+          fi
           xcodebuild archive \
             -workspace ios/KojoringTime.xcworkspace \
             -scheme KojoringTime \
             -configuration Release \
-            -destination 'generic/platform=iOS' \
+            -destination "$destination" \
             -archivePath "$RUNNER_TEMP/KojoringTime.xcarchive" \
             -derivedDataPath "$RUNNER_TEMP/ios-derived-data" \
             CODE_SIGNING_ALLOWED=NO \
@@ -88,10 +104,12 @@ jobs:
             2>&1 | tee "$RUNNER_TEMP/ios-build.log"
 
       - name: Package and verify IPA
+        if: matrix.target == 'device'
         run: |
           set -euo pipefail
           app="$RUNNER_TEMP/KojoringTime.xcarchive/Products/Applications/KojoringTime.app"
           test -s "$app/main.jsbundle"
+          test -s "$app/PlugIns/KojoriBusWidget.appex/KojoriBusWidget"
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleSupportedPlatforms:0' "$app/Info.plist")" = iPhoneOS
           executable=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$app/Info.plist")
           file "$app/$executable" | grep arm64
@@ -109,6 +127,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload IPA
+        if: matrix.target == 'device'
         uses: actions/upload-artifact@v4
         with:
           name: sidestore-ipa
@@ -117,11 +136,30 @@ jobs:
           retention-days: 7
           compression-level: 0
 
+      - name: Package simulator app
+        if: matrix.target == 'simulator'
+        run: |
+          app="$RUNNER_TEMP/KojoringTime.xcarchive/Products/Applications/KojoringTime.app"
+          test -s "$app/main.jsbundle"
+          test -s "$app/PlugIns/KojoriBusWidget.appex/KojoriBusWidget"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleSupportedPlatforms:0' "$app/Info.plist")" = iPhoneSimulator
+          ditto -c -k --keepParent "$app" "$RUNNER_TEMP/KojoringTime-simulator.zip"
+
+      - name: Upload simulator app
+        if: matrix.target == 'simulator'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-simulator
+          path: ${{ runner.temp }}/KojoringTime-simulator.zip
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
+
       - name: Upload build logs
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
-          name: ios-build-logs
+          name: ios-build-logs-${{ matrix.target }}
           path: |
             ${{ runner.temp }}/ios-pods.log
             ${{ runner.temp }}/ios-build.log

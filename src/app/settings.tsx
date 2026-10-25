@@ -11,6 +11,7 @@ import {
   InteractionManager,
   Linking,
   Modal,
+  PanResponder,
   Platform,
   Pressable,
   ScrollView,
@@ -72,6 +73,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import privacyPolicyAsset from '../../assets/legal/privacy-policy.md';
 import termsOfServiceAsset from '../../assets/legal/terms-of-service.md';
 import KojoriWidget from '../../modules/kojori-widget';
+import { startsSettingsBackGesture, completesSettingsBackGesture } from '@/utils/settings-back-gesture';
 
 const MONO = Platform.select({ android: 'monospace', ios: 'Menlo', default: 'monospace' });
 const DISPLAY = Platform.select({ android: 'serif', ios: 'Georgia', default: 'serif' });
@@ -1012,7 +1014,10 @@ function ThemeModeCard({
   );
 }
 
-export default function SettingsScreen({ isActive = true }: { isActive?: boolean }) {
+export default function SettingsScreen({ isActive = true, onSubmenuChange }: {
+  isActive?: boolean;
+  onSubmenuChange?: (open: boolean) => void;
+}) {
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
   const { colors, styles } = useStyles();
@@ -1026,6 +1031,24 @@ export default function SettingsScreen({ isActive = true }: { isActive?: boolean
   const [showPermissionModal, setShowPermissionModal] = useState(false);
   const [noticeModal, setNoticeModal] = useState<NoticeModalState | null>(null);
   const [activeSection, setActiveSection] = useState<SettingsSection | null>(null);
+  const isInSubmenu = activeSection !== null || modal !== null;
+  useEffect(() => {
+    onSubmenuChange?.(isInSubmenu);
+  }, [isInSubmenu, onSubmenuChange]);
+
+  function goBackToSections() {
+    setActiveSection(null);
+    settingsScrollRef.current?.scrollTo({ y: 0, animated: false });
+  }
+
+  const backGesture = PanResponder.create({
+    onMoveShouldSetPanResponderCapture: (_event, gesture) =>
+      Platform.OS === 'ios' && isActive && activeSection !== null && modal === null
+      && startsSettingsBackGesture(gesture),
+    onPanResponderRelease: (_event, gesture) => {
+      if (completesSettingsBackGesture(gesture)) goBackToSections();
+    },
+  });
   const shouldTrackQueryLog = isActive && activeSection === 'data' && settings.debugOptionsUnlocked;
   const queryLog = useTtcQueryLogSnapshot(shouldTrackQueryLog);
   const [queryMetricsNow, setQueryMetricsNow] = useState(() => Date.now());
@@ -1118,15 +1141,15 @@ export default function SettingsScreen({ isActive = true }: { isActive?: boolean
   }, [update]);
 
   useEffect(() => {
-    if (!activeSection) return;
+    if (!isActive || !activeSection) return;
 
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
-      setActiveSection(null);
+      goBackToSections();
       return true;
     });
 
     return () => subscription.remove();
-  }, [activeSection]);
+  }, [activeSection, isActive]);
 
   useEffect(() => {
     // The screen is mounted ahead of time so the tab switch stays cheap; keep
@@ -1502,13 +1525,13 @@ export default function SettingsScreen({ isActive = true }: { isActive?: boolean
   }
 
   return (
-    <View style={[styles.screen, { paddingTop: insets.top }]}>
+    <View {...backGesture.panHandlers} style={[styles.screen, { paddingTop: insets.top }]}>
       <View style={styles.header}>
         {activeSection ? (
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={t('settingsBackToSections')}
-            onPress={() => setActiveSection(null)}
+            onPress={goBackToSections}
             hitSlop={8}
             style={({ pressed }) => [styles.headerBackButton, pressed && { backgroundColor: colors.panel }]}>
             <MaterialCommunityIcons name="arrow-left" size={24} color={colors.text} />
@@ -1574,11 +1597,11 @@ export default function SettingsScreen({ isActive = true }: { isActive?: boolean
                 }),
                 accentColor: colors.primary,
               })}
-              {Platform.OS === 'android' ? renderSectionCard({
+              {Platform.OS !== 'web' ? renderSectionCard({
                 section: 'widget',
                 title: t('settingsSectionWidget'),
-                note: t('settingsSectionWidgetNote'),
-                summary: t('settingsSectionWidgetSummary', {
+                note: Platform.OS === 'ios' ? t('settingsIosWidgetNote') : t('settingsSectionWidgetNote'),
+                summary: Platform.OS === 'ios' ? t('settingsIosWidgetSummary') : t('settingsSectionWidgetSummary', {
                   kojori: widgetKojoriStopLabel,
                   tbilisi: widgetTbilisiStopLabel,
                 }),
@@ -1950,6 +1973,13 @@ export default function SettingsScreen({ isActive = true }: { isActive?: boolean
           onManage={() => setModal('tbilisi')}
         />
           </>
+        ) : null}
+
+        {activeSection === 'widget' && Platform.OS === 'ios' ? (
+          <View style={styles.sectionMeta}>
+            <Text style={styles.sectionHeader}>{t('settingsSectionWidget')}</Text>
+            <Text style={styles.sectionNote}>{t('settingsIosWidgetInstructions')}</Text>
+          </View>
         ) : null}
 
         {activeSection === 'widget' && Platform.OS === 'android' ? (

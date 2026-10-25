@@ -112,7 +112,17 @@ physical iPhone with code signing disabled, and packages `Payload/KojoringTime.a
 as an IPA. It checks that the app contains its JS bundle and an arm64 executable.
 OTA updates are disabled only in the disposable CI checkout, so this experimental
 app keeps the code embedded in its IPA. The map uses the default Apple Maps provider
-on iOS; the home-screen widget is Android-only. Successful compilation still needs
+on iOS. The IPA includes a native WidgetKit extension for iOS 17 and later; keep
+app extensions when SideStore asks during installation. Open the app once, then
+add Kojoring Time from the Home Screen widget gallery. Edit the widget to choose
+its stop (both directions are listed) and routes. Small, medium and large sizes
+are supported. Each widget bundles the same offline timetable as the app, shows
+Tbilisi time, and uses the device language (English, Georgian or Russian). Update
+the IPA to update its timetable. Widget settings are independent of the Android
+widget preferences in the app; no shared App Group or native network calls are
+needed. CI also uploads `ios-simulator`, containing a zipped `.app` that can be
+installed with `xcrun simctl install booted <path-to-app>` after extracting it.
+Successful compilation still needs
 an installation and launch check on a real iPhone.
 
 ## Updates

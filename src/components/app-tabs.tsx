@@ -1,7 +1,7 @@
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import PagerView from "react-native-pager-view";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { BackHandler, Pressable, StyleSheet, View } from "react-native";
+import { BackHandler, Platform, Pressable, StyleSheet, View } from "react-native";
 import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 import Animated, {
   interpolateColor,
@@ -184,6 +184,7 @@ export default function AppTabs({
   const insets = useSafeAreaInsets();
   const pagerRef = useRef<PagerView>(null);
   const [activeIndex, setActiveIndex] = useState(0);
+  const [settingsSubmenuOpen, setSettingsSubmenuOpen] = useState(false);
   const tabHistoryRef = useRef<number[]>([0]);
   const suppressedPageSelectionRef = useRef<number | null>(null);
   const [mountedIndexes, setMountedIndexes] = useState<ReadonlySet<number>>(
@@ -372,6 +373,7 @@ export default function AppTabs({
       initialPage={0}
       offscreenPageLimit={3}
       overScrollMode="never"
+      scrollEnabled={!(Platform.OS === 'ios' && activeIndex === 3 && settingsSubmenuOpen)}
       onPageScroll={pageScrollHandler}
       onPageScrollStateChanged={(event) => {
         if (event.nativeEvent.pageScrollState === "dragging") {
@@ -415,7 +417,7 @@ export default function AppTabs({
       </View>
       <View key="settings" style={styles.page}>
         {mountedIndexes.has(3) ? (
-          <MemoSettingsScreen isActive={activeIndex === 3} />
+          <MemoSettingsScreen isActive={activeIndex === 3} onSubmenuChange={setSettingsSubmenuOpen} />
         ) : null}
       </View>
     </AnimatedPagerView>

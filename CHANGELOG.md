@@ -2,9 +2,19 @@
 
 ## [UNRELEASED]
 
+### New
+
+- iPhone Home Screen widgets in three sizes show offline departures for a chosen stop and routes 380/316. Edit each widget to choose its stop; times stay in the Tbilisi timezone.
+
+### Fixed
+
+- The boarding-stop mini-map now uses Apple Maps framing on iOS instead of a zero-altitude Google camera.
+- Swiping right from the left edge inside an iPhone Settings section returns to the Settings menu instead of switching tabs.
+
 ### Infra
 
 - Added an experimental GitHub Actions build of an unsigned iPhone IPA for SideStore, with embedded JavaScript, OTA updates disabled for that build, and downloadable IPA and build logs.
+- iOS CI also builds a simulator app and checks native widget schedule behavior across midnight and weekday boundaries.
 
 ## v2026.9.23
 ### Fixed

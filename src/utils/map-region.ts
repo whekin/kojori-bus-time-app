@@ -156,3 +156,27 @@ export function zoomForRegion(region: MapRegion, widthPx: number) {
   const TILE_SIZE = 256;
   return Math.log2((360 * widthPx) / (TILE_SIZE * region.longitudeDelta));
 }
+
+/** Native map props kept at a pure seam so each provider's contract is testable. */
+export function pickerMapViewProps(
+  platform: string,
+  region: MapRegion,
+  width: number,
+  density: number,
+  zoomAdjust = 0,
+) {
+  // MapKit ignores Google zoom and treats altitude: 0 as a ground-level camera.
+  // Let it fit the actual stop bounds using its native region API instead.
+  if (platform === 'ios') return { region, camera: undefined };
+
+  return {
+    region: undefined,
+    camera: {
+      center: { latitude: region.latitude, longitude: region.longitude },
+      zoom: zoomForRegion(region, Math.max(width, 1) * density) + zoomAdjust,
+      pitch: 0,
+      heading: 0,
+      altitude: 0,
+    },
+  };
+}
