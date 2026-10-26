@@ -81,5 +81,8 @@
     "eslint-config-expo": "~55.0.1",
     "typescript": "~5.9.3"
   },
-  "private": true
+  "private": true,
+  "patchedDependencies": {
+    "expo-router@55.0.14": "patches/expo-router@55.0.14.patch"
+  }
 }

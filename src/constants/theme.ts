@@ -340,5 +340,6 @@ export const Spacing = {
   six: 64,
 } as const;
 
-export const BottomTabInset = Platform.select({ ios: 78, android: 92 }) ?? 0;
+// UIKit tabs report their occupied space through the screen's safe-area inset.
+export const BottomTabInset = Platform.select({ ios: 0, android: 92 }) ?? 0;
 export const MaxContentWidth = 800;

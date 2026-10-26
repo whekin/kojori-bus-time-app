@@ -120,12 +120,19 @@ full-page portrait (iOS 27+) sizes are supported. Each widget bundles the same o
 Tbilisi time, and uses the device language (English, Georgian or Russian). Update
 the IPA to update its timetable. Widget settings are independent of the Android
 widget preferences in the app; no shared App Group or native network calls are
-needed. CI also uploads `ios-simulator`, containing a zipped `.app` that can be
+needed. On iPhone, navigation uses UIKit tabs with SF Symbols and the system's
+Liquid Glass material on iOS 26+. Older iOS versions use their standard tab bar.
+The controlled `react-native-screens` host preserves screen state and the map-focus
+bridge without changing Android's pager. UIKit owns the tab bar's safe-area inset.
+`patches/expo-router@55.0.14.patch` guards `UIAction.subtitle` behind iOS 16 availability
+for Xcode 27 builds; Bun applies it during dependency installation.
+CI also uploads `ios-simulator`, containing a zipped `.app` that can be
 installed with `xcrun simctl install booted <path-to-app>` after extracting it.
 CI uses Xcode 27.1 to compile the portrait family and automatically selects an
 iPhone that the installed simulator runtime supports. The simulator job runs `.maestro/ios-smoke.yml`, checking
-that boarding-stop markers appear and that an edge swipe returns from nested
-Settings sections. Screenshots and results are uploaded as `ios-ui-checks`.
+that boarding-stop markers appear, all four native tabs open, tab switching keeps
+an open Settings section, and an edge swipe returns to its menu. Screenshots and
+results are uploaded as `ios-ui-checks`.
 Successful compilation still needs
 an installation and launch check on a real iPhone.
 

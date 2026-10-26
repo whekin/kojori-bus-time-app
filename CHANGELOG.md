@@ -4,6 +4,7 @@
 
 ### New
 
+- iPhone navigation uses the native system tab bar with SF Symbols, palette-colored selection, and Liquid Glass on iOS 26 and newer.
 - iPhone Home Screen widgets show offline departures for a chosen stop and routes 380/316 in small, medium, large, and full-page portrait sizes (portrait requires iOS 27). Edit each widget to choose its stop; times stay in the Tbilisi timezone.
 
 ### Fixed
@@ -12,7 +13,7 @@
 - Swiping right from the left edge inside an iPhone Settings section returns to the Settings menu instead of switching tabs.
 - Settings sections open at the top instead of inheriting the previous menu's scroll position.
 - Widget labels follow the widget's selected localization, matching the system's localized countdown and configuration controls.
-- iOS dependencies with obsolete minimum deployment versions now build under Xcode 27, without changing the app's existing iOS 15.1 minimum.
+- iOS dependencies with obsolete minimum deployment versions now build under Xcode 27; an Expo Router compatibility patch guards an iOS 16 menu API while preserving the app's iOS 15.1 minimum.
 
 ### Infra
 

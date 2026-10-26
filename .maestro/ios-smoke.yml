@@ -16,9 +16,29 @@ appId: com.whekin.kojoribus
     timeout: 30000
 - takeScreenshot: home-boarding-map
 - tapOn:
+    id: tab-timetable
+- assertVisible:
+    id: native-screen-timetable
+- takeScreenshot: native-tabs-timetable
+- tapOn:
+    id: tab-explore
+- assertVisible:
+    id: native-screen-explore
+- takeScreenshot: native-tabs-map
+- tapOn:
+    id: tab-index
+- assertVisible:
+    id: boarding-stop-1:2994
+- tapOn:
     id: tab-settings
 - tapOn:
     id: settings-section-commute
+- assertVisible:
+    id: settings-page-commute
+- tapOn:
+    id: tab-timetable
+- tapOn:
+    id: tab-settings
 - assertVisible:
     id: settings-page-commute
 - swipe:
