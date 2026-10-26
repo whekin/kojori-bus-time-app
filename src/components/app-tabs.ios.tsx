@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import * as Linking from 'expo-linking';
 import { Appearance, StyleSheet, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Tabs } from 'react-native-screens';
@@ -61,6 +62,14 @@ export default function AppTabs({
     const timer = setTimeout(() => setMapSuspended(activeRoute === 'settings'), 400);
     return () => clearTimeout(timer);
   }, [activeRoute]);
+
+  useEffect(() => {
+    const subscription = Linking.addEventListener('url', ({ url }) => {
+      const mode = Linking.parse(url).queryParams?.widgetMode;
+      if (mode === 'kojori' || mode === 'tbilisi') setActiveRoute('index');
+    });
+    return () => subscription.remove();
+  }, []);
 
   function navigateToTab(route: TabRoute) {
     if (route === 'explore') setMapSuspended(false);

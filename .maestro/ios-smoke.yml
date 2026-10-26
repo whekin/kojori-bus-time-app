@@ -63,3 +63,11 @@ appId: com.whekin.kojoribus
     duration: 450
 - assertVisible:
     id: settings-root
+- tapOn:
+    id: tab-timetable
+- openLink: "kojoribs://?widgetMode=kojori&widgetStopId=1%3A2994"
+- assertVisible:
+    id: native-screen-index
+- assertVisible:
+    id: boarding-stop-1:2994
+- takeScreenshot: native-tabs-widget-link
