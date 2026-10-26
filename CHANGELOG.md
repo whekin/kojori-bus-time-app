@@ -12,6 +12,7 @@
 - Swiping right from the left edge inside an iPhone Settings section returns to the Settings menu instead of switching tabs.
 - Settings sections open at the top instead of inheriting the previous menu's scroll position.
 - Widget labels follow the widget's selected localization, matching the system's localized countdown and configuration controls.
+- iOS dependencies with obsolete minimum deployment versions now build under Xcode 27, without changing the app's existing iOS 15.1 minimum.
 
 ### Infra
 

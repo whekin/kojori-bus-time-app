@@ -50,6 +50,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       ...(config.plugins ?? []),
       'expo-localization',
       './plugins/with-ios-widget',
+      './plugins/with-ios-pod-deployment-target',
       [
         'react-native-maps',
         {
