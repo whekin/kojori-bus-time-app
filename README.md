@@ -124,8 +124,9 @@ needed. On iPhone, navigation uses UIKit tabs with SF Symbols and the system's
 Liquid Glass material on iOS 26+. Older iOS versions use their standard tab bar.
 The controlled `react-native-screens` host preserves screen state and the map-focus
 bridge without changing Android's pager. UIKit owns the tab bar's safe-area inset.
-`patches/expo-router@55.0.14.patch` guards `UIAction.subtitle` behind iOS 16 availability
-for Xcode 27 builds; Bun applies it during dependency installation.
+Expo SDK 58 / React Native 0.88 provides the scene lifecycle required by the iOS 27
+SDK. Prebuild generates its standard SceneDelegate; no Router or scene lifecycle
+patch is needed. The app requires iOS 16.4+, and its widget extension requires iOS 17+.
 CI also uploads `ios-simulator`, containing a zipped `.app` that can be
 installed with `xcrun simctl install booted <path-to-app>` after extracting it.
 CI uses Xcode 27.1 to compile the portrait family and automatically selects an

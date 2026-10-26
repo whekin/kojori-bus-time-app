@@ -7,6 +7,12 @@ module.exports = defineConfig([
   {
     ignores: ["dist/*"],
     rules: {
+      // SDK 58 adds compiler migration diagnostics for existing screens. Keep
+      // them visible while retaining errors for the established hooks rules.
+      "react-hooks/immutability": "warn",
+      "react-hooks/purity": "warn",
+      "react-hooks/refs": "warn",
+      "react-hooks/set-state-in-effect": "warn",
       "react/display-name": "off",
       "react/jsx-key": "off",
       "react/jsx-no-comment-textnodes": "off",

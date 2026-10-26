@@ -196,8 +196,6 @@ function AppThemeShell() {
     <ThemeProvider value={navigationTheme}>
       <StatusBar
         style={resolvedMode === 'light' ? 'dark' : 'light'}
-        translucent
-        backgroundColor="transparent"
       />
       <View style={[styles.appSurface, { backgroundColor: colors.bg }]}>
         <AppReady />

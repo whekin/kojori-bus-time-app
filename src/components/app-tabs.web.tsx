@@ -69,7 +69,10 @@ export default function AppTabs(_props: AppTabsProps) {
   );
 }
 
-export function TabButton({ children, icon, isFocused, ...props }: TabTriggerSlotProps & { icon: WebTab['icon'] }) {
+export function TabButton({ children, icon, isFocused, ...props }: Omit<TabTriggerSlotProps, 'ref'> & {
+  icon: WebTab['icon'];
+  ref?: React.Ref<React.ComponentRef<typeof Pressable>>;
+}) {
   const C = useAppColors();
   const tint = isFocused ? C.text : C.textDim;
 

@@ -71,3 +71,14 @@ appId: com.whekin.kojoribus
 - assertVisible:
     id: boarding-stop-1:2994
 - takeScreenshot: native-tabs-widget-link
+- tapOn:
+    id: tab-settings
+- scrollUntilVisible:
+    element:
+      id: settings-section-appearance
+    direction: UP
+- tapOn:
+    id: settings-section-appearance
+- assertVisible:
+    id: settings-page-appearance
+- takeScreenshot: native-tabs-appearance

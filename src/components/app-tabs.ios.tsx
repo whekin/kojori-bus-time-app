@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import * as Linking from 'expo-linking';
-import { Appearance, StyleSheet, View } from 'react-native';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { StyleSheet } from 'react-native';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { Tabs } from 'react-native-screens';
 
 import ExploreScreen from '@/app/explore';
@@ -11,7 +11,6 @@ import TimetableScreen from '@/app/timetable';
 import { useAppColors } from '@/hooks/use-app-colors';
 import { useI18n } from '@/hooks/use-i18n';
 import { MapFocusProvider } from '@/hooks/use-map-focus';
-import { useSettings } from '@/hooks/use-settings';
 import { TabNavProvider, type TabRoute } from '@/hooks/use-tab-nav';
 import { scheduleIdleTask } from '@/utils/idle-task';
 
@@ -28,20 +27,14 @@ export default function AppTabs({
   onRequestDirectionPicker?: () => void;
 }) {
   const colors = useAppColors();
-  const { settings } = useSettings();
   const { t } = useI18n();
   const [activeRoute, setActiveRoute] = useState<TabRoute>('index');
   const [mountedRoutes, setMountedRoutes] = useState<ReadonlySet<TabRoute>>(
     () => new Set(['index']),
   );
   const [mapSuspended, setMapSuspended] = useState(false);
-
-  // UIKit owns the glass material. Apply the user's appearance to the window,
-  // including when it changes while the Settings tab remains selected.
-  useEffect(() => {
-    Appearance.setColorScheme(settings.themeMode === 'system' ? 'unspecified' : settings.themeMode);
-    return () => Appearance.setColorScheme('unspecified');
-  }, [settings.themeMode]);
+  const provenance = useRef(0);
+  const [navStateRequest, setNavStateRequest] = useState({ selectedScreenKey: 'index', baseProvenance: 0 });
 
   useEffect(() => {
     if (deferInactiveTabs) return;
@@ -66,15 +59,23 @@ export default function AppTabs({
   useEffect(() => {
     const subscription = Linking.addEventListener('url', ({ url }) => {
       const mode = Linking.parse(url).queryParams?.widgetMode;
-      if (mode === 'kojori' || mode === 'tbilisi') setActiveRoute('index');
+      if (mode === 'kojori' || mode === 'tbilisi') {
+        setActiveRoute('index');
+        setNavStateRequest({ selectedScreenKey: 'index', baseProvenance: provenance.current });
+      }
     });
     return () => subscription.remove();
   }, []);
 
-  function navigateToTab(route: TabRoute) {
+  function showTab(route: TabRoute) {
     if (route === 'explore') setMapSuspended(false);
     setMountedRoutes(previous => previous.has(route) ? previous : new Set([...previous, route]));
     setActiveRoute(route);
+  }
+
+  function navigateToTab(route: TabRoute) {
+    showTab(route);
+    setNavStateRequest({ selectedScreenKey: route, baseProvenance: provenance.current });
   }
 
   const titles = [t('tabsDepartures'), t('tabsMap'), t('tabsTimetable'), t('tabsSettings')];
@@ -83,39 +84,45 @@ export default function AppTabs({
     <MapFocusProvider>
       <TabNavProvider value={navigateToTab}>
         <Tabs.Host
-          experimentalControlNavigationStateInJS
+          navStateRequest={navStateRequest}
+          rejectStaleNavStateUpdates
+          colorScheme={colors.mode}
           nativeContainerStyle={{ backgroundColor: colors.bg }}
-          tabBarTintColor={colors.primary}
-          tabBarMinimizeBehavior="never"
-          tabBarControllerMode="tabBar"
-          onNativeFocusChange={({ nativeEvent: { tabKey } }) => {
-            const route = ROUTES.find(candidate => candidate === tabKey);
-            if (route) navigateToTab(route);
+          ios={{ tabBarTintColor: colors.primary, tabBarMinimizeBehavior: 'never', tabBarControllerMode: 'tabBar' }}
+          onTabSelected={({ nativeEvent }) => {
+            provenance.current = nativeEvent.provenance;
+            const route = ROUTES.find(candidate => candidate === nativeEvent.selectedScreenKey);
+            if (route) showTab(route);
+          }}
+          onTabSelectionRejected={({ nativeEvent }) => {
+            provenance.current = nativeEvent.provenance;
+            const route = ROUTES.find(candidate => candidate === nativeEvent.selectedScreenKey);
+            if (route) showTab(route);
           }}
         >
           {ROUTES.map((route, index) => (
             <Tabs.Screen
               key={route}
-              tabKey={route}
-              isFocused={activeRoute === route}
+              screenKey={route}
               title={titles[index]}
-              icon={{ ios: { type: 'sfSymbol', name: ICONS[index] } }}
-              selectedIcon={{ type: 'sfSymbol', name: `${ICONS[index]}.fill` }}
+              ios={{
+                icon: { type: 'sfSymbol', name: ICONS[index] },
+                selectedIcon: { type: 'sfSymbol', name: `${ICONS[index]}.fill` },
+                overrideScrollViewContentInsetAdjustmentBehavior: false,
+              }}
               tabBarItemTestID={`tab-${route}`}
               tabBarItemAccessibilityLabel={titles[index]}
-              freezeContents={false}
-              overrideScrollViewContentInsetAdjustmentBehavior={false}
               specialEffects={{ repeatedTabSelection: { popToRoot: false, scrollToTop: false } }}
             >
               <SafeAreaProvider>
-                <View testID={`native-screen-${route}`} collapsable={false} style={[styles.screen, { backgroundColor: colors.bg }]}>
+                <SafeAreaView edges={['left', 'right']} testID={`native-screen-${route}`} collapsable={false} style={[styles.screen, { backgroundColor: colors.bg }]}>
                   {mountedRoutes.has(route) ? (
                     route === 'index' ? <HomeScreen isActive={activeRoute === route} /> :
                     route === 'explore' ? <ExploreScreen isActive={activeRoute === route} suspendNativeMap={mapSuspended} /> :
                     route === 'timetable' ? <TimetableScreen isActive={activeRoute === route} /> :
                     <SettingsScreen isActive={activeRoute === route} />
                   ) : null}
-                </View>
+                </SafeAreaView>
               </SafeAreaProvider>
             </Tabs.Screen>
           ))}

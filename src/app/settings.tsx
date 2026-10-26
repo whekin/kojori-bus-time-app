@@ -8,7 +8,6 @@ import {
   ActivityIndicator,
   Alert,
   BackHandler,
-  InteractionManager,
   Linking,
   Modal,
   PanResponder,
@@ -21,7 +20,7 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
-import Carousel, { ICarouselInstance } from 'react-native-reanimated-carousel';
+import { Carousel, type CarouselRef } from 'react-native-reanimated-carousel';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { BAKED_AT } from '@/assets/ttc-baked';
@@ -74,6 +73,7 @@ import privacyPolicyAsset from '../../assets/legal/privacy-policy.md';
 import termsOfServiceAsset from '../../assets/legal/terms-of-service.md';
 import KojoriWidget from '../../modules/kojori-widget';
 import { startsSettingsBackGesture, completesSettingsBackGesture } from '@/utils/settings-back-gesture';
+import { scheduleIdleTask } from '@/utils/idle-task';
 
 const MONO = Platform.select({ android: 'monospace', ios: 'Menlo', default: 'monospace' });
 const DISPLAY = Platform.select({ android: 'serif', ios: 'Georgia', default: 'serif' });
@@ -1067,10 +1067,10 @@ export default function SettingsScreen({ isActive = true, onSubmenuChange }: {
   const appearanceUpdateHandleRef = useRef<{ cancel: () => void } | null>(null);
   const pendingAppearancePatchRef = useRef<Partial<Pick<typeof settings, 'paletteId' | 'themeMode'>>>({});
   const weeklyRefreshStartedRef = useRef(false);
-  const settingsScrollRef = useRef<ScrollView>(null);
+  const settingsScrollRef = useRef<React.ComponentRef<typeof ScrollView>>(null);
   const pendingScrollTargetRef = useRef<SettingsScrollTarget | null>(null);
   const languageSectionYRef = useRef<number | null>(null);
-  const paletteCarouselRef = useRef<ICarouselInstance>(null);
+  const paletteCarouselRef = useRef<CarouselRef>(null);
   const paletteIndex = Math.max(0, PALETTE_IDS.indexOf(selectedPaletteId));
   const paletteDragActiveRef = useRef(false);
   const paletteDragStartIndexRef = useRef(paletteIndex);
@@ -1109,7 +1109,7 @@ export default function SettingsScreen({ isActive = true, onSubmenuChange }: {
       ...patch,
     };
     cancelScheduledAppearanceUpdate();
-    appearanceUpdateHandleRef.current = InteractionManager.runAfterInteractions(() => {
+    appearanceUpdateHandleRef.current = scheduleIdleTask(() => {
       appearanceUpdateTimeoutRef.current = setTimeout(
         flushPendingAppearanceUpdate,
         APPEARANCE_UPDATE_DELAY_MS,
@@ -1649,22 +1649,20 @@ export default function SettingsScreen({ isActive = true, onSubmenuChange }: {
           <Carousel
             ref={paletteCarouselRef}
             loop={false}
-            width={paletteCarouselWidth}
-            height={230}
+            itemSize={paletteCarouselWidth}
             data={PALETTE_IDS}
             defaultIndex={paletteIndex}
-            pagingEnabled
-            snapEnabled
+            snapMode="page"
             overscrollEnabled={false}
-            style={styles.paletteCarousel}
+            style={[styles.paletteCarousel, { width: paletteCarouselWidth, height: 230 }]}
             onConfigurePanGesture={gesture => {
               gesture.activeOffsetX([-14, 14]);
             }}
-            mode="parallax"
-            modeConfig={{
-              parallaxScrollingScale: 0.92,
-              parallaxScrollingOffset: 84,
-              parallaxAdjacentItemScale: 0.8,
+            layout={{
+              type: 'parallax',
+              scale: 0.92,
+              offset: 84,
+              adjacentScale: 0.8,
             }}
             onScrollStart={() => {
               if (paletteProgrammaticIndexRef.current !== null) {
@@ -1678,7 +1676,7 @@ export default function SettingsScreen({ isActive = true, onSubmenuChange }: {
               paletteDragStartIndexRef.current = paletteIndex;
               palettePreviewIndexRef.current = paletteIndex;
             }}
-            onProgressChange={(_, absoluteProgress) => {
+            onProgressChange={absoluteProgress => {
               if (!paletteDragActiveRef.current) return;
 
               const startIndex = paletteDragStartIndexRef.current;
@@ -1699,7 +1697,7 @@ export default function SettingsScreen({ isActive = true, onSubmenuChange }: {
 
               palettePreviewIndexRef.current = nextIndex;
             }}
-            onScrollEnd={index => {
+            onSnapToItem={index => {
               if (paletteProgrammaticIndexRef.current !== null) {
                 const nextIndex = paletteProgrammaticIndexRef.current;
                 paletteProgrammaticIndexRef.current = null;

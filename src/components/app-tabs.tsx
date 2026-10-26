@@ -545,7 +545,7 @@ function createStyles(C: AppColors) {
       overflow: "hidden",
     },
     navHighlightTint: {
-      ...StyleSheet.absoluteFillObject,
+      ...StyleSheet.absoluteFill,
       borderRadius: 24,
     },
     navButton: {

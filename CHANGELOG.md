@@ -13,10 +13,12 @@
 - Swiping right from the left edge inside an iPhone Settings section returns to the Settings menu instead of switching tabs.
 - Settings sections open at the top instead of inheriting the previous menu's scroll position.
 - Widget labels follow the widget's selected localization, matching the system's localized countdown and configuration controls.
-- iOS dependencies with obsolete minimum deployment versions now build under Xcode 27; an Expo Router compatibility patch guards an iOS 16 menu API while preserving the app's iOS 15.1 minimum.
+- iOS dependencies with obsolete minimum deployment versions now build under Xcode 27.
 
 ### Infra
 
+- Upgraded to Expo SDK 58 / React Native 0.88 for official iOS 27 scene lifecycle support, replacing temporary Router and startup patches. The app now requires iOS 16.4+ and uses a new OTA runtime.
+- Updated the palette carousel for Gesture Handler 3 and replaced the removed InteractionManager API with idle task scheduling.
 - Added an experimental GitHub Actions build of an unsigned iPhone IPA for SideStore, with embedded JavaScript, OTA updates disabled for that build, and downloadable IPA and build logs.
 - iOS CI also builds a simulator app and checks native widget schedule behavior across midnight and weekday boundaries.
 - iOS simulator smoke checks cover boarding-stop markers and the Settings back gesture, with screenshots available as CI artifacts.
