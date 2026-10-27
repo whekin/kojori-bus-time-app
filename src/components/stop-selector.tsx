@@ -88,6 +88,7 @@ export function DirectionSwitch({
 
   return (
     <Pressable
+      testID="boarding-direction-toggle"
       accessibilityRole="button"
       accessibilityLabel={t('directionAccessibility', { origin, destination })}
       onPress={handlePress}

@@ -442,6 +442,7 @@ export function StopMapPicker({
 
     <View style={styles.infoRow}>
       <Text
+        testID={`active-boarding-stop-${activeStop.id}`}
         style={[styles.captionName, { fontFamily: DISPLAY }]}
         numberOfLines={1}
         adjustsFontSizeToFit

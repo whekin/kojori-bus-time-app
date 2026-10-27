@@ -13,6 +13,7 @@
 - Swiping right from the left edge inside an iPhone Settings section returns to the Settings menu instead of switching tabs.
 - Settings sections open at the top instead of inheriting the previous menu's scroll position.
 - Widget labels follow the widget's selected localization, matching the system's localized countdown and configuration controls.
+- Tapping an iPhone widget applies its direction and boarding stop when reopening the app, including repeated taps after changing direction manually.
 - iOS dependencies with obsolete minimum deployment versions now build under Xcode 27.
 
 ### Improved

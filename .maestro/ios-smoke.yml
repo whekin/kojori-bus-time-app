@@ -65,11 +65,29 @@ appId: com.whekin.kojoribus
     id: settings-root
 - tapOn:
     id: tab-timetable
-- openLink: "kojoribs://?widgetMode=kojori&widgetStopId=1%3A2994"
+- openLink: "kojoribs://?widgetMode=tbilisi&widgetStopId=1%3A3078"
+- runFlow:
+    when:
+      visible: "Open in .*Kojoring Time.*"
+    commands:
+      - tapOn: Open
 - assertVisible:
     id: native-screen-index
 - assertVisible:
-    id: boarding-stop-1:2994
+    id: active-boarding-stop-1:3078
+- tapOn:
+    id: boarding-direction-toggle
+- assertVisible:
+    id: active-boarding-stop-1:2994
+- tapOn:
+    id: tab-settings
+- openLink: "kojoribs://?widgetMode=tbilisi&widgetStopId=1%3A3078"
+- assertVisible:
+    id: active-boarding-stop-1:3078
+- stopApp
+- openLink: "kojoribs://?widgetMode=tbilisi&widgetStopId=1%3A3078"
+- assertVisible:
+    id: active-boarding-stop-1:3078
 - takeScreenshot: native-tabs-widget-link
 - tapOn:
     id: tab-settings

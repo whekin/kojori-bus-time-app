@@ -1,7 +1,8 @@
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import { useQueryClient } from "@tanstack/react-query";
-import { useLocalSearchParams } from "expo-router";
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import * as Linking from "expo-linking";
+import { useGlobalSearchParams } from "expo-router";
+import React, { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Animated,
@@ -875,7 +876,7 @@ export default function HomeScreen({
   const { settings, update, toggleKojoriFavorite, toggleTbilisiFavorite } =
     useSettings();
   const { activeDirection, selectDirection } = useActiveDirection();
-  const { widgetMode, widgetStopId } = useLocalSearchParams<{
+  const { widgetMode, widgetStopId } = useGlobalSearchParams<{
     widgetMode?: string;
     widgetStopId?: string;
   }>();
@@ -887,43 +888,55 @@ export default function HomeScreen({
   const tbilisiPaneNowRef = useRef(now);
   const mode = directionToMode(activeDirection);
 
-  useEffect(() => {
-    if (widgetMode !== "kojori" && widgetMode !== "tbilisi") return;
+  const applyWidgetLink = useEffectEvent((nextMode?: string, nextStopId?: string, repeatedTap = false) => {
+    if (nextMode !== "kojori" && nextMode !== "tbilisi") return;
 
-    const nextKey = `${widgetMode}:${widgetStopId ?? ""}`;
-    if (handledWidgetLink.current === nextKey) return;
+    const nextKey = `${nextMode}:${nextStopId ?? ""}`;
+    if (!repeatedTap && handledWidgetLink.current === nextKey) return;
     handledWidgetLink.current = nextKey;
 
-    selectDirection(modeToDirection(widgetMode), { persist: "immediate" });
+    selectDirection(modeToDirection(nextMode), { persist: "immediate" });
 
-    if (!widgetStopId) return;
+    if (!nextStopId) return;
 
-    if (widgetMode === "kojori") {
-      const nextFavorites = settings.tbilisiFavorites.includes(widgetStopId)
+    if (nextMode === "kojori") {
+      const nextFavorites = settings.tbilisiFavorites.includes(nextStopId)
         ? settings.tbilisiFavorites
-        : [widgetStopId, ...settings.tbilisiFavorites];
+        : [nextStopId, ...settings.tbilisiFavorites];
       update({
         tbilisiFavorites: nextFavorites,
-        activeTbilisiStopId: widgetStopId,
+        activeTbilisiStopId: nextStopId,
       });
       return;
     }
 
-    const nextFavorites = settings.kojoriFavorites.includes(widgetStopId)
+    const nextFavorites = settings.kojoriFavorites.includes(nextStopId)
       ? settings.kojoriFavorites
-      : [widgetStopId, ...settings.kojoriFavorites];
+      : [nextStopId, ...settings.kojoriFavorites];
     update({
       kojoriFavorites: nextFavorites,
-      activeKojoriStopId: widgetStopId,
+      activeKojoriStopId: nextStopId,
     });
-  }, [
-    selectDirection,
-    settings.kojoriFavorites,
-    settings.tbilisiFavorites,
-    update,
-    widgetMode,
-    widgetStopId,
-  ]);
+  });
+
+  // The screens are mounted by our tab host, so cold-start parameters belong
+  // to the global router. A fresh URL event must also reapply an identical link
+  // after the rider has manually changed direction or boarding stop.
+  useEffect(() => {
+    applyWidgetLink(widgetMode, widgetStopId);
+  }, [widgetMode, widgetStopId]);
+
+  useEffect(() => {
+    const subscription = Linking.addEventListener('url', ({ url }) => {
+      const params = Linking.parse(url).queryParams;
+      applyWidgetLink(
+        typeof params?.widgetMode === 'string' ? params.widgetMode : undefined,
+        typeof params?.widgetStopId === 'string' ? params.widgetStopId : undefined,
+        true,
+      );
+    });
+    return () => subscription.remove();
+  }, []);
 
   useEffect(() => {
     if (!isActive) return undefined;
