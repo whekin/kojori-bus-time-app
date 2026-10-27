@@ -79,6 +79,12 @@ export default function AppTabs({
   }
 
   const titles = [t('tabsDepartures'), t('tabsMap'), t('tabsTimetable'), t('tabsSettings')];
+  // Refresh item states as well as the host tint when the active palette changes.
+  const itemAppearance = {
+    normal: { tabBarItemIconColor: colors.textDim, tabBarItemTitleFontColor: colors.textDim },
+    selected: { tabBarItemIconColor: colors.primary, tabBarItemTitleFontColor: colors.primary },
+  };
+  const tabAppearance = { stacked: itemAppearance, inline: itemAppearance, compactInline: itemAppearance };
 
   return (
     <MapFocusProvider>
@@ -108,6 +114,8 @@ export default function AppTabs({
               ios={{
                 icon: { type: 'sfSymbol', name: ICONS[index] },
                 selectedIcon: { type: 'sfSymbol', name: `${ICONS[index]}.fill` },
+                standardAppearance: tabAppearance,
+                scrollEdgeAppearance: tabAppearance,
                 overrideScrollViewContentInsetAdjustmentBehavior: false,
               }}
               tabBarItemTestID={`tab-${route}`}

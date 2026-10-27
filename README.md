@@ -127,7 +127,7 @@ bridge without changing Android's pager. UIKit owns the tab bar's safe-area inse
 Expo SDK 58 / React Native 0.88 provides the scene lifecycle required by the iOS 27
 SDK. Prebuild generates its standard SceneDelegate; no Router or scene lifecycle
 patch is needed. The app requires iOS 16.4+, and its widget extension requires iOS 17+.
-CI also uploads `ios-simulator`, containing a zipped `.app` that can be
+CI also uploads `ios-simulator`, containing a zipped arm64 `.app` for Apple Silicon that can be
 installed with `xcrun simctl install booted <path-to-app>` after extracting it.
 CI uses Xcode 27.1 to compile the portrait family and automatically selects an
 iPhone that the installed simulator runtime supports. The simulator job runs `.maestro/ios-smoke.yml`, checking

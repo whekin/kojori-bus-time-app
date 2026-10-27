@@ -36,6 +36,7 @@ import {
   alpha,
   APP_PALETTES,
   BottomTabInset,
+  MaxContentWidth,
   getAppColors,
   type AppColors,
   type AppPaletteId,
@@ -1020,6 +1021,7 @@ export default function SettingsScreen({ isActive = true, onSubmenuChange }: {
 }) {
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
+  const [availableWidth, setAvailableWidth] = useState(windowWidth);
   const { colors, styles } = useStyles();
   const resolvedThemeMode = useResolvedAppThemeMode();
   const { settings, toggleKojoriFavorite, toggleTbilisiFavorite, update, hasManualDirectionOverride } = useSettings();
@@ -1031,6 +1033,9 @@ export default function SettingsScreen({ isActive = true, onSubmenuChange }: {
   const [showPermissionModal, setShowPermissionModal] = useState(false);
   const [noticeModal, setNoticeModal] = useState<NoticeModalState | null>(null);
   const [activeSection, setActiveSection] = useState<SettingsSection | null>(null);
+  const wideLayout = availableWidth >= 720;
+  const columnWidth = activeSection === null ? MaxContentWidth : 600;
+  const wideCardWidth = (Math.min(availableWidth, MaxContentWidth) - 52) / 2;
   const isInSubmenu = activeSection !== null || modal !== null;
   useEffect(() => {
     onSubmenuChange?.(isInSubmenu);
@@ -1467,13 +1472,15 @@ export default function SettingsScreen({ isActive = true, onSubmenuChange }: {
         onPress={() => openSection(section)}
         style={({ pressed }) => [
           styles.sectionCard,
+          wideLayout && styles.sectionCardWide,
+          wideLayout && { width: wideCardWidth },
           pressed && { backgroundColor: colors.panel },
         ]}>
         <View style={[styles.sectionCardRail, { backgroundColor: accentColor }]} />
         <View style={styles.sectionCardCopy}>
           <Text style={styles.sectionCardTitle}>{title}</Text>
           <Text style={styles.sectionCardNote}>{note}</Text>
-          <Text style={[styles.sectionCardSummary, { color: accentColor }]} numberOfLines={1}>
+          <Text style={[styles.sectionCardSummary, { color: accentColor }]} numberOfLines={wideLayout ? 2 : 1}>
             {summary}
           </Text>
         </View>
@@ -1506,6 +1513,7 @@ export default function SettingsScreen({ isActive = true, onSubmenuChange }: {
         onPress={onPress ?? (() => openSection(section))}
         style={({ pressed }) => [
           styles.summaryAction,
+          wideLayout && styles.summaryActionWide,
           {
             borderColor: pressed ? alpha(accentColor, '42') : colors.border,
             backgroundColor: pressed ? alpha(accentColor, '10') : colors.panel,
@@ -1532,8 +1540,9 @@ export default function SettingsScreen({ isActive = true, onSubmenuChange }: {
     <View
       testID={activeSection ? `settings-page-${activeSection}` : 'settings-root'}
       {...backGesture.panHandlers}
+      onLayout={({ nativeEvent }) => setAvailableWidth(nativeEvent.layout.width)}
       style={[styles.screen, { paddingTop: insets.top }]}>
-      <View style={styles.header}>
+      <View style={[styles.header, styles.contentColumn, { maxWidth: columnWidth }]}>
         {activeSection ? (
           <Pressable
             accessibilityRole="button"
@@ -1551,11 +1560,14 @@ export default function SettingsScreen({ isActive = true, onSubmenuChange }: {
       <ScrollView
         ref={settingsScrollRef}
         style={styles.scroll}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + BottomTabInset + 32 }]}
+        contentContainerStyle={[styles.scrollContent, styles.contentColumn, {
+          maxWidth: columnWidth,
+          paddingBottom: insets.bottom + BottomTabInset + 32,
+        }]}
         showsVerticalScrollIndicator={false}>
         {activeSection === null ? (
           <>
-            <View style={styles.summaryActionStack}>
+            <View style={[styles.summaryActionStack, wideLayout && styles.summaryActionRow]}>
               {renderSummaryAction({
                 section: 'appearance',
                 icon: 'palette-outline',
@@ -1582,7 +1594,7 @@ export default function SettingsScreen({ isActive = true, onSubmenuChange }: {
                 accentColor: colors.warning,
               })}
             </View>
-            <View style={styles.sectionCardStack}>
+            <View style={[styles.sectionCardStack, wideLayout && styles.sectionCardGrid]}>
               {renderSectionCard({
                 section: 'commute',
                 title: t('settingsSectionCommute'),
@@ -2458,6 +2470,7 @@ function createStyles(C: AppColors) {
     },
     headerSpacer: { width: 36 },
     scroll: { flex: 1 },
+    contentColumn: { width: '100%', alignSelf: 'center' },
     scrollContent: { paddingHorizontal: 20 },
 
     summaryActionStack: {
@@ -2474,6 +2487,8 @@ function createStyles(C: AppColors) {
       paddingVertical: 12,
       gap: 12,
     },
+    summaryActionRow: { flexDirection: 'row', gap: 12 },
+    summaryActionWide: { flex: 1, minWidth: 0, minHeight: 108, paddingHorizontal: 12, gap: 8 },
     summaryActionIcon: {
       width: 38,
       height: 38,
@@ -2508,6 +2523,8 @@ function createStyles(C: AppColors) {
       fontWeight: '600',
     },
     sectionCardStack: { marginTop: 18, gap: 12 },
+    sectionCardGrid: { flexDirection: 'row', flexWrap: 'wrap' },
+    sectionCardWide: { minWidth: 0, minHeight: 120 },
     sectionCard: {
       minHeight: 94,
       borderRadius: 16,

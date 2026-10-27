@@ -15,6 +15,10 @@
 - Widget labels follow the widget's selected localization, matching the system's localized countdown and configuration controls.
 - iOS dependencies with obsolete minimum deployment versions now build under Xcode 27.
 
+### Improved
+
+- Settings use a centered, readable content width on larger screens, with compact summary cards and a two-column section grid. Nested settings stay comfortably narrow.
+
 ### Infra
 
 - Upgraded to Expo SDK 58 / React Native 0.88 for official iOS 27 scene lifecycle support, replacing temporary Router and startup patches. The app now requires iOS 16.4+ and uses a new OTA runtime.
