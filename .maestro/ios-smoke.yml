@@ -4,6 +4,14 @@ appId: com.whekin.kojoribus
     clearState: true
     permissions:
       all: deny
+# Authorize the scheme before testing URL payloads. On a fresh iOS 27
+# simulator, the first external-link confirmation can discard that first URL.
+- openLink: "kojoribs://"
+- runFlow:
+    when:
+      visible: "Open in .*Kojoring Time.*"
+    commands:
+      - tapOn: Open
 - extendedWaitUntil:
     visible:
       id: start-kojori
