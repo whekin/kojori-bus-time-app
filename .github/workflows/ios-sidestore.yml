@@ -1,17 +1,24 @@
-name: Experimental iOS IPA (SideStore)
+name: iOS IPA (SideStore)
 
 on:
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Existing release tag to attach the IPA to (run on the same tag); leave empty for a preview'
+        type: string
+        required: false
+        default: ''
   push:
     branches:
       - codex/experiment-sidestore-ipa
+      - main
 
 permissions:
   contents: read
 
 concurrency:
   group: ios-sidestore-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ inputs.release_tag == '' }}
 
 jobs:
   ipa:
@@ -63,16 +70,10 @@ jobs:
           swiftc native/ios-widget/WidgetSchedule.swift native/ios-widget/WidgetScheduleTests.swift -o "$RUNNER_TEMP/widget-schedule-tests"
           "$RUNNER_TEMP/widget-schedule-tests" "$RUNNER_TEMP/timetable.json"
 
-      - name: Configure standalone experimental build
-        run: |
-          # Modify only this disposable checkout, leaving release config unchanged.
-          # The IPA uses its embedded JS rather than receiving production OTAs.
-          bun -e '
-            const config = await Bun.file("app.json").json();
-            config.expo.updates.enabled = false;
-            config.expo.ios.buildNumber = `1.${process.env.GITHUB_RUN_NUMBER}.${process.env.GITHUB_RUN_ATTEMPT}`;
-            await Bun.write("app.json", JSON.stringify(config, null, 2) + "\n");
-          '
+      - name: Configure standalone build
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: bun scripts/configure-ios-build.ts
 
       - name: Generate iOS project
         env:
@@ -123,7 +124,7 @@ jobs:
           unzip -tq "$RUNNER_TEMP/ios-artifacts/KojoringTime-sidestore.ipa"
           (cd "$RUNNER_TEMP/ios-artifacts" && shasum -a 256 KojoringTime-sidestore.ipa > SHA256SUMS.txt)
           {
-            echo '### Experimental SideStore IPA'
+            echo '### SideStore IPA'
             echo 'Download the **sidestore-ipa** artifact, extract the ZIP, and import the `.ipa` into SideStore.'
             echo 'Unsigned arm64 Release build with embedded JS and OTA updates disabled. No Apple credentials or Expo login used.'
             echo "Source commit: $GITHUB_SHA"
@@ -205,3 +206,37 @@ jobs:
             ${{ runner.temp }}/ios-build.log
           if-no-files-found: ignore
           retention-days: 7
+
+  publish:
+    name: Attach IPA to GitHub release
+    needs: ipa
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag != '' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      RELEASE_TAG: ${{ inputs.release_tag }}
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: sidestore-ipa
+          path: ipa
+      - name: Verify tag and publish versioned assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_TAG" =~ ^v[0-9]{4}\.[0-9]{1,2}\.[0-9]{1,2}$ ]]
+          test "$GITHUB_REF" = "refs/tags/$RELEASE_TAG"
+          # A date tag can be replaced by a re-release while this build runs.
+          # Never attach an obsolete binary to that newer release.
+          test "$(gh api "repos/$GH_REPO/commits/$RELEASE_TAG" --jq .sha)" = "$GITHUB_SHA"
+          gh release view "$RELEASE_TAG" > /dev/null
+          cd ipa
+          sha256sum --check SHA256SUMS.txt
+          asset="kojoring-time-$RELEASE_TAG-sidestore.ipa"
+          mv KojoringTime-sidestore.ipa "$asset"
+          sha256sum "$asset" > "$asset.sha256"
+          gh release upload "$RELEASE_TAG" "$asset" "$asset.sha256" --clobber
+          echo "IPA published: $(gh release view "$RELEASE_TAG" --json url --jq .url)" >> "$GITHUB_STEP_SUMMARY"

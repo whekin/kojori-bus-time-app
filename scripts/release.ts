@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * Full release pipeline: preflight → changelog → bake TTC data (+ freshness check) → stamp version → prebuild → build APK → commit → tag → push → GitHub release → EAS update.
+ * Full release pipeline: preflight → changelog → bake TTC data (+ freshness check) → stamp version → prebuild → build APK → commit → tag → push → GitHub release → iOS CI → Android EAS update.
  * Release notes are pulled from CHANGELOG.md. During normal development,
  * add notes under "## [UNRELEASED]"; release renames that heading to the
  * concrete version tag.
@@ -49,6 +49,7 @@ type Phase =
   | 'build'
   | 'commit_push'
   | 'github_release'
+  | 'ios_release'
   | 'eas_update';
 
 type ReleaseState = {
@@ -333,7 +334,7 @@ const runtimeCheckBase = continueMode || skipRuntimeCheck ? null : getRuntimeChe
 
 // ── 1. Preflight ────────────────────────────────────────────────────────────
 
-step('1/9  Preflight');
+step('1/10  Preflight');
 
 if (!isDone(state, 'preflight')) {
   const status = String(run('git status --porcelain', { stdio: 'pipe' }) ?? '').trim();
@@ -365,6 +366,12 @@ if (!isDone(state, 'preflight')) {
   } else if (skipRuntimeCheck && !continueMode) {
     console.log('Runtime guard skipped by --skip-runtime-check.');
   }
+  // Dispatch requires the workflow to exist on the default branch. Check before
+  // baking, building, or publishing anything rather than failing after release.
+  const iosWorkflow = String(run('gh workflow view ios-sidestore.yml --yaml', { stdio: 'pipe' }) ?? '');
+  if (!iosWorkflow.includes('release_tag:')) {
+    throw new Error('Merge the release-capable iOS workflow into the default branch before releasing.');
+  }
   markDone(state, 'preflight');
 } else {
   console.log('Already completed ✓');
@@ -372,7 +379,7 @@ if (!isDone(state, 'preflight')) {
 
 // ── 2. Changelog ────────────────────────────────────────────────────────────
 
-step('2/9  Changelog');
+step('2/10  Changelog');
 
 let releaseNotes = extractReleaseNotes(version);
 if (!releaseNotes) {
@@ -390,7 +397,7 @@ if (!isDone(state, 'changelog')) {
 
 // ── 3. Bake TTC data ────────────────────────────────────────────────────────
 
-step('3/9  Bake TTC data + freshness check');
+step('3/10  Bake TTC data + freshness check');
 
 if (!isDone(state, 'bake_ttc')) {
   run('bun run bake:ttc');
@@ -406,7 +413,7 @@ run('bun run bake:check');
 
 // ── 4. Stamp version ────────────────────────────────────────────────────────
 
-step('4/9  Stamp version');
+step('4/10  Stamp version');
 
 if (!isDone(state, 'stamp')) {
   const appJson = JSON.parse(readFileSync(appJsonPath, 'utf-8'));
@@ -430,7 +437,7 @@ if (!isDone(state, 'stamp')) {
 
 // ── 5. Prebuild ─────────────────────────────────────────────────────────────
 
-step('5/9  Prebuild');
+step('5/10  Prebuild');
 
 if (!isDone(state, 'prebuild')) {
   run('NODE_ENV=production EXPO_UPDATE_CHANNEL=production bunx --env-file=.env.local expo prebuild --platform android');
@@ -442,7 +449,7 @@ if (!isDone(state, 'prebuild')) {
 
 // ── 6. Build APK ────────────────────────────────────────────────────────────
 
-step('6/9  Build APK');
+step('6/10  Build APK');
 
 if (!isDone(state, 'build')) {
   run('cd android && ./gradlew --stop', { allowFailure: true });
@@ -462,7 +469,7 @@ if (!isDone(state, 'build')) {
 
 // ── 7. Commit, tag, push ────────────────────────────────────────────────────
 
-step('7/9  Commit & push');
+step('7/10  Commit & push');
 
 if (!isDone(state, 'commit_push')) {
   run('git add app.json package.json CHANGELOG.md assets/ttc-baked.ts');
@@ -489,13 +496,13 @@ if (!isDone(state, 'commit_push')) {
 
 // ── 8. GitHub release ───────────────────────────────────────────────────────
 
-step('8/9  GitHub release');
+step('8/10  GitHub release');
 
 if (!isDone(state, 'github_release')) {
   const apkName = `kojoring-time-${tag}.apk`;
   const renamedApkPath = resolve(root, `android/app/build/outputs/apk/release/${apkName}`);
   const notesFile = resolve(tmpdir(), `kojoring-release-${tag}.md`);
-  writeFileSync(notesFile, releaseNotes);
+  writeFileSync(notesFile, `${releaseNotes}\n\n### iPhone installation\n\nThe unsigned SideStore IPA and its SHA-256 checksum are attached after the iOS build and UI checks pass. If only the APK is visible, check [iOS build progress](https://github.com/whekin/kojori-bus-time-app/actions/workflows/ios-sidestore.yml).\n\n[Install on iPhone](https://github.com/whekin/kojori-bus-time-app/blob/${tag}/README.md#install-on-iphone) (iOS 16.4+; SideStore signs the IPA with your Apple Account).\n`);
 
   try {
     // Copy APK with proper name to avoid browser download issues
@@ -525,14 +532,27 @@ if (!isDone(state, 'github_release')) {
   markDone(state, 'github_release');
 }
 
-// ── 9. EAS update ──────────────────────────────────────────────────────────
+// iOS builds asynchronously on GitHub's macOS runner. Dispatch on the release
+// tag so its IPA always contains the exact source shipped with this APK.
+step('9/10  Queue iOS release build');
 
-step('9/9  EAS update');
+if (!isDone(state, 'ios_release')) {
+  run(`gh workflow run ios-sidestore.yml --ref ${shellQuote(tag)} -f ${shellQuote(`release_tag=${tag}`)}`);
+  console.log('iOS build queued. After device + simulator checks pass, CI attaches the IPA and SHA-256 to this GitHub release.');
+  console.log('Track progress: gh run list --workflow ios-sidestore.yml --event workflow_dispatch');
+  markDone(state, 'ios_release');
+} else {
+  console.log('iOS build already queued; check GitHub Actions for its result.');
+}
+
+// ── 10. EAS update ──────────────────────────────────────────────────────────
+
+step('10/10  Android EAS update');
 
 if (!isDone(state, 'eas_update')) {
   const updateMessage = createUpdateMessage(version, releaseNotes);
   run(
-    `NODE_ENV=production bunx eas update --channel production --environment production --message ${shellQuote(updateMessage)} --non-interactive`
+    `NODE_ENV=production bunx eas update --platform android --channel production --environment production --message ${shellQuote(updateMessage)} --non-interactive`
   );
 
   console.log(`EAS production update published: ${updateMessage}`);
