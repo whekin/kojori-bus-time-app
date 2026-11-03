@@ -3,24 +3,24 @@ import SwiftUI
 import WidgetKit
 
 struct StopEntity: AppEntity {
-    static var typeDisplayRepresentation: TypeDisplayRepresentation = "Stop"
+    static var typeDisplayRepresentation: TypeDisplayRepresentation = "Favorite"
     static var defaultQuery = StopQuery()
     let id: String
     var displayRepresentation: DisplayRepresentation {
-        let stop = WidgetSchedule.bundled.stops.first { $0.id == id }
-        return DisplayRepresentation(title: "\(stop?.name ?? id)", subtitle: "\(stop?.destination ?? "")")
+        let stop = WidgetSchedule.current.resolveStop(id)
+        return DisplayRepresentation(title: "\(stop?.destination ?? id)", subtitle: "\(stop?.name ?? "")")
     }
 }
 
 struct StopQuery: EntityQuery {
     func entities(for identifiers: [String]) async throws -> [StopEntity] {
-        WidgetSchedule.bundled.stops.filter { identifiers.contains($0.id) }.map { StopEntity(id: $0.id) }
+        identifiers.compactMap { WidgetSchedule.current.resolveStop($0) }.map { StopEntity(id: $0.id) }
     }
     func suggestedEntities() async throws -> [StopEntity] {
-        WidgetSchedule.bundled.stops.map { StopEntity(id: $0.id) }
+        WidgetSchedule.current.stops.map { StopEntity(id: $0.id) }
     }
     func defaultResult() async -> StopEntity? {
-        WidgetSchedule.bundled.stops.first.map { StopEntity(id: $0.id) }
+        WidgetSchedule.current.stops.first.map { StopEntity(id: $0.id) }
     }
 }
 
@@ -34,10 +34,13 @@ enum RouteChoice: String, AppEnum {
 }
 
 struct BusConfiguration: WidgetConfigurationIntent {
-    static var title: LocalizedStringResource = "Next bus"
-    static var description = IntentDescription("Choose a boarding stop and bus routes.")
+    static var title: LocalizedStringResource = "Next departure"
+    static var description = IntentDescription("Choose one of your favorite routes or groups.")
+    @Parameter(title: "Favorite") var favorite: StopEntity?
+    // Retained for widgets configured before favorite-based snapshots.
     @Parameter(title: "Stop") var stop: StopEntity?
     @Parameter(title: "Routes", default: .all) var routes: RouteChoice
+    static var parameterSummary: some ParameterSummary { Summary("\(\.$favorite)") }
 }
 
 struct BusEntry: TimelineEntry {
@@ -48,10 +51,10 @@ struct BusEntry: TimelineEntry {
 
 struct BusProvider: AppIntentTimelineProvider {
     func entry(at date: Date, configuration: BusConfiguration) -> BusEntry {
-        let schedule = WidgetSchedule.bundled
-        let stop = schedule.stops.first { $0.id == configuration.stop?.id } ?? schedule.stops.first
+        let schedule = WidgetSchedule.current
+        let stop = schedule.resolveStop(configuration.favorite?.id ?? configuration.stop?.id)
         return BusEntry(date: date, stop: stop, departures: Array(schedule.departures(
-            after: date, stopID: stop?.id ?? "", route: configuration.routes.bus
+            after: date, stopID: stop?.id ?? "", route: configuration.favorite == nil ? configuration.routes.bus : "all"
         ).prefix(16)))
     }
     func placeholder(in context: Context) -> BusEntry {
@@ -62,9 +65,9 @@ struct BusProvider: AppIntentTimelineProvider {
     }
     func timeline(for configuration: BusConfiguration, in context: Context) async -> Timeline<BusEntry> {
         let now = Date()
-        let schedule = WidgetSchedule.bundled
-        let stopID = configuration.stop?.id ?? schedule.stops.first?.id ?? ""
-        let departures = schedule.departures(after: now, stopID: stopID, route: configuration.routes.bus)
+        let schedule = WidgetSchedule.current
+        let stopID = schedule.resolveStop(configuration.favorite?.id ?? configuration.stop?.id)?.id ?? ""
+        let departures = schedule.departures(after: now, stopID: stopID, route: configuration.favorite == nil ? configuration.routes.bus : "all")
         let transitions = Set(departures.filter { $0.date < now.addingTimeInterval(86400) }
             .map { $0.date.addingTimeInterval(1) })
         let dates = [now] + transitions.sorted().prefix(60)
@@ -186,14 +189,26 @@ struct BusWidgetView: View {
                 }
                 Divider()
                 Text(WidgetCopy.text("later", language: language)).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                VStack(spacing: 10) {
-                    ForEach(Array(entry.departures.dropFirst().prefix(9))) { departure in
-                        HStack(spacing: 12) {
-                            badge(departure.bus)
-                            Text(departure.time).font(.system(.title3, design: .rounded).monospacedDigit())
-                            Spacer(minLength: 4)
-                            Text(departure.date, style: .relative).font(.caption).foregroundStyle(.secondary)
+                // Read chronologically across each row, then down. Keep the
+                // countdown below the time so both columns stay readable.
+                LazyVGrid(columns: [GridItem(.flexible(), alignment: .leading),
+                                    GridItem(.flexible(), alignment: .leading)],
+                          alignment: .leading, spacing: 14) {
+                    ForEach(Array(entry.departures.dropFirst().prefix(12))) { departure in
+                        VStack(alignment: .leading, spacing: 5) {
+                            HStack(spacing: 6) {
+                                Text(departure.time)
+                                    .font(.system(.title3, design: .rounded, weight: .semibold))
+                                    .monospacedDigit().lineLimit(1).minimumScaleFactor(0.8)
+                                    .layoutPriority(1)
+                                badge(departure.bus)
+                            }
+                            Text(departure.date, style: .relative)
+                                .font(.caption).foregroundStyle(.secondary)
+                                .lineLimit(1).minimumScaleFactor(0.8)
+                            Divider()
                         }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
                 Spacer(minLength: 0)
@@ -228,7 +243,7 @@ struct KojoriBusWidget: Widget {
             BusWidgetView(entry: entry)
         }
         .configurationDisplayName("Kojoring Time")
-        .description("Next bus")
+        .description("Next departure")
         .supportedFamilies(families)
     }
 }

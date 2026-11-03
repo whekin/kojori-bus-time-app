@@ -1,5 +1,6 @@
 {
-  "platforms": ["android"],
+  "platforms": ["android", "apple"],
+  "apple": { "modules": ["KojoriWidgetModule"] },
   "android": {
     "modules": ["expo.modules.kojoriwidget.KojoriWidgetModule"]
   }

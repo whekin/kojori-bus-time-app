@@ -1,67 +1,62 @@
-import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
-import { useRouter } from 'expo-router';
+import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
+import { useRouter } from "expo-router";
 import {
   Tabs,
   TabList,
   TabTrigger,
   TabSlot,
-  type TabListProps,
   type TabTriggerSlotProps,
-} from 'expo-router/ui';
-import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+} from "expo-router/ui";
+import React from "react";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 
-import { alpha, MaxContentWidth } from '@/constants/theme';
-import { useAppColors } from '@/hooks/use-app-colors';
-import { useI18n } from '@/hooks/use-i18n';
-import { MapFocusProvider } from '@/hooks/use-map-focus';
-import { TabNavProvider, type TabRoute } from '@/hooks/use-tab-nav';
+import { alpha, MaxContentWidth } from "@/constants/theme";
+import { useAppColors } from "@/hooks/use-app-colors";
+import { useI18n } from "@/hooks/use-i18n";
+import { MapFocusProvider } from "@/hooks/use-map-focus";
+import { TabNavProvider, type TabRoute } from "@/hooks/use-tab-nav";
 
-type AppTabsProps = {
+export default function AppTabs(_props: {
   backEnabled?: boolean;
   deferInactiveTabs?: boolean;
   onRequestDirectionPicker?: () => void;
-};
-
-type WebTab = {
-  route: TabRoute;
-  href: '/' | '/explore' | '/timetable' | '/settings';
-  title: string;
-  icon: React.ComponentProps<typeof MaterialCommunityIcons>['name'];
-};
-
-function hrefForRoute(route: TabRoute): WebTab['href'] {
-  if (route === 'index') return '/';
-  return `/${route}`;
-}
-
-export default function AppTabs(_props: AppTabsProps) {
+}) {
   const router = useRouter();
   const { t } = useI18n();
-  const tabs: WebTab[] = [
-    { route: 'index', href: '/', title: t('tabsDepartures'), icon: 'bus-clock' },
-    { route: 'explore', href: '/explore', title: t('tabsMap'), icon: 'map-marker-radius' },
-    { route: 'timetable', href: '/timetable', title: t('tabsTimetable'), icon: 'table-clock' },
-    { route: 'settings', href: '/settings', title: t('tabsSettings'), icon: 'cog' },
-  ];
-
-  function navigateToTab(route: TabRoute) {
-    router.push(hrefForRoute(route));
+  const colors = useAppColors();
+  const tabs = [
+    { route: "index", title: t("tabsDepartures"), icon: "bus-clock" },
+    { route: "explore", title: t("tabsMap"), icon: "map-outline" },
+    { route: "timetable", title: t("tabsTimetable"), icon: "calendar-clock" },
+    { route: "settings", title: t("tabsSettings"), icon: "cog-outline" },
+  ] as const;
+  function navigate(route: TabRoute) {
+    router.push(route === "index" ? "/" : `/${route}`);
   }
-
   return (
     <MapFocusProvider>
-      <TabNavProvider value={navigateToTab}>
+      <TabNavProvider value={navigate}>
         <Tabs>
           <TabSlot style={styles.slot} />
           <TabList asChild>
-            <CustomTabList>
-              {tabs.map(tab => (
-                <TabTrigger key={tab.route} name={tab.route} href={tab.href} asChild>
+            <View
+              style={StyleSheet.flatten([
+                styles.wrap,
+                styles.bar,
+                { backgroundColor: colors.surface, borderColor: colors.border },
+              ])}
+            >
+              {tabs.map((tab) => (
+                <TabTrigger
+                  key={tab.route}
+                  name={tab.route}
+                  href={tab.route === "index" ? "/" : `/${tab.route}`}
+                  asChild
+                >
                   <TabButton icon={tab.icon}>{tab.title}</TabButton>
                 </TabTrigger>
               ))}
-            </CustomTabList>
+            </View>
           </TabList>
         </Tabs>
       </TabNavProvider>
@@ -69,122 +64,70 @@ export default function AppTabs(_props: AppTabsProps) {
   );
 }
 
-export function TabButton({ children, icon, isFocused, ...props }: Omit<TabTriggerSlotProps, 'ref'> & {
-  icon: WebTab['icon'];
+function TabButton({
+  children,
+  icon,
+  isFocused,
+  ...props
+}: Omit<TabTriggerSlotProps, "ref"> & {
+  icon: React.ComponentProps<typeof MaterialCommunityIcons>["name"];
   ref?: React.Ref<React.ComponentRef<typeof Pressable>>;
 }) {
-  const C = useAppColors();
-  const tint = isFocused ? C.text : C.textDim;
-
+  const colors = useAppColors();
   return (
     <Pressable
       {...props}
       accessibilityRole="tab"
       accessibilityState={{ selected: isFocused }}
-      style={({ pressed }) => [
-        styles.tabButton,
+      style={StyleSheet.flatten([
+        styles.button,
         {
-          backgroundColor: isFocused ? C.surface : 'transparent',
-          borderColor: isFocused ? C.surfaceHigh : 'transparent',
-          opacity: pressed ? 0.72 : 1,
+          backgroundColor: isFocused
+            ? alpha(colors.primary, "18")
+            : "transparent",
         },
-      ]}>
-      <MaterialCommunityIcons name={icon} size={18} color={isFocused ? C.primary : C.textDim} />
-      <Text style={[styles.tabButtonLabel, { color: tint }]}>{children}</Text>
+      ])}
+    >
+      <MaterialCommunityIcons
+        name={icon}
+        size={22}
+        color={isFocused ? colors.primary : colors.textDim}
+      />
+      <Text
+        style={{
+          color: isFocused ? colors.text : colors.textDim,
+          fontSize: 11,
+          fontWeight: "700",
+        }}
+        numberOfLines={1}
+      >
+        {children}
+      </Text>
     </Pressable>
   );
 }
-
-export function CustomTabList(props: TabListProps) {
-  const C = useAppColors();
-
-  return (
-    <View {...props} style={styles.tabListContainer}>
-      <View
-        style={[
-          styles.innerContainer,
-          {
-            backgroundColor: alpha(C.panel, 'F2'),
-            borderColor: C.border,
-          },
-        ]}>
-        <View style={styles.brandBlock}>
-          <Text style={[styles.brandText, { color: C.text }]}>Kojoring Time</Text>
-          <Text style={[styles.brandSubtext, { color: C.textDim }]}>Kojori · Tbilisi</Text>
-        </View>
-
-        <View style={styles.tabButtons}>{props.children}</View>
-      </View>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
-  slot: {
-    height: '100%',
-  },
-  tabListContainer: {
-    position: 'absolute',
-    width: '100%',
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-    flexDirection: 'row',
-  },
-  innerContainer: {
-    width: '100%',
+  slot: { flex: 1 },
+  wrap: {
+    position: "absolute",
+    bottom: 12,
+    width: "96%",
     maxWidth: MaxContentWidth,
+    alignSelf: "center",
+  },
+  bar: {
+    flexDirection: "row",
+    padding: 6,
+    gap: 4,
+    borderWidth: 1,
+    borderRadius: 24,
+  },
+  button: {
+    flex: 1,
     minHeight: 58,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 22,
-    borderWidth: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    shadowColor: '#000',
-    shadowOpacity: 0.16,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 5 },
-  },
-  brandBlock: {
-    minWidth: 136,
-    marginRight: 'auto',
-  },
-  brandText: {
-    fontSize: 14,
-    lineHeight: 18,
-    fontWeight: '800',
-    letterSpacing: 0.2,
-  },
-  brandSubtext: {
-    fontSize: 11,
-    lineHeight: 14,
-    fontWeight: '700',
-    letterSpacing: 0.8,
-    textTransform: 'uppercase',
-  },
-  tabButtons: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    flexShrink: 1,
-  },
-  tabButton: {
-    minHeight: 40,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 16,
-    borderWidth: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-  },
-  tabButtonLabel: {
-    fontSize: 13,
-    lineHeight: 16,
-    fontWeight: '800',
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 18,
+    gap: 4,
   },
 });

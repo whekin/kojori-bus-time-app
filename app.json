@@ -7,7 +7,7 @@
     "icon": "./assets/images/icon.png",
     "scheme": "kojoribs",
     "userInterfaceStyle": "automatic",
-    "runtimeVersion": "kojori-native-7",
+    "runtimeVersion": "kojori-native-8",
     "updates": {
       "enabled": true,
       "url": "https://u.expo.dev/b3dd5ad4-f12e-4c00-a17e-33f830ee23c2",
@@ -49,7 +49,7 @@
       "predictiveBackGestureEnabled": false
     },
     "web": {
-      "output": "static",
+      "output": "server",
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
@@ -64,7 +64,7 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "Allow Kojoring Time to suggest whether you're closer to Kojori or Tbilisi.",
+          "locationWhenInUsePermission": "Allow Kojoring Time to suggest a nearby saved boarding stop.",
           "locationAlwaysAndWhenInUsePermission": false,
           "locationAlwaysPermission": false,
           "isIosBackgroundLocationEnabled": false,

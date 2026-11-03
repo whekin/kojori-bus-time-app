@@ -24,7 +24,7 @@ open class KojoriBusWidgetProvider : AppWidgetProvider() {
       ACTION_SET_DIRECTION -> {
         if (!isTrustedWidgetAction(context, intent)) return
         val nextDirection = intent.getStringExtra(EXTRA_DIRECTION) ?: return
-        WidgetPrefs.setDirection(context, nextDirection)
+        WidgetPrefs.setDirection(context, nextDirection, intent.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, -1))
         refreshAll(context)
       }
       ACTION_REFRESH -> {
@@ -44,9 +44,14 @@ open class KojoriBusWidgetProvider : AppWidgetProvider() {
       }
       ACTION_OPEN_APP -> {
         if (!isTrustedWidgetAction(context, intent)) return
-        val direction = intent.getStringExtra(EXTRA_DIRECTION) ?: WidgetPrefs.getDirection(context)
+        val widgetId = intent.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, -1)
+        val direction = intent.getStringExtra(EXTRA_DIRECTION) ?: WidgetPrefs.getDirection(context, widgetId)
         val stopId = intent.getStringExtra(EXTRA_STOP_ID) ?: ""
-        val uri = Uri.parse("kojoribs://?widgetMode=$direction&widgetStopId=$stopId")
+        val uri = Uri.Builder().scheme("kojoribs").authority("").apply {
+          if (direction == "kojori" || direction == "tbilisi") {
+            appendQueryParameter("widgetMode", direction); appendQueryParameter("widgetStopId", stopId)
+          } else appendQueryParameter("widgetFavoriteId", direction)
+        }.build()
         val openIntent = Intent(Intent.ACTION_VIEW, uri).apply {
           setPackage(context.packageName)
           flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
@@ -136,7 +141,7 @@ open class KojoriBusWidgetProvider : AppWidgetProvider() {
       appWidgetId: Int,
     ) {
       val views = RemoteViews(context.packageName, R.layout.kojori_bus_widget)
-      val currentDirection = WidgetPrefs.getDirection(context)
+      val currentDirection = WidgetPrefs.getDirection(context, appWidgetId)
       val stateJson = WidgetPrefs.getStateJson(context)
       val root = stateJson?.let { runCatching { JSONObject(it) }.getOrNull() }
 
@@ -195,12 +200,16 @@ open class KojoriBusWidgetProvider : AppWidgetProvider() {
     // timetable repeats weekly), so any item with a resolvable departure time
     // counts as upcoming — the widget never falls back to "open app to refresh".
     private fun hasUpcomingItems(snapshot: JSONObject): Boolean {
-      val items = snapshot.optJSONArray("items") ?: return false
+      val now = System.currentTimeMillis()
+      val items = WidgetSchedules.items(snapshot, now)
       val syncedAtEpochMs = snapshot.optLong("syncedAtEpochMs", 0L)
 
       for (index in 0 until items.length()) {
         val item = items.optJSONObject(index) ?: continue
-        if (item.optLong("departureEpochMs", 0L) > 0L) return true
+        val epoch = item.optLong("departureEpochMs", 0L)
+        if (snapshot.has("periodGroups")) {
+          if (epoch in now until now + 24L * 60 * 60 * 1000) return true
+        } else if (epoch > 0L) return true
         if (syncedAtEpochMs > 0L && item.has("minsUntilAtSync")) return true
       }
 
@@ -219,6 +228,24 @@ open class KojoriBusWidgetProvider : AppWidgetProvider() {
       val narrow = isNarrow(appWidgetManager, appWidgetId)
       views.setViewVisibility(R.id.toggle_row_h, if (narrow) View.GONE else View.VISIBLE)
       views.setViewVisibility(R.id.toggle_row_v, if (narrow) View.VISIBLE else View.GONE)
+
+      val order = root?.optJSONArray("favoriteOrder")
+      if (order != null) {
+        val ids = (0 until order.length()).map { order.optString(it) }
+        val snapshot = root?.optJSONObject("directions")?.optJSONObject(currentDirection)
+        val next = if (ids.isEmpty()) "" else ids[(ids.indexOf(currentDirection).coerceAtLeast(0) + 1) % ids.size]
+        val title = snapshot?.optString("title", "") ?: ""
+        val number = snapshot?.optString("routeNumbers", "") ?: ""
+        val label = "$title. ${root.localizedString("nextFavorite", "Next favorite")}."
+        val pending = directionPendingIntent(context, appWidgetId, next)
+        bindDirectionControl(views, R.id.toggle_row_h, R.id.direction_route_h, R.id.direction_swap_h,
+          R.id.direction_origin_h, number, R.id.direction_destination_h, title, label, accents.route380,
+          R.drawable.widget_direction_active_380, pending)
+        bindDirectionControl(views, R.id.toggle_row_v, R.id.direction_route_v, R.id.direction_swap_v,
+          null, null, R.id.direction_destination_v, title, label, accents.route380,
+          R.drawable.widget_direction_active_380, pending)
+        return
+      }
 
       val cityKojori = root.localizedString("cityKojori", "Kojori")
       val cityTbilisi = root.localizedString("cityTbilisi", "Tbilisi")

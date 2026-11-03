@@ -4,7 +4,7 @@ Guidelines for AI agents working on this codebase.
 
 ## Project Overview
 
-**Kojoring Time** — Android transit app for Kojori–Tbilisi bus routes (380, 316). Built with Expo Router + React Native, targeting Android primarily. Shows real-time departures, full timetables, live vehicle map, and native home screen widgets.
+**Kojoring Time** — favorite-route TTC transit app, with Kojori–Tbilisi routes 380/316 as its bundled starter collection. Built with Expo Router + React Native, targeting Android primarily. Shows real-time departures, full timetables, live vehicle map, and native home screen widgets.
 
 ## Key Conventions
 
@@ -13,7 +13,7 @@ Guidelines for AI agents working on this codebase.
 - **Theming**: All colors/fonts/spacing from `src/constants/theme.ts` via `useTheme()` hook
 - **React Compiler** is enabled — avoid manual `useMemo`/`useCallback`
 - **Platform variants**: `.web.tsx` suffix for web-specific components
-- **No test suite** yet — verify changes manually or via `bun lint`
+- **Verification**: `bun test`, `bun run typecheck`, `bun lint`, and `bun run i18n:check`; also verify changed native UI/widgets on a device or emulator.
 
 ## Architecture at a Glance
 
@@ -23,7 +23,8 @@ src/
   components/    # Reusable UI (AppTabs, stop pickers, banners, settings controls)
   constants/     # Theme, route configs
   hooks/         # useTheme, useSettings, useAppColors, TTC data hooks
-  services/      # TTC API client, offline data, widget sync
+  services/      # TTC API client, legacy offline data, diagnostics
+  transit/       # Route catalog, favorites/groups, generic queries, calendars, maps, widget snapshots
 assets/          # Images, icons, fonts, legal docs
 modules/         # Native Expo modules (kojori-widget)
 scripts/         # Release, icon gen, data baking

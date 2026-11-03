@@ -39,12 +39,14 @@ class WidgetListFactory(
     val type: RowType,
     val label: String? = null,
     val bus: String? = null,
+    val routeId: String? = null,
     val time: String? = null,
     val remainingMins: Int? = null,
     val isLastToday: Boolean = false,
   )
   private data class DepartureRow(
     val bus: String,
+    val routeId: String,
     val time: String,
     val remainingMins: Int,
     val departureEpochMs: Long,
@@ -65,6 +67,7 @@ class WidgetListFactory(
   private var rows: List<WidgetRow> = emptyList()
   private var palette = defaultPalette()
   private var strings: JSONObject? = null
+  private var stateRoot: JSONObject? = null
 
   override fun onCreate() {}
 
@@ -76,9 +79,10 @@ class WidgetListFactory(
     val root = runCatching { JSONObject(stateJson) }.getOrNull() ?: return
     if (!isSupportedWidgetState(root)) return
     strings = root.optJSONObject("strings")
-    direction = WidgetPrefs.getDirection(context)
+    stateRoot = root
+    direction = WidgetPrefs.getDirection(context, appWidgetId)
     val snapshot = root.optJSONObject("directions")?.optJSONObject(direction) ?: return
-    val items = snapshot.optJSONArray("items") ?: return
+    val items = WidgetSchedules.items(snapshot, System.currentTimeMillis())
 
     palette = readPalette(root)
     countdownMode = resolveCountdownMode()
@@ -103,12 +107,13 @@ class WidgetListFactory(
       // The synced items cover a full week and the timetable repeats weekly
       // (Georgia has no DST), so past departures are projected forward to
       // their next weekly occurrence instead of expiring.
-      if (departureEpochMs < nowMs) {
+      if (departureEpochMs < nowMs && !snapshot.has("periodGroups")) {
         val weeksBehind = Math.floorDiv(nowMs - departureEpochMs, WEEK_MS) + 1
         departureEpochMs += weeksBehind * WEEK_MS
       }
       DepartureRow(
         bus = item.optString("bus", "--"),
+        routeId = item.optString("routeId", item.optString("bus", "--")),
         time = time,
         remainingMins = Math.floorDiv(departureEpochMs - nowMs, 60_000L).toInt(),
         departureEpochMs = departureEpochMs,
@@ -116,7 +121,7 @@ class WidgetListFactory(
       )
     }
       .sortedBy { it.departureEpochMs }
-      .filter { it.departureEpochMs < windowEndMs }
+      .filter { it.departureEpochMs >= nowMs && it.departureEpochMs < windowEndMs }
 
     val lastTodayEpochMs = departures.lastOrNull { it.dayKey == todayKey }?.departureEpochMs
     val todayLabel = localizedString("today", "Today")
@@ -137,9 +142,10 @@ class WidgetListFactory(
         }
         add(
           WidgetRow(
-            id = row.departureEpochMs * 10 + if (row.bus == "380") 0 else 1,
+            id = row.departureEpochMs xor row.routeId.hashCode().toLong(),
             type = if (index == 0) RowType.FEATURED_DEPARTURE else RowType.DEPARTURE,
             bus = row.bus,
+            routeId = row.routeId,
             time = row.time,
             remainingMins = row.remainingMins,
             isLastToday = row.departureEpochMs == lastTodayEpochMs,
@@ -171,7 +177,7 @@ class WidgetListFactory(
   override fun getLoadingView(): RemoteViews? = null
   override fun getViewTypeCount(): Int = RowType.entries.size
   override fun getItemId(position: Int): Long = rows[position].id
-  override fun hasStableIds(): Boolean = true
+  override fun hasStableIds(): Boolean = false
 
   private fun headerRow(): RemoteViews {
     val views = RemoteViews(context.packageName, R.layout.widget_list_header)
@@ -191,7 +197,7 @@ class WidgetListFactory(
   private fun featuredDepartureRow(row: WidgetRow): RemoteViews {
     val views = RemoteViews(context.packageName, R.layout.widget_list_featured)
     val bus = row.bus ?: "--"
-    val busColor = if (bus == "380") palette.route380 else palette.route316
+    val busColor = WidgetTheme.routeAccent(context, stateRoot, row.routeId ?: bus)
 
     views.setTextViewText(
       R.id.featured_label,
@@ -215,7 +221,7 @@ class WidgetListFactory(
   private fun departureRow(row: WidgetRow, isLast: Boolean): RemoteViews {
     val views = RemoteViews(context.packageName, R.layout.widget_list_item)
     val bus = row.bus ?: "--"
-    val busColor = if (bus == "380") palette.route380 else palette.route316
+    val busColor = WidgetTheme.routeAccent(context, stateRoot, row.routeId ?: bus)
 
     views.setTextViewText(R.id.item_bus, bus)
     views.setTextColor(R.id.item_bus, busColor)
@@ -280,7 +286,7 @@ class WidgetListFactory(
   }
 
   private fun localDayKey(epochMs: Long): Int {
-    val calendar = Calendar.getInstance().apply { timeInMillis = epochMs }
+    val calendar = Calendar.getInstance(java.util.TimeZone.getTimeZone("Asia/Tbilisi")).apply { timeInMillis = epochMs }
     return calendar.get(Calendar.YEAR) * 1000 + calendar.get(Calendar.DAY_OF_YEAR)
   }
 

@@ -763,6 +763,32 @@ describe('live vehicle evidence helpers', () => {
 });
 
 describe('computeUpcomingDepartures', () => {
+  it('does not label tomorrow as the final bus today when both days have the same departure time', () => {
+    const schedule = makeSchedule([], { '1:stop': '08:00' });
+    const now = new Date(2026, 9, 30, 10, 0);
+    const [next] = computeUpcomingDepartures(schedule, undefined, '1:stop', 23 * 60, now);
+    expect(next.serviceDate).toBe('2026-10-31');
+    expect(getDepartureServiceBoundary(schedule, undefined, '1:stop', next, now).nextDepartureIsFinal).toBe(false);
+  });
+
+  it('uses the next day calendar when Friday rolls into Saturday', () => {
+    const weekday = { ...makeSchedule([], { '1:stop': '07:00,23:50' })[0], fromDay: 'MONDAY', toDay: 'FRIDAY' };
+    const weekend = { ...makeSchedule([], { '1:stop': '09:00' })[0], fromDay: 'SATURDAY', toDay: 'SUNDAY' };
+    const result = computeUpcomingDepartures([weekday, weekend], undefined, '1:stop', 12 * 60, new Date(2026, 9, 30, 23, 40));
+    expect(result.map(dep => [dep.time, dep.minsUntil])).toEqual([['23:50', 10], ['09:00', 560]]);
+  });
+
+  it('does not invent next-day departures for a weekday-only route', () => {
+    const weekday = { ...makeSchedule([], { '1:stop': '07:00' })[0], fromDay: 'MONDAY', toDay: 'FRIDAY' };
+    expect(computeUpcomingDepartures([weekday], undefined, '1:stop', 12 * 60, new Date(2026, 9, 30, 23, 40))).toEqual([]);
+  });
+
+  it('includes early tomorrow departures even when today has no service', () => {
+    const monday = { ...makeSchedule([], { '1:stop': '00:10' })[0], fromDay: 'MONDAY', toDay: 'MONDAY' };
+    const result = computeUpcomingDepartures([monday], undefined, '1:stop', 30, new Date(2026, 10, 1, 23, 55));
+    expect(result.map(dep => [dep.time, dep.minsUntil])).toEqual([['00:10', 15]]);
+  });
+
   it('does not keep current-minute scheduled departures at route-start stops', () => {
     const schedule316 = makeSchedule(['2026-04-15'], { '1:3932': '15:00,15:01,15:10' });
 

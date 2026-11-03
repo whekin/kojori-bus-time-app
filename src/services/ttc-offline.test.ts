@@ -15,6 +15,11 @@ mock.module('@react-native-async-storage/async-storage', () => ({
     removeItem: async (key: string) => {
       storage.delete(key);
     },
+    getAllKeys: async () => [...storage.keys()],
+    multiGet: async (keys: string[]) => keys.map(key => [key, storage.get(key) ?? null]),
+    multiRemove: async (keys: string[]) => {
+      keys.forEach(key => storage.delete(key));
+    },
     clear: async () => {
       storage.clear();
     },
@@ -111,6 +116,67 @@ describe('ttc offline sync progress', () => {
     expect(snapshot.datasetSync.schedules.effectiveUpdatedAt).toBe(bakedAt);
   });
 
+  it('hydrates arbitrary-route downloads and removes them without deleting favorites', async () => {
+    const transit = await import('@/transit/data');
+    const client = makeQueryClient();
+    const boarding = { route: { id: '1:R216088', shortName: '101', longName: 'Test', mode: 'BUS' }, pattern: { patternSuffix: '1:01', headsign: 'School' }, stop: { id: '1:2949', label: 'School' } };
+    const options = transit.scheduleQuery(boarding);
+    await client.fetchQuery(options);
+    const restored = makeQueryClient();
+    storage.set('@ttc_transit_v1:corrupt', JSON.stringify({ queryKey: ['transit', 'catalog', 'ka'], updatedAt: Date.now(), data: {} }));
+    await transit.hydrateTransitCache(restored);
+    expect(restored.getQueryData(options.queryKey)).toEqual([]);
+    expect(restored.getQueryData(['transit', 'catalog', 'ka'])).toBeUndefined();
+    storage.set('@kojori_favorites_v1', 'favorite-101');
+    await offline.clearAllTtcCache(restored);
+    expect(storage.get('@kojori_favorites_v1')).toBe('favorite-101');
+    expect([...storage.keys()].some(key => key.startsWith('@ttc_transit_v1:'))).toBe(false);
+  });
+
+  it('does not mark old bundled or downloaded timetables fresh merely by hydrating them', async () => {
+    const transit = await import('@/transit/data');
+    const { ROUTES } = await import('./ttc');
+    const route = ROUTES['380'];
+    const client = makeQueryClient();
+    offline.loadBakedData(client);
+    const cachedAt = Date.parse('2026-05-01T00:00:00Z');
+    writeEnvelope(`@ttc_schedule_${route.id}_0_01`, cachedAt, []);
+    await offline.hydrateTtcOfflineData(client);
+    await transit.hydrateTransitCache(client);
+    expect(client.getQueryState(['transit', 'schedule', `${route.id}/0:01`])?.dataUpdatedAt).toBe(Date.parse(BAKED_AT));
+    expect(client.getQueryData(['transit', 'schedule', `${route.id}/0:01`]).length).toBeGreaterThan(0);
+    const newer = Date.parse(BAKED_AT) + 1000;
+    writeEnvelope(`@ttc_schedule_${route.id}_0_01`, newer, []);
+    await transit.hydrateTransitCache(client);
+    expect(client.getQueryState(['transit', 'schedule', `${route.id}/0:01`])?.dataUpdatedAt).toBe(newer);
+    expect(client.getQueryState(['transit', 'schedule', `${route.id}/1:01`])?.dataUpdatedAt).toBe(Date.parse(BAKED_AT));
+  });
+
+  it('clears transit cache while preserving settings, location and unrelated queries', async () => {
+    const client = makeQueryClient();
+    storage.set('@kojori_settings_v2', 'saved favorites');
+    storage.set('@kojori_last_location_v1', 'saved location');
+    storage.set('@ttc_schedule_old_route', 'old schedule');
+    storage.set('@ttc_route_polylines_v2_toKojori', 'old geometry');
+    storage.set('@ttc_stop_names_v1', 'old stop names');
+    storage.set('@ttc_query_log_v1', 'diagnostic history');
+    client.setQueryData(['schedule', 'route', 'pattern'], []);
+    client.setQueryData(['arrivals', 'stop'], []);
+    client.setQueryData(['unrelated'], 'keep');
+
+    await offline.clearAllTtcCache(client);
+
+    expect(storage.get('@kojori_settings_v2')).toBe('saved favorites');
+    expect(storage.get('@kojori_last_location_v1')).toBe('saved location');
+    expect(storage.has('@ttc_schedule_old_route')).toBe(false);
+    expect(storage.has('@ttc_route_polylines_v2_toKojori')).toBe(false);
+    expect(storage.has('@ttc_stop_names_v1')).toBe(false);
+    expect(storage.get('@ttc_query_log_v1')).toBe('diagnostic history');
+    expect(client.getQueryData(['schedule', 'route', 'pattern'])).toBeUndefined();
+    expect(client.getQueryData(['arrivals', 'stop'])).toBeUndefined();
+    expect(client.getQueryData(['unrelated'])).toBe('keep');
+  });
+
   it('reports request progress for a forced schedule refresh', async () => {
     const client = makeQueryClient();
     const snapshots: TtcOfflineSnapshot[] = [];
@@ -125,6 +191,68 @@ describe('ttc offline sync progress', () => {
     expect(snapshots.some(snapshot => snapshot.totalRequests === 4)).toBe(true);
     expect(snapshots.some(snapshot => snapshot.completedRequests === 4)).toBe(true);
     expect(offline.getTtcOfflineSnapshot().lastCompletedDataset).toBe('schedules');
+  });
+
+  it('does not auto-refresh before hydration and coalesces concurrent startup checks', async () => {
+    const client = makeQueryClient();
+    expect(await offline.refreshTtcOfflineDataIfDue(client)).toBe(false);
+    await offline.hydrateTtcOfflineData(client);
+    const now = Math.max(Date.now(), new Date(BAKED_AT).getTime() + 8 * 24 * 60 * 60_000);
+    const results = await Promise.all([
+      offline.refreshTtcOfflineDataIfDue(client, now),
+      offline.refreshTtcOfflineDataIfDue(client, now),
+    ]);
+    expect(results).toEqual([true, false]);
+    expect(await offline.refreshTtcOfflineDataIfDue(client, now + 60_000)).toBe(false);
+    expect(offline.getTtcOfflineSnapshot().scheduleRevision).toBeGreaterThan(1);
+  });
+
+  it('retries failed background refreshes after cooldown without discarding saved schedules', async () => {
+    const client = makeQueryClient();
+    await offline.hydrateTtcOfflineData(client);
+    client.setQueryData(['schedule', 'saved'], ['offline timetable']);
+    const now = Math.max(Date.now(), new Date(BAKED_AT).getTime() + 8 * 24 * 60 * 60_000);
+    globalThis.fetch = mock(async () => new Response('unavailable', { status: 500 }));
+    expect(await offline.refreshTtcOfflineDataIfDue(client, now)).toBe(true);
+    expect(offline.getTtcOfflineSnapshot().error).not.toBeNull();
+    expect(offline.getTtcOfflineSnapshot().scheduleRevision).toBe(1);
+    expect(client.getQueryData(['schedule', 'saved'])).toEqual(['offline timetable']);
+    expect(await offline.refreshTtcOfflineDataIfDue(client, now + 60_000)).toBe(false);
+    installFetchMock();
+    expect(await offline.refreshTtcOfflineDataIfDue(client, now + 5 * 60_000)).toBe(true);
+    expect(offline.getTtcOfflineSnapshot().error).toBeNull();
+    expect(offline.getTtcOfflineSnapshot().scheduleRevision).toBe(2);
+  });
+
+  it('clears downloaded schedules after an in-flight refresh finishes without losing favorites', async () => {
+    const client = makeQueryClient();
+    storage.set('@kojori_settings_v2', 'saved favorites');
+    await Promise.all([
+      offline.refreshTtcOfflineDataset(client, 'schedules', { force: true }),
+      offline.clearAllTtcCache(client),
+    ]);
+    expect(storage.get('@kojori_settings_v2')).toBe('saved favorites');
+    expect([...storage.keys()].filter(key => key !== '@ttc_query_log_v1')).toEqual(['@kojori_settings_v2']);
+    expect(client.getQueryCache().getAll()).toHaveLength(0);
+    expect(offline.getTtcOfflineSnapshot().lastHydratedAt).toBeNull();
+  });
+
+  it('coalesces duplicate refreshes and queues different datasets', async () => {
+    const client = makeQueryClient();
+    const fetchMock = installFetchMock();
+    await Promise.all([
+      offline.refreshTtcOfflineDataset(client, 'schedules', { force: true }),
+      offline.refreshTtcOfflineDataset(client, 'schedules', { force: true }),
+    ]);
+    expect(fetchMock.scheduleCalls()).toBe(4);
+    expect(fetchMock.fetchCalls()).toBe(4);
+    await Promise.all([
+      offline.refreshTtcOfflineDataset(client, 'schedules', { force: true }),
+      offline.warmTtcOfflineData(client),
+    ]);
+    expect(fetchMock.scheduleCalls()).toBe(8);
+    expect(offline.getTtcOfflineSnapshot().datasetSync.routeStops.source).toBe('cache');
+    expect(offline.getTtcOfflineSnapshot().datasetSync.polylines.source).toBe('cache');
   });
 
   it('updates only schedule freshness after a forced schedule refresh', async () => {

@@ -1,3 +1,4 @@
+import * as Linking from "expo-linking";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import PagerView from "react-native-pager-view";
 import React, { useCallback, useEffect, useRef, useState } from "react";
@@ -312,6 +313,15 @@ export default function AppTabs({
     },
     [switchToTabIndex],
   );
+
+  // A widget tap lands on Departures, whichever tab was open.
+  useEffect(() => {
+    const subscription = Linking.addEventListener("url", ({ url }) => {
+      const params = Linking.parse(url).queryParams;
+      if (params?.widgetFavoriteId || params?.widgetMode) switchToTabIndex(0);
+    });
+    return () => subscription.remove();
+  }, [switchToTabIndex]);
 
   useEffect(() => {
     if (!backEnabled) return;

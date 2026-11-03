@@ -1,33 +1,24 @@
 # Kojoring Time
 
-Kojoring Time is a small, focused transit app for one very specific problem: getting between Tbilisi and Kojori without guessing when the next bus is actually coming.
+A focused TTC transit app built around the routes you actually use. Save a route, its direction and your boarding stop, then check the next departure in one tap.
 
-It gives you one fast place to check:
-- next departures for routes `380` and `316`
-- direction-aware stop selection
-- offline-friendly timetable data
-- live map view
-- Android home-screen widget
-- fun app themes and route color palettes
+- Save trips on any TTC bus, metro or cable-car route: one or more routes going the same way, boarded at your saved stops.
+- Group interchangeable routes into a single departures feed.
+- Keep timetables offline, with live predictions and a map when connected.
+- Choose any date in the timetable; reorder, edit and add return trips in Settings.
+- Show saved trips in Android and iPhone Home Screen widgets.
+- Use English, Georgian or Russian with light/dark themes and app palettes.
 
-This app is built for quick everyday use. Open it, see the next bus, move on.
-
-## Why it exists
-
-Generic transit apps are noisy. They try to solve every city and every route.
-
-Kojoring Time is different:
-- it focuses on Kojori <-> Tbilisi trips
-- it keeps the main screen simple and glanceable
-- it works well even when network is bad
-- it lets you keep favorite stops and a widget on your home screen
+The existing Kojori–Tbilisi 380/316 setup is preserved as a starter collection. Existing active and widget stops migrate automatically; other saved stops stay available as quick choices in the editor.
 
 ## Screens
 
-- `Departures`: fastest way to see what is coming next
-- `Map`: live route view for both buses
-- `Timetable`: schedule-first view by stop
-- `Settings`: favorites, widget defaults, map options, color palette
+- `Departures`: the selected trip — boarding-stop map, next bus, upcoming list. The start screen lists all trips and adds new ones.
+- `Map`: geometry, boarding stops and vehicles for the selected trip.
+- `Timetable`: the selected trip's calendar and route filters, in Tbilisi time.
+- `Settings`: appearance, language, launch, widgets, offline data and app information.
+
+See [the trips architecture and verification guide](docs/favorites-architecture.md) for storage, native widget migration and web hosting requirements.
 
 ## Tech
 
@@ -35,7 +26,7 @@ Kojoring Time is different:
 - Bun for package management
 - Expo Router
 - TanStack Query
-- Android widget module
+- Native Android widget module and iOS WidgetKit extension
 
 ## Quick start
 
@@ -91,55 +82,100 @@ What they do:
 - `bun run release:android:build`: builds the Android production AAB with EAS
 - `bun run release:android:submit`: submits the latest production build to Play Console
 
-`bun run release` creates the date-based release for today. If that date tag already exists, it treats the run as a re-release: the visible app version stays the same, the Android build suffix/versionCode increments, the existing GitHub release APK and notes are replaced, and a new EAS update is published.
+## Install on iPhone
 
-## Experimental SideStore IPA
+Requires **iOS 16.4+**. The IPA is unsigned; opening it directly in Files does not
+install it. SideStore signs and installs it with your Apple Account. A paid Apple
+Developer membership is not required.
 
-The `Experimental iOS IPA (SideStore)` GitHub Actions workflow builds an unsigned
-arm64 Release app on macOS for installation through SideStore. It runs on pushes
-to `codex/experiment-sidestore-ipa` and supports `workflow_dispatch` once the workflow
-exists on the default branch. No Apple certificates, paid developer account,
-Expo login, or repository secrets are required for the build.
+1. Set up SideStore using its [official guide](https://docs.sidestore.io/docs/installation/install), starting with the linked prerequisites. Complete the first SideStore refresh before importing apps.
+2. On your iPhone, open [Kojoring Time releases](https://github.com/whekin/kojori-bus-time-app/releases/latest). Under **Assets**, download `kojoring-time-vYYYY.M.D-sidestore.ipa` to Files. If only the APK is listed, the [iOS build](https://github.com/whekin/kojori-bus-time-app/actions/workflows/ios-sidestore.yml) may still be running; failed checks prevent IPA publication.
+3. Connect the VPN required by your SideStore setup. In SideStore, open **My Apps**, tap **+**, and choose the downloaded IPA. **Keep app extensions** when asked, so the Home Screen widget is installed.
+4. If iOS requests developer trust, follow the prompt under **Settings → General → VPN & Device Management**. If launch requires Developer Mode, enable it under **Settings → Privacy & Security → Developer Mode**, restart, and confirm on the phone.
+5. Open Kojoring Time once. On iOS 17+, add it from the Home Screen widget gallery; long-press the widget and choose **Edit Widget** to select its stop and routes.
 
-Open the branch's run in GitHub Actions, download the `sidestore-ipa` artifact,
-extract the ZIP, and import `KojoringTime-sidestore.ipa` into SideStore. The artifact
-also includes `SHA256SUMS.txt`; build logs are uploaded separately. Artifacts expire
-after seven days. To retry before merging the workflow, use GitHub's **Re-run jobs**
-on an existing run or push another commit to the experimental branch.
+With a free Apple Account, refresh Kojoring Time and SideStore before their
+seven-day signing period expires. Check the expiry counters in SideStore rather
+than relying solely on background refresh. See the [SideStore FAQ](https://docs.sidestore.io/docs/faq)
+for signing limits and troubleshooting. A widget extension uses an additional App ID.
 
-The workflow generates the ignored iOS project from Expo config, archives for a
-physical iPhone with code signing disabled, and packages `Payload/KojoringTime.app`
-as an IPA. It checks that the app contains its JS bundle and an arm64 executable.
-OTA updates are disabled only in the disposable CI checkout, so this experimental
-app keeps the code embedded in its IPA. The map uses the default Apple Maps provider
-on iOS. The IPA includes a native WidgetKit extension for iOS 17 and later; keep
-app extensions when SideStore asks during installation. Open the app once, then
-add Kojoring Time from the Home Screen widget gallery. Edit the widget to choose
-its stop (both directions are listed) and routes. Small, medium, large and
-full-page portrait (iOS 27+) sizes are supported. Each widget bundles the same offline timetable as the app, shows
-Tbilisi time, and uses the device language (English, Georgian or Russian). Update
-the IPA to update its timetable. Widget settings are independent of the Android
-widget preferences in the app; no shared App Group or native network calls are
-needed. On iPhone, navigation uses UIKit tabs with SF Symbols and the system's
-Liquid Glass material on iOS 26+. Older iOS versions use their standard tab bar.
-The controlled `react-native-screens` host preserves screen state and the map-focus
-bridge without changing Android's pager. UIKit owns the tab bar's safe-area inset.
-Expo SDK 58 / React Native 0.88 provides the scene lifecycle required by the iOS 27
-SDK. Prebuild generates its standard SceneDelegate; no Router or scene lifecycle
-patch is needed. The app requires iOS 16.4+, and its widget extension requires iOS 17+.
-CI also uploads `ios-simulator`, containing a zipped arm64 `.app` for Apple Silicon that can be
-installed with `xcrun simctl install booted <path-to-app>` after extracting it.
-CI uses Xcode 27.1 to compile the portrait family and automatically selects an
-iPhone that the installed simulator runtime supports. The simulator job runs `.maestro/ios-smoke.yml`, checking
-that boarding-stop markers appear, all four native tabs open, tab switching keeps
-an open Settings section, and an edge swipe returns to its menu. Screenshots and
-results are uploaded as `ios-ui-checks`.
-Successful compilation still needs
-an installation and launch check on a real iPhone.
+To update, download the newer IPA and import it into SideStore over the existing
+app using the same Apple Account. Keep the installed app to preserve its settings.
+These IPAs use embedded JavaScript with Expo OTA updates disabled, so app changes
+and new offline timetable data require a newer IPA. Refreshing a signature only
+renews installation validity; it does not download a new app version.
+
+The widget uses its bundled offline timetable, Tbilisi time, and the device
+language (English, Georgian, or Russian). Its stop/route settings are independent
+of the app's Android widget preferences. Available sizes are small, medium,
+large, and full-page portrait on iOS 27+. iOS does not offer a tall half-width
+Home Screen widget size. Liquid Glass navigation uses the system appearance on
+iOS 26+; older supported versions use the standard tab bar.
+
+Each release includes an adjacent `.ipa.sha256` file. On a Mac, download both
+files into the same folder and verify the IPA with:
+
+```bash
+shasum -a 256 -c kojoring-time-vYYYY.M.D-sidestore.ipa.sha256
+```
+
+## Publishing releases
+
+`bun run release` creates today's date-based release (or use
+`bun run release 2026.10.27` for an explicit date). Commit user-facing notes under
+`## [UNRELEASED]` in `CHANGELOG.md` first.
+
+The existing Android pipeline bakes and checks TTC data, stamps both platforms'
+versions, builds the APK, pushes the release commit/tag, and publishes the GitHub
+release. It then dispatches **iOS IPA (SideStore)** on that exact tag and publishes
+the Android production EAS update. iOS builds run asynchronously on GitHub's macOS
+runner; the local script finishing means the iOS build was queued, not that its
+IPA has passed validation.
+
+The iOS workflow builds unsigned arm64 Release apps for device and simulator,
+checks lint, TypeScript, Bun tests and the native offline schedule, then runs the
+Maestro interface flow. Only after both jobs succeed does it upload
+`kojoring-time-vYYYY.M.D-sidestore.ipa` and `.ipa.sha256` to that existing release.
+The IPA includes its JavaScript bundle and WidgetKit extension. A guard rejects
+publication if a re-release moved the tag while the build was running. No Apple
+signing certificates, Apple Account credentials, Expo login, or added repository
+secrets are needed by iOS CI; release uploads use the job's GitHub token.
+
+**One-time setup:** merge this workflow and the release script into the default
+branch before using `bun release`. GitHub requires a dispatchable workflow on the
+default branch; release preflight checks that it exists. Your local `gh` login
+must have repository write/Actions access, alongside the existing Android release
+and EAS setup. If preflight or a later phase fails, resume the same release with
+`bun run release YYYY.M.D --continue`.
+
+If today's tag already exists, the script performs a re-release: it increments
+the build suffix, replaces the tag/APK/notes, and queues iOS again. The existing
+IPA is replaced only after the new build passes, so until then it remains the
+previous build of that date. Prefer a new date version for ordinary releases.
+
+For a failed iOS run, use **Re-run failed jobs** in GitHub Actions. To rebuild and
+attach an IPA independently of Android, dispatch on the matching existing tag:
+
+```bash
+gh workflow run ios-sidestore.yml --ref v2026.10.27 -f release_tag=v2026.10.27
+gh run list --workflow ios-sidestore.yml --event workflow_dispatch
+```
+
+A nonempty `release_tag` must match both the selected Git tag and stamped app
+version. The release must already exist. Leaving the input empty creates preview
+artifacts without uploading anything to Releases. Pushes to `main` and the
+experimental iOS branch also run preview checks. Those temporary artifacts expire
+after seven days; release assets remain attached to the release.
+
+CI uploads `sidestore-ipa`, `ios-simulator` (an arm64 `.app` ZIP for Apple Silicon),
+`ios-ui-checks` (screenshots and results), and build logs. Extract the simulator ZIP
+and install with `xcrun simctl install booted <path-to-app>`. The workflow uses
+Xcode 27.1 and generates the ignored native project from Expo config. A real-device
+installation check is still useful before announcing a release.
 
 ## Updates
 
-EAS Updates use the manual runtime in `app.json` (`kojori-android-1`) instead of the date-based app version. This lets daily releases and JS-only fixes update existing compatible installs automatically.
+Android EAS Updates use the manual runtime in `app.json` (`kojori-native-7`) instead of the date-based app version. This lets JS-only fixes update compatible Android installs automatically. SideStore IPAs deliberately keep OTA updates disabled.
 
 Only bump `expo.runtimeVersion` when native compatibility changes, such as Expo SDK or React Native upgrades, native dependency changes, config plugin changes, Android widget Kotlin/XML changes, permissions, icons, splash screen, or other native app config. The runtime guard checks these files before releases and manual EAS updates.
 

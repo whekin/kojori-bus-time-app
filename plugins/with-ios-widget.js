@@ -1,4 +1,4 @@
-const { withXcodeProject } = require('expo/config-plugins');
+const { withXcodeProject, withEntitlementsPlist, withInfoPlist } = require('expo/config-plugins');
 const { execFileSync } = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -6,6 +6,16 @@ const path = require('node:path');
 const TARGET = 'KojoriBusWidget';
 
 module.exports = function withIosWidget(config) {
+  const appGroup = `group.${config.ios.bundleIdentifier}.shared`;
+  config = withEntitlementsPlist(config, mod => {
+    const groups = mod.modResults['com.apple.security.application-groups'] || [];
+    mod.modResults['com.apple.security.application-groups'] = [...new Set([...groups, appGroup])];
+    return mod;
+  });
+  config = withInfoPlist(config, mod => {
+    mod.modResults.KojoriWidgetAppGroup = appGroup;
+    return mod;
+  });
   return withXcodeProject(config, mod => {
     const root = mod.modRequest.projectRoot;
     const folder = path.join(mod.modRequest.platformProjectRoot, TARGET);
@@ -66,6 +76,7 @@ module.exports = function withIosWidget(config) {
         IPHONEOS_DEPLOYMENT_TARGET: '17.0',
         TARGETED_DEVICE_FAMILY: '"1,2"',
         GENERATE_INFOPLIST_FILE: 'NO',
+        CODE_SIGN_ENTITLEMENTS: `${TARGET}/${TARGET}.entitlements`,
         SWIFT_EMIT_LOC_STRINGS: 'YES',
       });
     }
@@ -79,9 +90,13 @@ module.exports = function withIosWidget(config) {
 <key>CFBundlePackageType</key><string>XPC!</string>
 <key>CFBundleShortVersionString</key><string>$(MARKETING_VERSION)</string>
 <key>CFBundleVersion</key><string>$(CURRENT_PROJECT_VERSION)</string>
+<key>KojoriWidgetAppGroup</key><string>${appGroup}</string>
 <key>NSExtension</key><dict>
 <key>NSExtensionPointIdentifier</key><string>com.apple.widgetkit-extension</string>
 </dict></dict></plist>`);
+    fs.writeFileSync(path.join(folder, `${TARGET}.entitlements`), `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict><key>com.apple.security.application-groups</key><array><string>${appGroup}</string></array></dict></plist>`);
     // node-xcode otherwise serializes missing file metadata as literal "undefined".
     for (const file of Object.values(project.pbxFileReferenceSection())) {
       if (!file || typeof file !== 'object') continue;

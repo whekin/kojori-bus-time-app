@@ -1,28 +1,24 @@
 import { DefaultTheme, ThemeProvider, type Theme } from '@react-navigation/native';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { focusManager, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useGlobalSearchParams } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import * as SystemUI from 'expo-system-ui';
 import React, { useEffect, useRef, useState } from 'react';
-import { BackHandler, StyleSheet, View } from 'react-native';
+import { AppState, BackHandler, StyleSheet, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { AnimatedSplashOverlay, AppReveal } from '@/components/animated-icon';
 import AppTabs from '@/components/app-tabs';
 import { StartScreen } from '@/components/start-screen';
-import { DirectionProvider, useActiveDirection } from '@/hooks/use-active-direction';
+import { TripEditor } from '@/components/trip-editor';
+import { WidgetSync } from '@/components/widget-sync';
 import { AppColorsProvider, useAppColors, useResolvedAppThemeMode } from '@/hooks/use-app-colors';
-import { getClosestStopCandidate } from '@/hooks/use-closest-stop';
 import { useLocation } from '@/hooks/use-location';
-import { useRouteStops } from '@/hooks/use-route-stops';
-import { DEFAULT_BOARDING_STOP_ID, SettingsProvider, useSettings, type SharedDirection } from '@/hooks/use-settings';
-import { prefillStopNames } from '@/hooks/use-stop-names';
-import {
-  hydrateTtcOfflineData,
-  loadBakedData,
-} from '@/services/ttc-offline';
-import { hydrateTtcQueryLog } from '@/services/ttc-query-log';
+import { SettingsProvider, useSettings } from '@/hooks/use-settings';
+import { FavoritesProvider, useFavorites } from '@/transit/favorites';
+import { nearbyFavorite } from '@/transit/model';
+import { TripUiContext, type TripEditorOptions } from '@/transit/trip-ui';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -31,75 +27,66 @@ const queryClient = new QueryClient({
     queries: {
       retry: 2,
       staleTime: 60_000,
+      gcTime: 24 * 60 * 60_000,
     },
   },
 });
 
-function CachePrefiller() {
-  useEffect(() => {
-    void (async () => {
-      // 1. Instantly seed from baked asset — zero network, zero I/O.
-      loadBakedData(queryClient);
-      await prefillStopNames(queryClient);
-      await hydrateTtcQueryLog();
-
-      // 2. Overlay with anything the user has previously saved in AsyncStorage.
-      await hydrateTtcOfflineData(queryClient);
-    })();
-  }, []);
-
-  return null;
-}
-
-const SMART_DIRECTION_GRACE_MS = 1800;
+const SMART_TRIP_GRACE_MS = 1800;
 
 function AppReady() {
-  const { isLoaded, settings, update } = useSettings();
-  const { selectDirection } = useActiveDirection();
+  const { isLoaded: settingsLoaded, settings } = useSettings();
+  const { isLoaded: tripsLoaded, state, select } = useFavorites();
+  const isLoaded = settingsLoaded && tripsLoaded;
   const [dismissedStart, setDismissedStart] = useState(false);
   const [forcedStartOpen, setForcedStartOpen] = useState(false);
+  const [editor, setEditor] = useState<{ key: number; options: TripEditorOptions } | null>(null);
   const [waitingForSmart, setWaitingForSmart] = useState(false);
   const graceInitialized = useRef(false);
-  const { widgetMode } = useGlobalSearchParams<{ widgetMode?: string }>();
-  const { suggestedMode, resolvedLocation } = useLocation(settings.launchBehavior === 'smart');
-  const { stops: toKojoriStops } = useRouteStops('toKojori');
-  const { stops: toTbilisiStops } = useRouteStops('toTbilisi');
+  const { widgetMode, widgetFavoriteId } = useGlobalSearchParams<{
+    widgetMode?: string;
+    widgetFavoriteId?: string;
+  }>();
+  const { resolvedLocation } = useLocation(settings.launchBehavior === 'smart');
 
-  const launchedFromWidget = widgetMode === 'kojori' || widgetMode === 'tbilisi';
+  const launchedFromWidget =
+    Boolean(widgetFavoriteId) || widgetMode === 'kojori' || widgetMode === 'tbilisi';
 
-  // Start a one-shot grace window the moment settings hydrate, so smart direction
-  // gets a short chance to resolve before we fall back to the start screen.
+  useEffect(() => {
+    focusManager.setFocused(AppState.currentState === 'active');
+    const listener = AppState.addEventListener('change', next =>
+      focusManager.setFocused(next === 'active'),
+    );
+    return () => listener.remove();
+  }, []);
+
+  // Start a one-shot grace window the moment data hydrates, so a nearby trip
+  // gets a short chance to resolve before we fall back to the trip chooser.
   useEffect(() => {
     if (!isLoaded || graceInitialized.current) return;
     graceInitialized.current = true;
-    const eligible = settings.launchBehavior === 'smart' && !launchedFromWidget;
+    const eligible =
+      settings.launchBehavior === 'smart' && !launchedFromWidget && state.favorites.length > 0;
     if (!eligible) return;
 
     setWaitingForSmart(true);
-    const timeout = setTimeout(() => setWaitingForSmart(false), SMART_DIRECTION_GRACE_MS);
+    const timeout = setTimeout(() => setWaitingForSmart(false), SMART_TRIP_GRACE_MS);
     return () => clearTimeout(timeout);
-  }, [isLoaded, launchedFromWidget, settings.launchBehavior]);
+  }, [isLoaded, launchedFromWidget, settings.launchBehavior, state.favorites.length]);
 
-  // If smart direction resolves during the grace window, auto-skip to the app.
+  // A single unambiguous nearby trip skips the chooser.
   useEffect(() => {
-    if (!waitingForSmart || !suggestedMode || !resolvedLocation) return;
-    const direction: SharedDirection = suggestedMode === 'kojori' ? 'toKojori' : 'toTbilisi';
-    const routeStops = direction === 'toKojori' ? toKojoriStops : toTbilisiStops;
-    const closestStopResult = getClosestStopCandidate(routeStops, resolvedLocation, {
-      fallbackStopId: DEFAULT_BOARDING_STOP_ID[direction],
-    });
-    if (!closestStopResult.closestStop) return;
-
-    if (direction === 'toKojori') {
-      update({ activeTbilisiStopId: closestStopResult.closestStop.id });
-    } else {
-      update({ activeKojoriStopId: closestStopResult.closestStop.id });
-    }
-
-    selectDirection(direction, { manual: false, persist: 'immediate' });
+    if (!waitingForSmart || !resolvedLocation) return;
+    const nearby = nearbyFavorite(
+      state.favorites,
+      resolvedLocation.latitude,
+      resolvedLocation.longitude,
+    );
+    if (nearby.status !== 'available') return;
+    select(nearby.favorite.id);
     setDismissedStart(true);
     setWaitingForSmart(false);
-  }, [resolvedLocation, selectDirection, suggestedMode, toKojoriStops, toTbilisiStops, update, waitingForSmart]);
+  }, [resolvedLocation, select, state.favorites, waitingForSmart]);
 
   useEffect(() => {
     if (isLoaded && !waitingForSmart) {
@@ -107,12 +94,17 @@ function AppReady() {
     }
   }, [isLoaded, waitingForSmart]);
 
+  // With no trips the chooser is the welcome screen; with one there is
+  // nothing to choose.
   const showStart =
     forcedStartOpen ||
-    (!dismissedStart && settings.launchBehavior !== 'remember' && !launchedFromWidget);
+    (!dismissedStart &&
+      state.favorites.length !== 1 &&
+      (settings.launchBehavior !== 'remember' || state.favorites.length === 0) &&
+      !launchedFromWidget);
 
   useEffect(() => {
-    if (!isLoaded || !showStart || !forcedStartOpen || waitingForSmart) return;
+    if (!isLoaded || !showStart || !forcedStartOpen || waitingForSmart || editor) return;
 
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
       setForcedStartOpen(false);
@@ -121,7 +113,7 @@ function AppReady() {
     });
 
     return () => subscription.remove();
-  }, [forcedStartOpen, isLoaded, showStart, waitingForSmart]);
+  }, [editor, forcedStartOpen, isLoaded, showStart, waitingForSmart]);
 
   if (!isLoaded) return null;
 
@@ -130,18 +122,30 @@ function AppReady() {
     setForcedStartOpen(false);
   }
 
+  const tripUi = {
+    openPicker: () => {
+      setForcedStartOpen(true);
+      setDismissedStart(false);
+    },
+    openEditor: (options: TripEditorOptions = {}) =>
+      setEditor(prev => ({ key: (prev?.key ?? 0) + 1, options })),
+  };
+
+  function closeEditor() {
+    setEditor(null);
+    // A trip added from the chooser opens straight away.
+    if (showStart && state.selectedId) handleStartDone();
+  }
+
   return (
-    <>
-      <CachePrefiller />
+    <TripUiContext.Provider value={tripUi}>
+      <WidgetSync />
       {!waitingForSmart ? (
         <AppReveal>
           <AppTabs
-            backEnabled={!showStart}
+            backEnabled={!showStart && !editor}
             deferInactiveTabs={showStart}
-            onRequestDirectionPicker={() => {
-              setForcedStartOpen(true);
-              setDismissedStart(false);
-            }}
+            onRequestDirectionPicker={tripUi.openPicker}
           />
         </AppReveal>
       ) : null}
@@ -150,8 +154,18 @@ function AppReady() {
           <StartScreen onDone={handleStartDone} />
         </View>
       ) : null}
+      {editor ? (
+        <View style={styles.editorOverlay}>
+          <TripEditor
+            key={editor.key}
+            options={editor.options}
+            onClose={closeEditor}
+            onRestart={tripUi.openEditor}
+          />
+        </View>
+      ) : null}
       <AnimatedSplashOverlay />
-    </>
+    </TripUiContext.Provider>
   );
 }
 
@@ -167,6 +181,11 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFill,
     zIndex: 10,
     elevation: 10,
+  },
+  editorOverlay: {
+    ...StyleSheet.absoluteFill,
+    zIndex: 20,
+    elevation: 20,
   },
 });
 
@@ -209,11 +228,11 @@ export default function RootLayout() {
     <GestureHandlerRootView style={styles.root}>
       <QueryClientProvider client={queryClient}>
         <SettingsProvider>
-          <DirectionProvider>
+          <FavoritesProvider>
             <AppColorsProvider>
               <AppThemeShell />
             </AppColorsProvider>
-          </DirectionProvider>
+          </FavoritesProvider>
         </SettingsProvider>
       </QueryClientProvider>
     </GestureHandlerRootView>

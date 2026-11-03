@@ -1,4 +1,6 @@
-import React, { useEffect, useMemo, useState } from "react";
+import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
+import { useQueries } from "@tanstack/react-query";
+import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Platform,
@@ -11,26 +13,39 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { StopSelector } from "@/components/stop-selector";
-import { alpha, BottomTabInset, type AppColors } from "@/constants/theme";
-import { useActiveDirection } from "@/hooks/use-active-direction";
-import { useAppColors } from "@/hooks/use-app-colors";
-import { useClosestStop } from "@/hooks/use-closest-stop";
-import { useI18n } from "@/hooks/use-i18n";
-import { useRouteStops } from "@/hooks/use-route-stops";
-import { useSchedule } from "@/hooks/use-schedule";
-import { useSettings } from "@/hooks/use-settings";
-import { useStopNames } from "@/hooks/use-stop-names";
-import { createThemedStyles } from "@/utils/themed-styles";
 import {
-  BusLine,
-  extractStopTimes,
-  findStop,
-  getTodayPeriod,
-  parseTimeToMins,
-  resolveTtcLookupStopId,
-  ROUTES,
-  type StopInfo,
-} from "@/services/ttc";
+  boardingRoutes,
+  dateLocale,
+  dayConfirmation,
+  groupByDayPart,
+  timetableRows,
+  type DayPart,
+  type PeriodsByPattern,
+  type TimetableRow,
+} from "@/components/timetable-rows";
+import { alpha, BottomTabInset, type AppColors } from "@/constants/theme";
+import { useAppColors } from "@/hooks/use-app-colors";
+import { useClosestTripStop } from "@/hooks/use-closest-stop";
+import { useI18n } from "@/hooks/use-i18n";
+import { useStopNames } from "@/hooks/use-stop-names";
+import { useTransitCopy } from "@/transit/copy";
+import { scheduleQuery } from "@/transit/data";
+import { TransitDatePicker } from "@/transit/date-picker";
+import { useFavorites } from "@/transit/favorites";
+import {
+  activeBoardings,
+  patternKey,
+  shiftTransitDate,
+  transitDate,
+  transitTime,
+  tripPatterns,
+  tripStopId,
+  tripStops,
+  type TransitRoute,
+} from "@/transit/model";
+import { routeColor, tripAccent } from "@/transit/ui";
+import { useTripUi } from "@/transit/trip-ui";
+import { createThemedStyles } from "@/utils/themed-styles";
 
 const MONO = Platform.select({
   android: "monospace",
@@ -38,40 +53,33 @@ const MONO = Platform.select({
   default: "monospace",
 });
 
-type Filter = "all" | BusLine;
+const MINUTE_MS = 60_000;
 
-interface TimetableEntry {
-  bus: BusLine;
-  time: string;
-  minsFromMidnight: number;
+function currentMinute() {
+  return Math.floor(Date.now() / MINUTE_MS) * MINUTE_MS;
 }
 
-interface TimetableSection {
-  title: string;
-  data: TimetableEntry[];
-}
-
-function groupByPeriod(
-  entries: TimetableEntry[],
-  t: ReturnType<typeof useI18n>["t"],
-): TimetableSection[] {
-  const periods = [
-    { title: t("timetableMorning"), min: 0, max: 719 },
-    { title: t("timetableAfternoon"), min: 720, max: 1019 },
-    { title: t("timetableEvening"), min: 1020, max: 1439 },
-  ];
-  return periods
-    .map((p) => ({
-      title: p.title,
-      data: entries.filter(
-        (e) => e.minsFromMidnight >= p.min && e.minsFromMidnight <= p.max,
-      ),
-    }))
-    .filter((s) => s.data.length > 0);
-}
-
-function getCurrentMinsFromMidnight(date = new Date()) {
-  return date.getHours() * 60 + date.getMinutes();
+/** Wall clock, ticking on the minute while the tab is visible. */
+function useMinuteClock(active: boolean) {
+  const [now, setNow] = useState(currentMinute);
+  useEffect(() => {
+    if (!active) return undefined;
+    const tick = () => setNow(currentMinute());
+    tick();
+    let intervalId: ReturnType<typeof setInterval> | undefined;
+    const timeoutId = setTimeout(
+      () => {
+        tick();
+        intervalId = setInterval(tick, MINUTE_MS);
+      },
+      MINUTE_MS - (Date.now() % MINUTE_MS),
+    );
+    return () => {
+      clearTimeout(timeoutId);
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [active]);
+  return now;
 }
 
 function formatRelativeTimeHint(
@@ -82,7 +90,8 @@ function formatRelativeTimeHint(
 ) {
   if (minsUntil < -1) return null;
   if (minsUntil < 1) return t("commonNow");
-  if (minsUntil < 60) return formatRelativeDuration("future", "minute", minsUntil);
+  if (minsUntil < 60)
+    return formatRelativeDuration("future", "minute", minsUntil);
 
   const hours = Math.floor(minsUntil / 60);
   const minutes = minsUntil % 60;
@@ -94,180 +103,251 @@ function formatRelativeTimeHint(
     : formatRelativeDuration("future", "hour", hours);
 }
 
-function buildStopSelectorStops({
-  favoriteIds,
-  activeStopId,
-  routeStops,
-  stopNames,
-  stopFallback,
-}: {
-  favoriteIds: string[];
-  activeStopId: string;
-  routeStops: StopInfo[];
-  stopNames: Record<string, string>;
-  stopFallback: (id: string) => string;
-}) {
-  const routeStopMap = new Map(routeStops.map((stop) => [stop.id, stop]));
-  const ids = favoriteIds.includes(activeStopId)
-    ? favoriteIds
-    : [...favoriteIds, activeStopId];
-
-  return ids.map((id) => {
-    const base = routeStopMap.get(id) ??
-      findStop(id) ?? { id, label: stopFallback(id) };
-    return { ...base, label: stopNames[id] ?? base.label };
-  });
-}
-
-function BusTag({ bus }: { bus: BusLine }) {
-  const colors = useAppColors();
+function RouteTag({ route, color }: { route: TransitRoute; color: string }) {
   const styles = useTimetableStyles();
-  const color = bus === "380" ? colors.route380 : colors.route316;
   return (
     <View style={[styles.busTag, { borderColor: color }]}>
-      <Text style={[styles.busTagText, { color, fontFamily: MONO }]}>
-        {bus}
+      <Text
+        style={[styles.busTagText, { color, fontFamily: MONO }]}
+        numberOfLines={1}
+      >
+        {route.shortName}
       </Text>
     </View>
   );
 }
 
-export default function TimetableScreen({ isActive = true }: { isActive?: boolean }) {
+function Chip({
+  label,
+  accessibilityLabel,
+  selected,
+  color,
+  icon,
+  onPress,
+}: {
+  label: string;
+  accessibilityLabel?: string;
+  selected: boolean;
+  color: string;
+  icon?: React.ComponentProps<typeof MaterialCommunityIcons>["name"];
+  onPress: () => void;
+}) {
   const colors = useAppColors();
   const styles = useTimetableStyles();
-  const { t, formatDuration, formatRelativeDuration } = useI18n();
-  const insets = useSafeAreaInsets();
-  const { settings, update } = useSettings();
-  const { activeDirection } = useActiveDirection();
-  const stopNames = useStopNames();
-  const [filter, setFilter] = useState<Filter>("all");
-  const [nowMins, setNowMins] = useState(() => getCurrentMinsFromMidnight());
-  const direction = activeDirection;
-
-  useEffect(() => {
-    if (!isActive) return undefined;
-
-    function updateClock() {
-      setNowMins(getCurrentMinsFromMidnight());
-    }
-
-    updateClock();
-    let intervalId: ReturnType<typeof setInterval> | undefined;
-    const timeoutId = setTimeout(
-      () => {
-        updateClock();
-        intervalId = setInterval(updateClock, 60_000);
-      },
-      60_000 - (Date.now() % 60_000),
-    );
-
-    return () => {
-      clearTimeout(timeoutId);
-      if (intervalId) clearInterval(intervalId);
-    };
-  }, [isActive]);
-
-  const favoriteIds =
-    direction === "toKojori"
-      ? settings.tbilisiFavorites
-      : settings.kojoriFavorites;
-  const stopId =
-    direction === "toKojori"
-      ? settings.activeTbilisiStopId
-      : settings.activeKojoriStopId;
-  const { stops: routeStops } = useRouteStops(direction);
-  const {
-    closestStop,
-    status: closestStopStatus,
-    resolvedLocation,
-    requestLocation: handleRequestLocation,
-  } = useClosestStop(direction, stopId, isActive);
-  const stops = useMemo(
-    () =>
-      buildStopSelectorStops({
-        favoriteIds,
-        activeStopId: stopId,
-        routeStops,
-        stopNames,
-        stopFallback: (id) =>
-          t("commonStopNumber", { id: id.split(":")[1] ?? id }),
-      }),
-    [favoriteIds, routeStops, stopId, stopNames, t],
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel ?? label}
+      accessibilityState={{ selected }}
+      style={[
+        styles.filterChip,
+        selected && {
+          borderColor: color,
+          backgroundColor: alpha(color, "14"),
+        },
+      ]}
+      onPress={onPress}
+    >
+      {icon ? (
+        <MaterialCommunityIcons
+          name={icon}
+          size={14}
+          color={selected ? color : colors.textDim}
+        />
+      ) : null}
+      <Text
+        style={[
+          styles.filterChipText,
+          selected && { color, fontWeight: "600" },
+        ]}
+      >
+        {label}
+      </Text>
+    </Pressable>
   );
+}
+
+function NoTrip() {
+  const colors = useAppColors();
+  const styles = useTimetableStyles();
+  const copy = useTransitCopy();
+  const { openEditor } = useTripUi();
+  const insets = useSafeAreaInsets();
+  return (
+    <View
+      style={[
+        styles.screen,
+        styles.noTrip,
+        { paddingTop: insets.top, paddingBottom: insets.bottom + BottomTabInset },
+      ]}
+    >
+      <MaterialCommunityIcons
+        name="table-clock"
+        size={34}
+        color={colors.textFaint}
+      />
+      <Text style={styles.noTripText}>{copy("timetableNoTrip")}</Text>
+      <Pressable
+        accessibilityRole="button"
+        onPress={() => openEditor()}
+        style={({ pressed }) => [
+          styles.filterChip,
+          styles.noTripButton,
+          {
+            borderColor: colors.primary,
+            backgroundColor: alpha(colors.primary, pressed ? "26" : "14"),
+          },
+        ]}
+      >
+        <MaterialCommunityIcons name="plus" size={16} color={colors.primary} />
+        <Text style={[styles.filterChipText, { color: colors.primary, fontWeight: "600" }]}>
+          {copy("addTrip")}
+        </Text>
+      </Pressable>
+    </View>
+  );
+}
+
+export default function TimetableScreen({
+  isActive = true,
+}: {
+  isActive?: boolean;
+}) {
+  const colors = useAppColors();
+  const styles = useTimetableStyles();
+  const { t, formatDuration, formatRelativeDuration, resolvedLanguage } =
+    useI18n();
+  const copy = useTransitCopy();
+  const insets = useSafeAreaInsets();
+  const { selected: trip, setStop } = useFavorites();
+  const stopNames = useStopNames();
+  const [routeFilter, setRouteFilter] = useState<string | null>(null);
+  const [pickedDate, setPickedDate] = useState<string | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const now = useMinuteClock(isActive);
+
+  const stops = (trip ? tripStops(trip) : []).map((stop) => ({
+    ...stop,
+    label: stopNames[stop.id] ?? stop.label,
+  }));
+  const stopId = trip ? tripStopId(trip) : "";
+  const closest = useClosestTripStop(stops, stopId, isActive && Boolean(trip));
   const closestStopId =
-    (closestStopStatus === "available" || closestStopStatus === "fallback") &&
-    closestStop
-      ? closestStop.id
+    closest.status === "available" && closest.closestStop
+      ? closest.closestStop.id
       : null;
 
-  function handleSelectStop(id: string) {
-    if (direction === "toKojori") {
-      update({ activeTbilisiStopId: id });
-    } else {
-      update({ activeKojoriStopId: id });
-    }
+  // Every pattern of the trip, so switching boarding stops is instant.
+  const patterns = trip ? tripPatterns(trip) : [];
+  const schedules = useQueries({
+    queries: patterns.map((b) => ({ ...scheduleQuery(b), enabled: isActive })),
+  });
+
+  if (!trip) return <NoTrip />;
+
+  const periods: PeriodsByPattern = {};
+  patterns.forEach((b, i) => {
+    periods[patternKey(b)] = schedules[i]?.data;
+  });
+  const isLoading = schedules.some((q) => q.isLoading && !q.data);
+  const isError = schedules.some((q) => q.isError && !q.data);
+
+  const boardings = activeBoardings(trip);
+  const routes = boardingRoutes(boardings);
+  const filter = routes.some((r) => r.id === routeFilter) ? routeFilter : null;
+  const accentColor = tripAccent(trip, colors);
+
+  const today = transitDate(now);
+  const tomorrow = shiftTransitDate(today, 1);
+  const date = pickedDate ?? today;
+  const locale = dateLocale(resolvedLanguage);
+  const customDate = date !== today && date !== tomorrow;
+
+  const rows = timetableRows(boardings, periods, date, filter);
+  const confirmation = dayConfirmation(boardings, periods, date);
+  const partTitles: Record<DayPart, string> = {
+    morning: t("timetableMorning"),
+    afternoon: t("timetableAfternoon"),
+    evening: t("timetableEvening"),
+  };
+  const sections = groupByDayPart(rows).map((section) => ({
+    title: partTitles[section.part],
+    data: section.data,
+  }));
+  const allLabel = routes.every((r) => r.mode === "BUS")
+    ? t("timetableAllBuses")
+    : copy("allModes");
+
+  function selectDate(next: string) {
+    setPickedDate(next === today ? null : next);
   }
 
-  const { data: s380ToKojori, isLoading: l380ToKojori } = useSchedule(
-    ROUTES["380"].id,
-    ROUTES["380"].toKojori,
-  );
-  const { data: s316ToKojori, isLoading: l316ToKojori } = useSchedule(
-    ROUTES["316"].id,
-    ROUTES["316"].toKojori,
-  );
-  const { data: s380ToTbilisi, isLoading: l380ToTbilisi } = useSchedule(
-    ROUTES["380"].id,
-    ROUTES["380"].toTbilisi,
-  );
-  const { data: s316ToTbilisi, isLoading: l316ToTbilisi } = useSchedule(
-    ROUTES["316"].id,
-    ROUTES["316"].toTbilisi,
-  );
+  function renderItem({
+    item,
+    index,
+    section,
+  }: {
+    item: TimetableRow;
+    index: number;
+    section: { data: TimetableRow[] };
+  }) {
+    const minsUntil = Math.round((item.epochMs - now) / MINUTE_MS);
+    const relativeHint =
+      minsUntil < 24 * 60
+        ? formatRelativeTimeHint(
+            minsUntil,
+            t,
+            formatDuration,
+            formatRelativeDuration,
+          )
+        : null;
+    const isSoon = minsUntil >= -1 && minsUntil <= 30;
 
-  const s380 = direction === "toKojori" ? s380ToKojori : s380ToTbilisi;
-  const s316 = direction === "toKojori" ? s316ToKojori : s316ToTbilisi;
-  const l380 = direction === "toKojori" ? l380ToKojori : l380ToTbilisi;
-  const l316 = direction === "toKojori" ? l316ToKojori : l316ToTbilisi;
-
-  const isLoading = l380 || l316;
-  const accentColor =
-    direction === "toKojori" ? colors.route380 : colors.route316;
-
-  const sections = useMemo<TimetableSection[]>(() => {
-    const buses: BusLine[] = filter === "all" ? ["380", "316"] : [filter];
-    const entries: TimetableEntry[] = [];
-
-    const schedules: Record<BusLine, typeof s380> = {
-      "380": s380,
-      "316": s316,
-    };
-
-    const lookupStopId = resolveTtcLookupStopId(stopId);
-
-    for (const bus of buses) {
-      const schedule = schedules[bus];
-      if (!schedule) continue;
-      const period = getTodayPeriod(schedule);
-      if (!period) continue;
-      const times = extractStopTimes(period, lookupStopId);
-
-      for (const t of times) {
-        entries.push({ bus, time: t, minsFromMidnight: parseTimeToMins(t) });
-      }
-    }
-
-    return groupByPeriod(
-      entries.sort((a, b) => a.minsFromMidnight - b.minsFromMidnight),
-      t,
+    return (
+      <View
+        style={[
+          styles.timeRow,
+          index === 0 && styles.timeRowFirst,
+          index < section.data.length - 1
+            ? styles.timeRowDivider
+            : styles.timeRowLast,
+          isSoon && {
+            borderColor: alpha(accentColor, "55"),
+            backgroundColor: alpha(accentColor, "0D"),
+          },
+        ]}
+      >
+        <RouteTag
+          route={item.boarding.route}
+          color={routeColor(item.boarding.route.id, colors, trip)}
+        />
+        <View style={styles.timeMain}>
+          <Text
+            style={[styles.timeText, { fontFamily: MONO }]}
+            numberOfLines={1}
+          >
+            {transitTime(item.epochMs)}
+          </Text>
+        </View>
+        <View style={styles.timeMeta}>
+          {relativeHint ? (
+            <Text
+              style={[styles.relativeText, isSoon && { color: accentColor }]}
+              numberOfLines={2}
+            >
+              {relativeHint}
+            </Text>
+          ) : null}
+        </View>
+      </View>
     );
-  }, [s380, s316, stopId, filter, t]);
+  }
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
       <SectionList
         sections={sections}
-        keyExtractor={(item, i) => `${item.bus}-${item.time}-${i}`}
+        keyExtractor={(item) => item.key}
         showsVerticalScrollIndicator={false}
         stickySectionHeadersEnabled={false}
         contentContainerStyle={[
@@ -281,53 +361,100 @@ export default function TimetableScreen({ isActive = true }: { isActive?: boolea
                 stops={stops}
                 activeStopId={stopId}
                 accentColor={accentColor}
-                direction={direction}
-                onSelectStop={handleSelectStop}
+                tripId={trip.id}
+                onSelectStop={(id) => setStop(trip.id, id)}
                 mapReturnRoute="timetable"
                 closestStopId={closestStopId}
-                userLocation={resolvedLocation}
-                onRequestLocation={handleRequestLocation}
+                userLocation={closest.resolvedLocation}
+                onRequestLocation={closest.requestLocation}
                 showDirectionSwitch
                 label={t("stopTimetable")}
               />
             </View>
 
             <View style={styles.filterRow}>
-              {(["all", "380", "316"] as Filter[]).map((f) => {
-                const isActive = filter === f;
-                const chipColor =
-                  f === "380"
-                    ? colors.route380
-                    : f === "316"
-                      ? colors.route316
-                      : accentColor;
-                return (
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={f === "all" ? t("timetableAllBuses") : t("commonRoute") + ` ${f}`}
-                    accessibilityState={{ selected: isActive }}
-                    key={f}
-                    style={[
-                      styles.filterChip,
-                      isActive && {
-                        borderColor: chipColor,
-                        backgroundColor: alpha(chipColor, "14"),
-                      },
-                    ]}
-                    onPress={() => setFilter(f)}
-                  >
-                    <Text
-                      style={[
-                        styles.filterChipText,
-                        isActive && { color: chipColor, fontWeight: "600" },
-                      ]}
-                    >
-                      {f === "all" ? t("timetableAllBuses") : f}
-                    </Text>
-                  </Pressable>
-                );
-              })}
+              <Chip
+                label={copy("today")}
+                selected={date === today}
+                color={accentColor}
+                onPress={() => selectDate(today)}
+              />
+              <Chip
+                label={copy("tomorrow")}
+                selected={date === tomorrow}
+                color={accentColor}
+                onPress={() => selectDate(tomorrow)}
+              />
+              <Chip
+                icon="calendar-month-outline"
+                label={
+                  customDate
+                    ? new Date(`${date}T12:00:00Z`).toLocaleDateString(locale, {
+                        weekday: "short",
+                        day: "numeric",
+                        month: "short",
+                        timeZone: "UTC",
+                      })
+                    : copy("otherDate")
+                }
+                accessibilityLabel={
+                  customDate
+                    ? new Date(`${date}T12:00:00Z`).toLocaleDateString(locale, {
+                        weekday: "long",
+                        day: "numeric",
+                        month: "long",
+                        timeZone: "UTC",
+                      })
+                    : copy("otherDate")
+                }
+                selected={customDate}
+                color={accentColor}
+                onPress={() => setPickerOpen(true)}
+              />
             </View>
+
+            {confirmation ? (
+              <View style={styles.statusRow}>
+                <MaterialCommunityIcons
+                  name={
+                    confirmation === "confirmed"
+                      ? "check-circle-outline"
+                      : "calendar-week"
+                  }
+                  size={13}
+                  color={colors.textFaint}
+                />
+                <Text style={styles.statusText} numberOfLines={2}>
+                  {copy(
+                    confirmation === "confirmed"
+                      ? "timetableConfirmed"
+                      : "timetableWeekly",
+                  )}
+                </Text>
+              </View>
+            ) : null}
+
+            {routes.length > 1 ? (
+              <View style={styles.filterRow}>
+                <Chip
+                  label={allLabel}
+                  selected={filter === null}
+                  color={accentColor}
+                  onPress={() => setRouteFilter(null)}
+                />
+                {routes.map((route) => (
+                  <Chip
+                    key={route.id}
+                    label={route.shortName}
+                    accessibilityLabel={`${t("commonRoute")} ${route.shortName}`}
+                    selected={filter === route.id}
+                    color={routeColor(route.id, colors, trip)}
+                    onPress={() => setRouteFilter(route.id)}
+                  />
+                ))}
+              </View>
+            ) : null}
+            <View style={styles.headerSpacer} />
           </View>
         }
         ListEmptyComponent={
@@ -337,7 +464,13 @@ export default function TimetableScreen({ isActive = true }: { isActive?: boolea
             </View>
           ) : (
             <View style={styles.emptyState}>
-              <Text style={styles.emptyText}>{t("timetableNoEntries")}</Text>
+              <Text style={styles.emptyText}>
+                {isError
+                  ? copy("unavailable")
+                  : filter
+                    ? t("timetableNoEntries")
+                    : copy("noDayTrips")}
+              </Text>
             </View>
           )
         }
@@ -350,51 +483,20 @@ export default function TimetableScreen({ isActive = true }: { isActive?: boolea
             <View style={styles.sectionHeaderLine} />
           </View>
         )}
-        renderItem={({ item, index, section }) => {
-          const minsUntil = item.minsFromMidnight - nowMins;
-          const relativeHint = formatRelativeTimeHint(minsUntil, t, formatDuration, formatRelativeDuration);
-          const isSoon = minsUntil >= -1 && minsUntil <= 30;
-
-          return (
-            <View
-              style={[
-                styles.timeRow,
-                index === 0 && styles.timeRowFirst,
-                index < section.data.length - 1
-                  ? styles.timeRowDivider
-                  : styles.timeRowLast,
-                isSoon && {
-                  borderColor: alpha(accentColor, "55"),
-                  backgroundColor: alpha(accentColor, "0D"),
-                },
-              ]}
-            >
-              <BusTag bus={item.bus} />
-              <View style={styles.timeMain}>
-                <Text
-                  style={[styles.timeText, { fontFamily: MONO }]}
-                  numberOfLines={1}
-                >
-                  {item.time}
-                </Text>
-              </View>
-              <View style={styles.timeMeta}>
-                {relativeHint ? (
-                  <Text
-                    style={[
-                      styles.relativeText,
-                      isSoon && { color: accentColor },
-                    ]}
-                    numberOfLines={2}
-                  >
-                    {relativeHint}
-                  </Text>
-                ) : null}
-              </View>
-            </View>
-          );
-        }}
+        renderItem={renderItem}
       />
+      {pickerOpen ? (
+        <TransitDatePicker
+          value={date}
+          today={today}
+          accentColor={accentColor}
+          onSelect={(next) => {
+            selectDate(next);
+            setPickerOpen(false);
+          }}
+          onClose={() => setPickerOpen(false)}
+        />
+      ) : null}
     </View>
   );
 }
@@ -406,11 +508,14 @@ function createStyles(C: AppColors) {
 
     filterRow: {
       flexDirection: "row",
+      flexWrap: "wrap",
       gap: 8,
-      paddingTop: 18,
-      paddingBottom: 2,
+      paddingTop: 14,
     },
     filterChip: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
       paddingHorizontal: 15,
       paddingVertical: 6,
       borderRadius: 100,
@@ -420,20 +525,44 @@ function createStyles(C: AppColors) {
     },
     filterChipText: { color: C.textDim, fontSize: 13, fontWeight: "500" },
 
-    noteBanner: {
-      marginBottom: 8,
-      paddingHorizontal: 14,
-      paddingVertical: 9,
-      backgroundColor: C.surface,
-      borderRadius: 10,
-      borderWidth: 1,
-      borderColor: C.border,
+    statusRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      paddingTop: 10,
+      paddingHorizontal: 4,
     },
-    noteText: { color: C.textDim, fontSize: 12, lineHeight: 17 },
+    statusText: {
+      flexShrink: 1,
+      color: C.textFaint,
+      fontSize: 12,
+      lineHeight: 16,
+    },
+    headerSpacer: { height: 6 },
 
-    loadingCenter: { flex: 1, alignItems: "center", justifyContent: "center" },
+    noTrip: {
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 14,
+      paddingHorizontal: 32,
+    },
+    noTripText: {
+      color: C.textDim,
+      fontSize: 15,
+      lineHeight: 21,
+      textAlign: "center",
+      maxWidth: 320,
+    },
+    noTripButton: { paddingHorizontal: 18, paddingVertical: 9 },
+
+    loadingCenter: {
+      flex: 1,
+      alignItems: "center",
+      justifyContent: "center",
+      paddingVertical: 32,
+    },
     emptyState: { paddingVertical: 32, alignItems: "center" },
-    emptyText: { color: C.textDim, fontSize: 14 },
+    emptyText: { color: C.textDim, fontSize: 14, textAlign: "center" },
 
     listContent: { paddingHorizontal: 20 },
     sectionHeader: {
@@ -501,6 +630,7 @@ function createStyles(C: AppColors) {
       paddingHorizontal: 8,
       paddingVertical: 4,
       minWidth: 46,
+      maxWidth: 92,
       alignItems: "center",
     },
     busTagText: { fontSize: 14, fontWeight: "700", letterSpacing: 0.5 },

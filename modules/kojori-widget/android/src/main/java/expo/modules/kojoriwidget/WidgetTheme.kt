@@ -12,6 +12,10 @@ import org.json.JSONObject
 // older versions retain the app's native fallback palette. Only route accents
 // come from the synced app palette, picked for the device scheme at render time.
 object WidgetTheme {
+  fun routeAccent(context: Context, root: JSONObject?, routeId: String): Int {
+    val night = (context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
+    return parseColor(context, root?.optJSONObject("routeColors")?.optJSONObject(routeId)?.optString(if (night) "dark" else "light"), R.color.widget_amber)
+  }
   data class Accents(val route380: Int, val route316: Int)
 
   fun accents(context: Context, root: JSONObject?): Accents {

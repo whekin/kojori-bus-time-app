@@ -4,11 +4,23 @@
 
 ### New
 
+- Trips: follow any TTC bus, metro or cable-car route, not just 380 and 316. A trip is one or more routes heading the same way, boarded at any of your saved stops — Departures, Map and Timetable show the trip you picked exactly as they showed Kojori before.
+- Adding a trip takes three taps: route, direction, boarding stop (nearest stops first). The app then suggests other routes from that stop going the same way and offers to add the way back.
+- The start screen shows one card per trip, with a trip and its way back sharing a card: "to Tbilisi" in large type, a "↩ Kojori" button to turn around, and the real route drawn faintly behind, from your stop to the end of the line. The direction pill on the stop map flips to the return trip or opens the list. The Timetable has Today, Tomorrow and any date from a calendar, marking which days TTC has confirmed.
+- Android and iPhone widgets support saved favorites and groups, including arbitrary route numbers. Android widgets cycle favorites independently; iPhone widgets offer a favorite picker.
 - iPhone navigation uses the native system tab bar with SF Symbols, palette-colored selection, and Liquid Glass on iOS 26 and newer.
-- iPhone Home Screen widgets show offline departures for a chosen stop and routes 380/316 in small, medium, large, and full-page portrait sizes (portrait requires iOS 27). Edit each widget to choose its stop; times stay in the Tbilisi timezone.
+- iPhone Home Screen widgets show offline favorite departures in small, medium, large, and full-page portrait sizes (portrait requires iOS 27). Existing stop selections migrate; times stay in the Tbilisi timezone.
+
+### Improved
+
+- Compact trip cards replace photo backgrounds. Saved return trips share a single origin–destination heading with a central swap button; the destination is emphasized and the last direction is remembered.
 
 ### Fixed
 
+- Clearing the transit cache preserves favorite stops, appearance, language, and launch settings.
+- A failed vehicle-position request for one route no longer blocks fresh positions for other routes.
+- Upcoming departures use each day's timetable across midnight and weekday/weekend changes. The Timetable screen also updates its service day after midnight or returning to the app.
+- Android widgets sync after saved schedules load and after timetable updates, with ordered writes to prevent an older snapshot replacing newer data.
 - The boarding-stop mini-map now uses Apple Maps framing on iOS instead of a zero-altitude Google camera.
 - Swiping right from the left edge inside an iPhone Settings section returns to the Settings menu instead of switching tabs.
 - Settings sections open at the top instead of inheriting the previous menu's scroll position.
@@ -18,10 +30,18 @@
 
 ### Improved
 
-- Settings use a centered, readable content width on larger screens, with compact summary cards and a two-column section grid. Nested settings stay comfortably narrow.
+- Existing 380/316 choices become two trips, "To Kojori" and "To Tbilisi", keeping every saved boarding stop and the active one; the app looks and works as before.
+- Network requests are shared by route/pattern and stop, limited to three concurrent calls, and live polling follows visible cards and the selected map. Location suggests only an unambiguous nearby trip.
+- Offline transit data refreshes automatically when due on app launch and return, without opening Settings. Failed refreshes retry with a cooldown while saved schedules remain available.
+- The full-page iPhone widget uses two columns for upcoming departures, showing up to 12 more buses with their times, routes, and countdowns.
+- Settings use a centered, readable content width on larger screens. Nested settings stay comfortably narrow.
 
 ### Infra
 
+- Native runtime is now `kojori-native-8` for favorite-based widget snapshots and iOS App Group storage. A new native build is required.
+- The web app includes a restricted read-only TTC endpoint because TTC does not allow browser CORS requests. Web hosting now needs the exported server as well as client assets; no deployment was performed.
+- The bundled TTC catalog can be refreshed with `bun scripts/bake-ttc-catalog.ts`; per-route timetables, stops, and geometry are downloaded and cached on demand.
+- `bun release` queues a tagged iOS build; after device and simulator checks pass, GitHub Releases gets a downloadable SideStore IPA and SHA-256 checksum alongside the Android APK. README now includes iPhone installation, signing renewal, updates, and widget setup.
 - Upgraded to Expo SDK 58 / React Native 0.88 for official iOS 27 scene lifecycle support, replacing temporary Router and startup patches. The app now requires iOS 16.4+ and uses a new OTA runtime.
 - Updated the palette carousel for Gesture Handler 3 and replaced the removed InteractionManager API with idle task scheduling.
 - Added an experimental GitHub Actions build of an unsigned iPhone IPA for SideStore, with embedded JavaScript, OTA updates disabled for that build, and downloadable IPA and build logs.

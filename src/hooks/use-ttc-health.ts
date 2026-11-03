@@ -134,6 +134,10 @@ export function reportTtcFailure(isRateLimited = false) {
   scheduleStatusTransition();
 }
 
+export function getTtcHealthSnapshot() {
+  return currentSnapshot;
+}
+
 export function useTtcHealth() {
   return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 }

@@ -1,6 +1,11 @@
 import { Image } from 'expo-image';
 import { StyleSheet, View } from 'react-native';
 import Animated, { Keyframe, Easing } from 'react-native-reanimated';
+import type { ReactNode } from 'react';
+
+export function AppReveal({ children }: { children: ReactNode }) {
+  return <>{children}</>;
+}
 
 const DURATION = 300;
 

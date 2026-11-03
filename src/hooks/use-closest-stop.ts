@@ -160,3 +160,36 @@ export function useClosestStop(
     requestLocation: () => void requestLocationAccess({ forceFresh: true }),
   };
 }
+
+/** Nearest of a trip's saved boarding stops; trips have no default stop. */
+export function useClosestTripStop(
+  stops: StopInfo[],
+  activeStopId: string,
+  enabled = true,
+) {
+  const { permission, resolvedLocation, isLocating, requestLocationAccess } = useLocation(enabled);
+
+  const candidate = useMemo(() => {
+    if (!enabled) {
+      return { status: 'disabled' as const, closestStop: null, distanceMeters: null };
+    }
+    if (permission === 'denied') {
+      return { status: 'denied' as const, closestStop: null, distanceMeters: null };
+    }
+    if (!resolvedLocation) {
+      return {
+        status: isLocating ? ('locating' as const) : ('no-location' as const),
+        closestStop: null,
+        distanceMeters: null,
+      };
+    }
+    return getClosestStopCandidate(stops, resolvedLocation, { activeStopId });
+  }, [activeStopId, enabled, isLocating, permission, resolvedLocation, stops]);
+
+  return {
+    ...candidate,
+    resolvedLocation,
+    isLocating,
+    requestLocation: () => void requestLocationAccess({ forceFresh: true }),
+  };
+}

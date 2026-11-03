@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { queryOptions, useQueries, type UseQueryResult } from '@tanstack/react-query';
 
 import { BAKED_POLYLINES } from '@/assets/ttc-baked';
 import { BusLine, decodeGooglePolyline, fetchVehiclePositions, ROUTES, VehiclePosition, type PolylinePoint } from '@/services/ttc';
@@ -67,19 +67,12 @@ function hasValidCoordinate(position: VehiclePosition) {
   );
 }
 
-async function fetchPositionsForDirection(direction: Direction): Promise<LiveVehiclePosition[]> {
-  const entries = ([
-    ['380', ROUTES['380']],
-    ['316', ROUTES['316']],
-  ] as const).map(async ([bus, route]) => {
-    const response = await fetchVehiclePositions(route.id, route[direction]);
-    return Object.values(response)
-      .flat()
-      .map(position => ({ ...position, bus }))
-      .filter(hasValidCoordinate);
-  });
-
-  const rawPositions = (await Promise.all(entries)).flat();
+async function fetchPositionsForRoute(bus: BusLine, direction: Direction): Promise<LiveVehiclePosition[]> {
+  const route = ROUTES[bus];
+  const response = await fetchVehiclePositions(route.id, route[direction]);
+  const rawPositions = Object.values(response).flat()
+    .map(position => ({ ...position, bus }))
+    .filter(hasValidCoordinate);
   const deduped = new Map<string, LiveVehiclePosition>();
 
   rawPositions.forEach(position => {
@@ -89,24 +82,44 @@ async function fetchPositionsForDirection(direction: Direction): Promise<LiveVeh
   return [...deduped.values()];
 }
 
+export function vehiclePositionsQueryOptions(
+  bus: BusLine,
+  direction: Direction,
+  enabled: boolean,
+  options: UseVehiclePositionsOptions = {},
+) {
+  const route = ROUTES[bus];
+  return queryOptions({
+    queryKey: ['vehicle-positions', direction, route.id, route[direction]],
+    meta: { source: 'ttc' },
+    queryFn: () => fetchPositionsForRoute(bus, direction),
+    enabled,
+    staleTime: options.staleTimeMs ?? 2_000,
+    refetchInterval: query => {
+      if (!enabled) return false;
+      return query.state.status === 'error' ? OFFLINE_REFRESH_MS : options.refetchIntervalMs ?? ACTIVE_MAP_LIVE_REFRESH_MS;
+    },
+    retry: 0,
+  });
+}
+
 export function useVehiclePositions(
   direction: Direction,
   enabled: boolean,
   options: UseVehiclePositionsOptions = {},
 ) {
-  const refetchIntervalMs = options.refetchIntervalMs ?? ACTIVE_MAP_LIVE_REFRESH_MS;
-  const staleTimeMs = options.staleTimeMs ?? 2_000;
-
-  return useQuery<LiveVehiclePosition[]>({
-    queryKey: ['vehicle-positions', direction],
-    meta: { source: 'ttc' },
-    queryFn: () => fetchPositionsForDirection(direction),
-    enabled,
-    staleTime: staleTimeMs,
-    refetchInterval: query => {
-      if (!enabled) return false;
-      return query.state.status === 'error' ? OFFLINE_REFRESH_MS : refetchIntervalMs;
-    },
-    retry: 0,
+  return useQueries({
+    queries: (Object.keys(ROUTES) as BusLine[]).map(bus => vehiclePositionsQueryOptions(bus, direction, enabled, options)),
+    combine: combineVehiclePositions,
   });
+}
+
+export function combineVehiclePositions(queries: UseQueryResult<LiveVehiclePosition[]>[]) {
+  return {
+    // A failed route cannot hide fresh results from another route, or provide
+    // stale vehicle evidence that promotes arrivals to live on Departures.
+    data: queries.flatMap(query => query.isError ? [] : query.data ?? []),
+    isFetching: queries.some(query => query.isFetching),
+    refetch: () => Promise.all(queries.map(query => query.refetch())),
+  };
 }

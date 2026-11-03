@@ -5,18 +5,21 @@ import {
   type TtcQueryKind,
 } from '@/services/ttc-query-log';
 
-const BASE = 'https://transit.ttc.com.ge/pis-gateway/api';
-const API_KEY = 'c0a2f304-551a-4d08-b8df-2c53ecd57f9f';
+import { TTC_BASE as BASE, TTC_API_KEY as API_KEY } from '@/services/ttc-endpoint';
 
 const headers = { 'x-api-key': API_KEY };
 export type TtcLocale = 'en' | 'ka';
 
-async function fetchTtcJson<T>(url: string, kind: TtcQueryKind): Promise<T> {
+export async function fetchTtcJson<T>(url: string, kind: TtcQueryKind, signal?: AbortSignal): Promise<T> {
   const startedAt = Date.now();
   let statusCode: number | null = null;
 
   try {
-    const res = await fetch(url, { headers });
+    // TTC does not expose CORS headers. Browser requests use the app's narrow
+    // read-only endpoint; native clients continue to reach TTC directly.
+    const browser = typeof document !== 'undefined';
+    const target = browser && url.startsWith(BASE) ? `/ttc?path=${encodeURIComponent(url.slice(BASE.length))}` : url;
+    const res = await fetch(target, { headers: browser ? undefined : headers, signal });
     statusCode = res.status;
 
     if (!res.ok) {
@@ -39,6 +42,9 @@ async function fetchTtcJson<T>(url: string, kind: TtcQueryKind): Promise<T> {
     });
     return data as T;
   } catch (error) {
+    // A request the app cancelled (screen left, query refetched) says nothing
+    // about TTC; callers that abort on a timeout report that themselves.
+    if (signal?.aborted) throw error;
     if (!(error instanceof Error && error.message.startsWith('HTTP '))) {
       reportTtcFailure();
     }
@@ -527,6 +533,7 @@ export function formatFutureTime(offsetMins: number, now = new Date()): string {
 
 export interface Departure {
   key: string;
+  serviceDate?: string;
   bus: BusLine;
   time: string;      // display time "HH:mm"
   minsUntil: number;
@@ -692,7 +699,7 @@ export function getDepartureServiceBoundary(
   schedule380: SchedulePeriod[] | undefined,
   schedule316: SchedulePeriod[] | undefined,
   stopId: string,
-  nextDeparture: Pick<Departure, 'bus' | 'time' | 'scheduledTime'> | undefined,
+  nextDeparture: Pick<Departure, 'bus' | 'time' | 'scheduledTime' | 'serviceDate'> | undefined,
   now = new Date(),
 ): DepartureServiceBoundary {
   const nowMins = now.getHours() * 60 + now.getMinutes();
@@ -719,6 +726,7 @@ export function getDepartureServiceBoundary(
   const nextDepartureIsFinal = Boolean(
     nextDeparture &&
     finalDepartureToday &&
+    (!nextDeparture.serviceDate || nextDeparture.serviceDate === serviceDateString(now)) &&
     nextDeparture.bus === finalDepartureToday.bus &&
     (nextDeparture.scheduledTime ?? nextDeparture.time) === finalDepartureToday.time,
   );
@@ -777,7 +785,7 @@ export function getLiveVehicleCountsForStop(
 
 /**
  * Merges and sorts upcoming departures for both bus lines from a given stop.
- * Returns departures within the next 3 hours.
+ * Returns departures within the horizon, using each service day's own calendar.
  */
 export function computeUpcomingDepartures(
   schedule380: SchedulePeriod[] | undefined,
@@ -787,40 +795,29 @@ export function computeUpcomingDepartures(
   now = new Date(),
   options: { includeRecentPast?: boolean } = {},
 ): Departure[] {
-  const lookupStopId = resolveTtcLookupStopId(stopId);
   const nowMins = now.getHours() * 60 + now.getMinutes();
-  const midnightWrapThresholdMins = 12 * 60;
   const minMinsUntil = options.includeRecentPast
     ? -LIVE_ARRIVAL_MATCH_WINDOW_MINUTES
     : MIN_SCHEDULED_DEPARTURE_MINUTES;
   const result: Departure[] = [];
 
-  const entries: [BusLine, SchedulePeriod[] | undefined][] = [
-    ['380', schedule380],
-    ['316', schedule316],
-  ];
-
-  for (const [bus, schedule] of entries) {
-    if (!schedule) continue;
-    const period = getTodayPeriod(schedule, now);
-    if (!period) continue;
-    const times = extractStopTimes(period, lookupStopId);
-
-    for (const t of times) {
-      const mins = parseTimeToMins(t);
-      // Wrap only clearly next-day trips; slightly past departures should disappear.
-      let minsUntil = mins - nowMins;
-      if (minsUntil < -midnightWrapThresholdMins) minsUntil += 24 * 60;
+  const lastDay = Math.floor((nowMins + horizonMins) / (24 * 60));
+  for (let daysUntil = 0; daysUntil <= lastDay; daysUntil += 1) {
+    const date = addServiceDays(now, daysUntil);
+    const departures = scheduledDeparturesForDate(schedule380, schedule316, stopId, date, daysUntil);
+    for (const departure of departures) {
+      const minsUntil = departure.minsUntil - nowMins;
       // Scheduled-only rows should not pretend a bus is "Now".
       // If a bus is still coming after schedule, TTC live data can surface it.
       if (minsUntil < minMinsUntil || minsUntil > horizonMins) continue;
       result.push({
-        key: `${bus}-${mins}`,
-        bus,
-        time: formatTime(mins),
+        key: departure.key,
+        serviceDate: departure.date,
+        bus: departure.bus,
+        time: departure.time,
         minsUntil,
         status: 'scheduled',
-        scheduledTime: formatTime(mins),
+        scheduledTime: departure.time,
       });
     }
   }

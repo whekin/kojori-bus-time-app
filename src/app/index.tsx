@@ -1,5 +1,4 @@
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
-import { useQueryClient } from "@tanstack/react-query";
 import * as Linking from "expo-linking";
 import { useGlobalSearchParams } from "expo-router";
 import React, { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
@@ -9,6 +8,7 @@ import {
   AppState,
   Easing,
   Platform,
+  Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -21,49 +21,104 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StopSelector } from "@/components/stop-selector";
 import { TtcStatusTopBar } from "@/components/ttc-status-top-bar";
 import { alpha, BottomTabInset, type AppColors } from "@/constants/theme";
-import { useActiveDirection } from "@/hooks/use-active-direction";
 import { useAppColors } from "@/hooks/use-app-colors";
-import { useArrivals } from "@/hooks/use-arrivals";
-import { useClosestStop } from "@/hooks/use-closest-stop";
+import { useClosestTripStop } from "@/hooks/use-closest-stop";
 import { useI18n } from "@/hooks/use-i18n";
-import { useRouteStops } from "@/hooks/use-route-stops";
-import { useSchedule } from "@/hooks/use-schedule";
 import { useReducedMotion } from "@/hooks/use-reduced-motion";
-import { useSettings } from "@/hooks/use-settings";
 import { useStopNames } from "@/hooks/use-stop-names";
-import { useVehiclePositions } from "@/hooks/use-vehicle-positions";
 import { createThemedStyles } from "@/utils/themed-styles";
+import { useTransitCopy } from "@/transit/copy";
+import { useFavorites } from "@/transit/favorites";
+import { useFavoriteDepartures } from "@/transit/hooks";
 import {
-  BusLine,
-  computeUpcomingDepartures,
-  Departure,
-  findStop,
-  getDepartureServiceBoundary,
-  getLiveVehicleCountsForStop,
-  injectLiveDelayDemo,
-  mergeArrivalsIntoSchedule,
-  ROUTES,
-  type DepartureServiceBoundary,
-  type ServiceDeparture,
-  type StopInfo,
-} from "@/services/ttc";
+  serviceDayBounds,
+  transitDate,
+  transitTime,
+  tripStopId,
+  tripStops,
+  type Favorite,
+  type TransitDeparture,
+  type TransitRoute,
+} from "@/transit/model";
+import { useTripUi } from "@/transit/trip-ui";
+import { routeColor, transitModeIcon, tripAccent } from "@/transit/ui";
 
 const MONO = Platform.select({
   android: "monospace",
   ios: "Menlo",
   default: "monospace",
 });
-type SharedMode = "kojori" | "tbilisi";
 const CONTENT_SIDE = 20;
 const SECTION_SPACE = 12;
-const DEPARTURES_LIVE_VEHICLE_REFRESH_MS = 30_000;
 
-function modeToDirection(mode: SharedMode) {
-  return mode === "kojori" ? "toKojori" : "toTbilisi";
+/** A departure as the home screen draws it. */
+type Departure = {
+  key: string;
+  route: TransitRoute;
+  time: string;
+  minsUntil: number;
+  scheduledTime?: string;
+  live: boolean;
+  driftMinutes?: number | null;
+};
+
+type ServiceDeparture = {
+  route: TransitRoute;
+  time: string;
+  date: string;
+  daysUntil: number;
+};
+
+type DepartureServiceBoundary = {
+  nextServiceDeparture: ServiceDeparture | null;
+  serviceEndedToday: boolean;
+  nextDepartureIsFinal: boolean;
+};
+
+function toDeparture(dep: TransitDeparture, now: number): Departure {
+  return {
+    key: dep.key,
+    route: dep.boarding.route,
+    time: transitTime(dep.epochMs),
+    minsUntil: Math.max(0, Math.round((dep.epochMs - now) / 60_000)),
+    scheduledTime: transitTime(dep.scheduledEpochMs),
+    live: dep.live,
+    driftMinutes: dep.live
+      ? Math.round((dep.epochMs - dep.scheduledEpochMs) / 60_000)
+      : null,
+  };
 }
 
-function directionToMode(direction: "toKojori" | "toTbilisi"): SharedMode {
-  return direction === "toKojori" ? "kojori" : "tbilisi";
+/** Today's departures on the home list; later ones only announce next service. */
+function splitServiceDay(
+  rows: TransitDeparture[],
+  servedToday: boolean,
+  now: number,
+) {
+  const { end } = serviceDayBounds(now);
+  const today = rows.filter((dep) => dep.epochMs < end);
+  const later = rows.find((dep) => dep.epochMs >= end);
+  const boundary: DepartureServiceBoundary = {
+    nextServiceDeparture:
+      today.length === 0 && later
+        ? {
+            route: later.boarding.route,
+            time: transitTime(later.epochMs),
+            date: transitDate(later.epochMs),
+            daysUntil: Math.max(
+              1,
+              Math.round(
+                (Date.parse(transitDate(later.epochMs)) -
+                  Date.parse(transitDate(now))) /
+                  86_400_000,
+              ),
+            ),
+          }
+        : null,
+    serviceEndedToday: today.length === 0 && servedToday,
+    nextDepartureIsFinal: today.length === 1,
+  };
+  return { today, boundary };
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -129,25 +184,9 @@ function getRealtimeStatus(
   };
 }
 
-function routeColor(bus: BusLine, colors: ReturnType<typeof useAppColors>) {
-  return bus === "380" ? colors.route380 : colors.route316;
-}
-
 function getDisplayedDepartures(departures: Departure[]) {
-  const visibleDepartures = departures.filter(
-    (dep) => dep.status !== "cancelled" && !dep.cancelled,
-  );
-  const next = visibleDepartures[0];
-  const hiddenKeys = new Set<string>();
-
-  if (next) hiddenKeys.add(`${next.key}:${next.status}`);
-
-  return {
-    next,
-    upcoming: visibleDepartures.filter(
-      (dep) => !hiddenKeys.has(`${dep.key}:${dep.status}`),
-    ),
-  };
+  const [next, ...upcoming] = departures;
+  return { next, upcoming };
 }
 
 function languageDateLocale(language: "en" | "ka" | "ru") {
@@ -186,40 +225,22 @@ function splitCountdownLabel(label: string) {
   };
 }
 
-function buildStopSelectorStops({
-  favoriteIds,
-  activeStopId,
-  routeStops,
-  stopNames,
-  stopFallback,
-}: {
-  favoriteIds: string[];
-  activeStopId: string;
-  routeStops: StopInfo[];
-  stopNames: Record<string, string>;
-  stopFallback: (id: string) => string;
-}) {
-  const routeStopMap = new Map(routeStops.map((stop) => [stop.id, stop]));
-  const ids = favoriteIds.includes(activeStopId)
-    ? favoriteIds
-    : [...favoriteIds, activeStopId];
-
-  return ids.map((id) => {
-    const base = routeStopMap.get(id) ??
-      findStop(id) ?? { id, label: stopFallback(id) };
-    return { ...base, label: stopNames[id] ?? base.label };
-  });
-}
-
 // ── Atoms ─────────────────────────────────────────────────────────────────────
-function BusTag({ bus }: { bus: BusLine }) {
+function BusTag({ route, trip }: { route: TransitRoute; trip: Favorite }) {
   const colors = useAppColors();
   const styles = useHomeStyles();
-  const color = routeColor(bus, colors);
+  const color = routeColor(route.id, colors, trip);
   return (
     <View style={[styles.busTag, { borderColor: color }]}>
+      {route.mode !== "BUS" ? (
+        <MaterialCommunityIcons
+          name={transitModeIcon(route.mode)}
+          size={13}
+          color={color}
+        />
+      ) : null}
       <Text style={[styles.busTagText, { color, fontFamily: MONO }]}>
-        {bus}
+        {route.shortName}
       </Text>
     </View>
   );
@@ -377,7 +398,15 @@ function ErrorBanner({ message }: { message: string }) {
 }
 
 // ── Shared departure row ───────────────────────────────────────────────────────
-function DepartureRow({ dep, isLast }: { dep: Departure; isLast: boolean }) {
+function DepartureRow({
+  dep,
+  trip,
+  isLast,
+}: {
+  dep: Departure;
+  trip: Favorite;
+  isLast: boolean;
+}) {
   const colors = useAppColors();
   const styles = useHomeStyles();
   const { t, formatDuration, formatRelativeDuration } = useI18n();
@@ -386,7 +415,7 @@ function DepartureRow({ dep, isLast }: { dep: Departure; isLast: boolean }) {
 
   return (
     <View style={[styles.row, !isLast && styles.rowDivider]}>
-      <BusTag bus={dep.bus} />
+      <BusTag route={dep.route} trip={trip} />
       <View style={styles.rowMain}>
         <Text
           style={[
@@ -441,11 +470,13 @@ function DepartureRow({ dep, isLast }: { dep: Departure; isLast: boolean }) {
 // ── Shared "next bus" card ─────────────────────────────────────────────────────
 function NextCard({
   dep,
+  trip,
   accentColor,
   isLoading,
   serviceBoundary,
 }: {
   dep: Departure | undefined;
+  trip: Favorite;
   accentColor: string;
   isLoading: boolean;
   serviceBoundary: DepartureServiceBoundary;
@@ -477,7 +508,7 @@ function NextCard({
               {t("homeNextServiceDetail", { when })}
             </Text>
             <View style={[styles.servicePill, { borderColor: alpha(accentColor, "38"), backgroundColor: alpha(accentColor, "12") }]}>
-              <BusTag bus={serviceBoundary.nextServiceDeparture.bus} />
+              <BusTag route={serviceBoundary.nextServiceDeparture.route} trip={trip} />
               <Text style={[styles.servicePillText, { color: accentColor, fontFamily: MONO }]}>
                 {serviceBoundary.nextServiceDeparture.time}
               </Text>
@@ -502,7 +533,7 @@ function NextCard({
     });
   })();
   const realtimeStatus = getRealtimeStatus(dep, colors, t);
-  const busColor = routeColor(dep.bus, colors);
+  const busColor = routeColor(dep.route.id, colors, trip);
   const highlightColor = busColor;
   const isLiveDeparture = dep.live === true;
   const statusColor = realtimeStatus?.textColor ?? colors.textDim;
@@ -550,7 +581,7 @@ function NextCard({
                     { color: colors.bg, fontFamily: MONO },
                   ]}
                 >
-                  {dep.bus}
+                  {dep.route.shortName}
                 </Text>
               </View>
               <View style={styles.nextHeaderCopy}>
@@ -675,127 +706,69 @@ function NextCard({
   );
 }
 
-// ── Direction view ────────────────────────────────────────────────────────────
-function DirectionDeparturesView({
+// ── Trip view ─────────────────────────────────────────────────────────────────
+function TripDeparturesView({
+  trip,
   isActive,
-  direction,
-  favoriteIds,
-  activeStopId,
-  onSelectStop,
-  onToggleFavorite,
   bottomInset,
-  isRefreshing,
-  onRefresh,
   now,
-  demoEnabled,
 }: {
+  trip: Favorite;
   isActive: boolean;
-  direction: "toKojori" | "toTbilisi";
-  favoriteIds: string[];
-  activeStopId: string;
-  onSelectStop: (id: string) => void;
-  onToggleFavorite: (id: string) => void;
   bottomInset: number;
-  isRefreshing: boolean;
-  onRefresh: () => void;
-  now: Date;
-  demoEnabled: boolean;
+  now: number;
 }) {
   const colors = useAppColors();
   const styles = useHomeStyles();
   const { t } = useI18n();
+  const copy = useTransitCopy();
   const stopNames = useStopNames();
-  const { stops: routeStops } = useRouteStops(direction);
+  const { setStop } = useFavorites();
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const activeStopId = tripStopId(trip);
+  const stops = tripStops(trip).map((stop) => ({
+    ...stop,
+    label: stopNames[stop.id] ?? stop.label,
+  }));
   const {
     closestStop,
     status: closestStopStatus,
     resolvedLocation,
     requestLocation: handleRequestLocation,
-  } = useClosestStop(direction, activeStopId, isActive);
-  const accentColor = direction === "toKojori" ? colors.route380 : colors.route316;
-  const favoriteStops = useMemo(
-    () =>
-      buildStopSelectorStops({
-        favoriteIds,
-        activeStopId,
-        routeStops,
-        stopNames,
-        stopFallback: (id) =>
-          t("commonStopNumber", { id: id.split(":")[1] ?? id }),
-      }),
-    [activeStopId, favoriteIds, routeStops, stopNames, t],
-  );
+  } = useClosestTripStop(stops, activeStopId, isActive);
+  const accentColor = tripAccent(trip, colors);
   const closestStopId =
-    (closestStopStatus === "available" || closestStopStatus === "fallback") &&
-    closestStop
-      ? closestStop.id
-      : null;
+    closestStopStatus === "available" && closestStop ? closestStop.id : null;
 
-  const {
-    data: s380,
-    isLoading: l380,
-    isError: e380,
-  } = useSchedule(ROUTES["380"].id, ROUTES["380"][direction]);
-  const {
-    data: s316,
-    isLoading: l316,
-    isError: e316,
-  } = useSchedule(ROUTES["316"].id, ROUTES["316"][direction]);
-  const {
-    arrivals,
-    dataUpdatedAt,
-    isError: eArrival,
-  } = useArrivals(activeStopId, direction, isActive);
-  const { data: liveVehiclePositions } = useVehiclePositions(direction, isActive, {
-    refetchIntervalMs: DEPARTURES_LIVE_VEHICLE_REFRESH_MS,
-    staleTimeMs: 20_000,
-  });
-
-  const rawDepartures = useMemo(
-    () => computeUpcomingDepartures(
-      s380,
-      s316,
-      activeStopId,
-      undefined,
-      now,
-      { includeRecentPast: true },
-    ),
-    [s380, s316, activeStopId, now],
+  const data = useFavoriteDepartures(trip, isActive, now);
+  const { today, boundary: serviceBoundary } = splitServiceDay(
+    data.rows,
+    data.servedToday,
+    now,
   );
-  const liveVehicleCounts = useMemo(
-    () => getLiveVehicleCountsForStop(
-      s380,
-      s316,
-      activeStopId,
-      liveVehiclePositions ?? [],
-      now,
-    ),
-    [s380, s316, activeStopId, liveVehiclePositions, now],
+  const { next, upcoming } = getDisplayedDepartures(
+    today.map((dep) => toDeparture(dep, now)),
   );
-
-  const departures = useMemo(() => {
-    const merged = mergeArrivalsIntoSchedule(
-      rawDepartures,
-      arrivals,
-      now,
-      dataUpdatedAt,
-      { stopId: activeStopId, liveVehicleCounts },
-    );
-    return demoEnabled ? injectLiveDelayDemo(merged, now) : merged;
-  }, [rawDepartures, arrivals, now, dataUpdatedAt, activeStopId, liveVehicleCounts, demoEnabled]);
-
-  const isLoading = l380 || l316;
-  const isError = (e380 || e316 || eArrival) && !s380 && !s316;
-  const { next, upcoming } = useMemo(
-    () => getDisplayedDepartures(departures),
-    [departures],
-  );
-  const serviceBoundary = useMemo(
-    () => getDepartureServiceBoundary(s380, s316, activeStopId, next, now),
-    [s380, s316, activeStopId, next, now],
-  );
+  const isLoading = data.loading && !data.hasSchedule;
+  const isError = !data.hasSchedule && !data.loading && data.failedCount > 0;
   const hasNextServiceCard = !next && Boolean(serviceBoundary.nextServiceDeparture);
-  const showUpcomingEmpty = !isLoading && upcoming.length === 0 && !serviceBoundary.nextDepartureIsFinal && !hasNextServiceCard;
+  // With nothing next, the next card already says so.
+  const showUpcomingEmpty =
+    Boolean(next) &&
+    !isLoading &&
+    upcoming.length === 0 &&
+    !serviceBoundary.nextDepartureIsFinal &&
+    !hasNextServiceCard;
+
+  async function handleRefresh() {
+    if (isRefreshing) return;
+    setIsRefreshing(true);
+    try {
+      await data.refresh();
+    } finally {
+      setIsRefreshing(false);
+    }
+  }
 
   return (
     <View style={styles.modeContainer}>
@@ -809,7 +782,7 @@ function DirectionDeparturesView({
         refreshControl={
           <RefreshControl
             refreshing={isRefreshing}
-            onRefresh={onRefresh}
+            onRefresh={handleRefresh}
             tintColor={colors.text}
             colors={[colors.text]}
             progressBackgroundColor={colors.surfaceHigh}
@@ -818,11 +791,11 @@ function DirectionDeparturesView({
       >
         <View style={styles.fixedSection}>
           <StopSelector
-            stops={favoriteStops}
+            stops={stops}
             activeStopId={activeStopId}
             accentColor={accentColor}
-            direction={direction}
-            onSelectStop={onSelectStop}
+            tripId={trip.id}
+            onSelectStop={(id) => setStop(trip.id, id)}
             mapReturnRoute="index"
             closestStopId={closestStopId}
             userLocation={resolvedLocation}
@@ -830,11 +803,15 @@ function DirectionDeparturesView({
             showDirectionSwitch
           />
 
-          {isError && <ErrorBanner message={t("homeScheduleError")} />}
+          {isError ? <ErrorBanner message={t("homeScheduleError")} /> : null}
+          {data.missingStops.length > 0 ? (
+            <ErrorBanner message={copy("stopsChanged")} />
+          ) : null}
 
           <SectionDivider label={t("homeNext")} style={styles.nextDivider} />
           <NextCard
             dep={next}
+            trip={trip}
             accentColor={accentColor}
             isLoading={isLoading}
             serviceBoundary={serviceBoundary}
@@ -850,8 +827,9 @@ function DirectionDeparturesView({
           <View style={[styles.list, styles.listSection]}>
             {upcoming.map((dep, i) => (
               <DepartureRow
-                key={`${dep.key}-${dep.status}`}
+                key={dep.key}
                 dep={dep}
+                trip={trip}
                 isLast={i === upcoming.length - 1}
               />
             ))}
@@ -864,74 +842,111 @@ function DirectionDeparturesView({
   );
 }
 
-// ── Root ──────────────────────────────────────────────────────────────────────
+function NoTrips({ bottomInset }: { bottomInset: number }) {
+  const colors = useAppColors();
+  const styles = useHomeStyles();
+  const copy = useTransitCopy();
+  const { openEditor } = useTripUi();
+  return (
+    <View
+      style={[
+        styles.noTrips,
+        { paddingBottom: bottomInset + BottomTabInset + 24 },
+      ]}
+    >
+      <View
+        style={[
+          styles.noTripsIcon,
+          { backgroundColor: alpha(colors.route380, "1F") },
+        ]}
+      >
+        <MaterialCommunityIcons
+          name="bus-marker"
+          size={34}
+          color={colors.route380}
+        />
+      </View>
+      <Text style={styles.noTripsTitle}>{copy("tripsEmpty")}</Text>
+      <Text style={styles.noTripsText}>{copy("tripsEmptyNote")}</Text>
+      <Pressable
+        accessibilityRole="button"
+        onPress={() => openEditor()}
+        style={({ pressed }) => [
+          styles.noTripsButton,
+          { backgroundColor: colors.route380, opacity: pressed ? 0.85 : 1 },
+        ]}
+      >
+        <MaterialCommunityIcons name="plus" size={20} color={colors.bg} />
+        <Text style={[styles.noTripsButtonText, { color: colors.bg }]}>
+          {copy("tripAdd")}
+        </Text>
+      </Pressable>
+    </View>
+  );
+}
+
 export default function HomeScreen({
-  isActive = false,
+  // Web renders tabs through the router without the native tab host's prop.
+  isActive = Platform.OS === "web",
 }: {
   isActive?: boolean;
 }) {
   const styles = useHomeStyles();
   const insets = useSafeAreaInsets();
-  const queryClient = useQueryClient();
-  const { settings, update, toggleKojoriFavorite, toggleTbilisiFavorite } =
-    useSettings();
-  const { activeDirection, selectDirection } = useActiveDirection();
-  const { widgetMode, widgetStopId } = useGlobalSearchParams<{
+  const { state, selected, select, setStop } = useFavorites();
+  const { widgetFavoriteId, widgetMode, widgetStopId } = useGlobalSearchParams<{
+    widgetFavoriteId?: string;
     widgetMode?: string;
     widgetStopId?: string;
   }>();
-
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [now, setNow] = useState(() => new Date());
+  const [now, setNow] = useState(() => Date.now());
   const handledWidgetLink = useRef<string | null>(null);
-  const kojoriPaneNowRef = useRef(now);
-  const tbilisiPaneNowRef = useRef(now);
-  const mode = directionToMode(activeDirection);
 
-  const applyWidgetLink = useEffectEvent((nextMode?: string, nextStopId?: string, repeatedTap = false) => {
-    if (nextMode !== "kojori" && nextMode !== "tbilisi") return;
-
-    const nextKey = `${nextMode}:${nextStopId ?? ""}`;
-    if (!repeatedTap && handledWidgetLink.current === nextKey) return;
-    handledWidgetLink.current = nextKey;
-
-    selectDirection(modeToDirection(nextMode), { persist: "immediate" });
-
-    if (!nextStopId) return;
-
-    if (nextMode === "kojori") {
-      const nextFavorites = settings.tbilisiFavorites.includes(nextStopId)
-        ? settings.tbilisiFavorites
-        : [nextStopId, ...settings.tbilisiFavorites];
-      update({
-        tbilisiFavorites: nextFavorites,
-        activeTbilisiStopId: nextStopId,
-      });
-      return;
-    }
-
-    const nextFavorites = settings.kojoriFavorites.includes(nextStopId)
-      ? settings.kojoriFavorites
-      : [nextStopId, ...settings.kojoriFavorites];
-    update({
-      kojoriFavorites: nextFavorites,
-      activeKojoriStopId: nextStopId,
-    });
-  });
+  // Widgets link to a trip; widgets made before trips existed link to a
+  // Kojori direction plus stop, which the migrated trips keep as their ids.
+  const applyWidgetLink = useEffectEvent(
+    (
+      params: { favoriteId?: string; mode?: string; stopId?: string },
+      repeatedTap = false,
+    ) => {
+      const id =
+        params.favoriteId ??
+        (params.mode === "kojori"
+          ? "legacy:toKojori"
+          : params.mode === "tbilisi"
+            ? "legacy:toTbilisi"
+            : undefined);
+      if (!id || !state.favorites.some((f) => f.id === id)) return;
+      const key = `${id}:${params.stopId ?? ""}`;
+      if (!repeatedTap && handledWidgetLink.current === key) return;
+      handledWidgetLink.current = key;
+      select(id);
+      if (params.stopId) setStop(id, params.stopId);
+    },
+  );
 
   // The screens are mounted by our tab host, so cold-start parameters belong
   // to the global router. A fresh URL event must also reapply an identical link
-  // after the rider has manually changed direction or boarding stop.
+  // after the rider has manually changed trip or boarding stop.
   useEffect(() => {
-    applyWidgetLink(widgetMode, widgetStopId);
-  }, [widgetMode, widgetStopId]);
+    applyWidgetLink({
+      favoriteId: widgetFavoriteId,
+      mode: widgetMode,
+      stopId: widgetStopId,
+    });
+  }, [widgetFavoriteId, widgetMode, widgetStopId]);
 
   useEffect(() => {
-    const subscription = Linking.addEventListener('url', ({ url }) => {
+    const subscription = Linking.addEventListener("url", ({ url }) => {
       const params = Linking.parse(url).queryParams;
+      const read = (value: unknown) =>
+        typeof value === "string" ? value : undefined;
       applyWidgetLink(
-        typeof params?.widgetMode === 'string' ? params.widgetMode : undefined,
-        typeof params?.widgetStopId === 'string' ? params.widgetStopId : undefined,
+        {
+          favoriteId: read(params?.widgetFavoriteId),
+          mode: read(params?.widgetMode),
+          stopId: read(params?.widgetStopId),
+        },
         true,
       );
     });
@@ -942,133 +957,36 @@ export default function HomeScreen({
     if (!isActive) return undefined;
 
     function updateClock() {
-      setNow(new Date());
+      setNow(Date.now());
     }
 
     updateClock();
-    let intervalId: ReturnType<typeof setInterval> | undefined;
-    const timeoutId = setTimeout(
-      () => {
-        updateClock();
-        intervalId = setInterval(updateClock, 60_000);
-      },
-      60_000 - (Date.now() % 60_000),
-    );
-
+    // Live predictions move between minute ticks; 15 s keeps countdowns honest.
+    const intervalId = setInterval(updateClock, 15_000);
     const sub = AppState.addEventListener("change", (state) => {
       if (state === "active") updateClock();
     });
 
     return () => {
-      clearTimeout(timeoutId);
-      if (intervalId) clearInterval(intervalId);
+      clearInterval(intervalId);
       sub.remove();
     };
   }, [isActive]);
 
-  useEffect(() => {
-    if (mode === "kojori") {
-      kojoriPaneNowRef.current = now;
-    } else {
-      tbilisiPaneNowRef.current = now;
-    }
-  }, [mode, now]);
-
-  const activeStopId =
-    mode === "kojori"
-      ? settings.activeTbilisiStopId
-      : settings.activeKojoriStopId;
-  const kojoriPaneNow = mode === "kojori" ? now : kojoriPaneNowRef.current;
-  const tbilisiPaneNow = mode === "tbilisi" ? now : tbilisiPaneNowRef.current;
-
-  async function handleRefresh() {
-    if (isRefreshing) return;
-    setIsRefreshing(true);
-    setNow(new Date());
-
-    try {
-      await Promise.all([
-        queryClient.refetchQueries({
-          predicate: (query) =>
-            Array.isArray(query.queryKey) &&
-            query.queryKey[0] === "arrivals" &&
-            query.queryKey[1] === activeStopId,
-        }),
-        queryClient.refetchQueries({
-          queryKey: [
-            "schedule",
-            ROUTES["380"].id,
-            ROUTES["380"][activeDirection],
-          ],
-          exact: true,
-        }),
-        queryClient.refetchQueries({
-          queryKey: [
-            "schedule",
-            ROUTES["316"].id,
-            ROUTES["316"][activeDirection],
-          ],
-          exact: true,
-        }),
-        queryClient.refetchQueries({
-          queryKey: ["vehicle-positions", activeDirection],
-          exact: true,
-        }),
-      ]);
-    } finally {
-      setNow(new Date());
-      setIsRefreshing(false);
-    }
-  }
-
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
       <TtcStatusTopBar />
-
-      <View style={styles.directionPaneStack}>
-        <View
-          pointerEvents={mode === "kojori" ? "auto" : "none"}
-          style={[
-            styles.directionPane,
-            mode !== "kojori" && styles.directionPaneHidden,
-          ]}
-        >
-          <DirectionDeparturesView
-            isActive={isActive && mode === "kojori"}
-            direction="toKojori"
-            favoriteIds={settings.tbilisiFavorites}
-            activeStopId={settings.activeTbilisiStopId}
-            onSelectStop={(id) => update({ activeTbilisiStopId: id })}
-            onToggleFavorite={toggleTbilisiFavorite}
-            bottomInset={insets.bottom}
-            isRefreshing={isRefreshing}
-            onRefresh={handleRefresh}
-            now={kojoriPaneNow}
-            demoEnabled={settings.cancelledBusDemo}
-          />
-        </View>
-        <View
-          pointerEvents={mode === "tbilisi" ? "auto" : "none"}
-          style={[
-            styles.directionPane,
-            mode !== "tbilisi" && styles.directionPaneHidden,
-          ]}
-        >
-          <DirectionDeparturesView
-            isActive={isActive && mode === "tbilisi"}
-            direction="toTbilisi"
-            favoriteIds={settings.kojoriFavorites}
-            activeStopId={settings.activeKojoriStopId}
-            onSelectStop={(id) => update({ activeKojoriStopId: id })}
-            onToggleFavorite={toggleKojoriFavorite}
-            bottomInset={insets.bottom}
-            isRefreshing={isRefreshing}
-            onRefresh={handleRefresh}
-            now={tbilisiPaneNow}
-            demoEnabled={settings.cancelledBusDemo}
-          />
-        </View>
-      </View>
+      {selected ? (
+        <TripDeparturesView
+          key={selected.id}
+          trip={selected}
+          isActive={isActive}
+          bottomInset={insets.bottom}
+          now={now}
+        />
+      ) : (
+        <NoTrips bottomInset={insets.bottom} />
+      )}
     </View>
   );
 }
@@ -1079,6 +997,45 @@ function createStyles(C: AppColors) {
     screen: { flex: 1, backgroundColor: C.bg },
 
     modeContainer: { flex: 1 },
+    noTrips: {
+      flex: 1,
+      alignItems: "center",
+      justifyContent: "center",
+      paddingHorizontal: 36,
+      gap: 12,
+    },
+    noTripsIcon: {
+      width: 72,
+      height: 72,
+      borderRadius: 36,
+      alignItems: "center",
+      justifyContent: "center",
+      marginBottom: 8,
+    },
+    noTripsTitle: {
+      color: C.text,
+      fontSize: 24,
+      lineHeight: 30,
+      fontWeight: "700",
+      textAlign: "center",
+      fontFamily: Platform.select({ android: "serif", ios: "Georgia", default: "serif" }),
+    },
+    noTripsText: {
+      color: C.textDim,
+      fontSize: 15,
+      lineHeight: 21,
+      textAlign: "center",
+    },
+    noTripsButton: {
+      marginTop: 12,
+      height: 48,
+      borderRadius: 24,
+      paddingHorizontal: 22,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+    },
+    noTripsButtonText: { fontSize: 16, fontWeight: "800" },
     directionPaneStack: { flex: 1 },
     directionPane: { ...StyleSheet.absoluteFill },
     directionPaneHidden: { opacity: 0 },

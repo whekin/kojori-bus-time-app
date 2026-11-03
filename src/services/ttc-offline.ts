@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { clearTransitData } from '@/transit/data';
 import { QueryClient } from '@tanstack/react-query';
 
 import {
@@ -53,6 +54,7 @@ export interface TtcDatasetSyncState {
 export type TtcDatasetSyncMap = Record<TtcOfflineDataset, TtcDatasetSyncState>;
 
 export interface TtcOfflineSnapshot {
+  scheduleRevision: number;
   status: 'idle' | 'hydrating' | 'warming' | 'ready' | 'partial';
   completedSteps: number;
   totalSteps: number;
@@ -101,6 +103,11 @@ const TOTAL_OFFLINE_DATASETS = 3;
 const TOTAL_OFFLINE_STEPS = 3;
 const BAKED_AT_MS = new Date(BAKED_AT).getTime();
 let throttleMs = TTC_OFFLINE_THROTTLE_MS;
+let refreshInFlight: Promise<void> | null = null;
+let refreshInFlightKey: string | null = null;
+let lastAutoAttemptAt: number | null = null;
+let lastAutoSuccessAt: number | null = null;
+const AUTO_RETRY_INTERVAL_MS = 5 * 60_000;
 
 function buildDatasetSyncState(dataset: TtcOfflineDataset, cachedAtValues: (number | null)[]): TtcDatasetSyncState {
   const cachedValues = cachedAtValues.filter((value): value is number => typeof value === 'number');
@@ -147,6 +154,7 @@ function createBundledDatasetSync(): TtcDatasetSyncMap {
 
 const listeners = new Set<() => void>();
 let snapshot: TtcOfflineSnapshot = {
+  scheduleRevision: 0,
   status: 'idle',
   completedSteps: 0,
   totalSteps: TOTAL_OFFLINE_STEPS,
@@ -364,6 +372,7 @@ async function refreshStep(
       completedSteps: stepIndex,
       error: snapshot.error,
       lastCompletedDataset: dataset,
+      scheduleRevision: snapshot.scheduleRevision + (dataset === 'schedules' ? 1 : 0),
     });
   } catch (error) {
     const nextError = error instanceof Error ? error.message : `Could not refresh ${dataset}`;
@@ -689,6 +698,7 @@ export async function hydrateTtcOfflineData(client: QueryClient) {
     status: availableDatasets === TOTAL_OFFLINE_DATASETS ? 'ready' : 'partial',
     availableDatasets,
     lastHydratedAt: Date.now(),
+    scheduleRevision: snapshot.scheduleRevision + 1,
     lastSyncAt,
     oldestEffectiveSyncAt,
     datasetSync,
@@ -877,7 +887,7 @@ async function finishRefresh() {
   });
 }
 
-export async function refreshTtcOfflineDataset(
+async function refreshTtcOfflineDatasetImpl(
   client: QueryClient,
   dataset: TtcOfflineDataset,
   options: { force?: boolean } = {},
@@ -908,7 +918,7 @@ export async function refreshTtcOfflineDataset(
  * Gradually refreshes all offline datasets, throttling every TTC API request.
  * Cached data is used without delay unless force is enabled.
  */
-export async function warmTtcOfflineData(
+async function warmTtcOfflineDataImpl(
   client: QueryClient,
   options: { force?: boolean; skipFreshMs?: number } = {},
 ) {
@@ -970,9 +980,70 @@ export async function warmTtcOfflineData(
   await finishRefresh();
 }
 
-export async function clearAllTtcCache(client: QueryClient) {
-  await AsyncStorage.clear();
-  client.clear();
+function runOfflineRefresh(key: string, run: () => Promise<void>): Promise<void> {
+  if (refreshInFlight) {
+    if (refreshInFlightKey === key) return refreshInFlight;
+    return refreshInFlight.catch(() => { }).then(() => runOfflineRefresh(key, run));
+  }
+  refreshInFlightKey = key;
+  refreshInFlight = run().finally(() => {
+    refreshInFlight = null;
+    refreshInFlightKey = null;
+  });
+  return refreshInFlight;
+}
+
+export function refreshTtcOfflineDataset(
+  client: QueryClient,
+  dataset: TtcOfflineDataset,
+  options: { force?: boolean } = {},
+) {
+  return runOfflineRefresh(`${dataset}:${options.force ?? false}`, () => refreshTtcOfflineDatasetImpl(client, dataset, options));
+}
+
+export function warmTtcOfflineData(
+  client: QueryClient,
+  options: { force?: boolean; skipFreshMs?: number } = {},
+) {
+  return runOfflineRefresh(`all:${options.force ?? false}:${options.skipFreshMs ?? 0}`, () => warmTtcOfflineDataImpl(client, options));
+}
+
+/** Called after hydration, periodically while active, and on foreground. */
+export async function refreshTtcOfflineDataIfDue(client: QueryClient, now = Date.now()) {
+  if (!snapshot.lastHydratedAt || snapshot.status === 'hydrating' || refreshInFlight) return false;
+  const refreshedAt = Math.max(snapshot.lastSyncAt ?? 0, lastAutoSuccessAt ?? 0);
+  if (now - refreshedAt < TTC_OFFLINE_AUTO_REFRESH_INTERVAL) return false;
+  if (lastAutoAttemptAt !== null && now - lastAutoAttemptAt < AUTO_RETRY_INTERVAL_MS) return false;
+
+  lastAutoAttemptAt = now;
+  await warmTtcOfflineData(client);
+  if (!snapshot.error) lastAutoSuccessAt = now;
+  return true;
+}
+
+export function clearAllTtcCache(client: QueryClient) {
+  // Serialize clearing with downloads so they cannot restore removed keys.
+  return runOfflineRefresh('clear', () => clearTtcCacheImpl(client));
+}
+
+async function clearTtcCacheImpl(client: QueryClient) {
+  await clearTransitData(client);
+  const cacheKeys = (await AsyncStorage.getAllKeys()).filter(key =>
+    key.startsWith('@ttc_schedule_') ||
+    key.startsWith('@ttc_route_stops_') ||
+    key.startsWith('@ttc_route_polylines_') ||
+    key.startsWith('@ttc_stop_names_'),
+  );
+  const transitQueries = {
+    predicate: (query: { queryKey: readonly unknown[] }) =>
+      ['schedule', 'route-stops', 'route-polylines', 'stop', 'arrivals', 'vehicle-positions']
+        .includes(String(query.queryKey[0])),
+  };
+  await client.cancelQueries(transitQueries);
+  await AsyncStorage.multiRemove(cacheKeys);
+  client.removeQueries(transitQueries);
+  lastAutoAttemptAt = null;
+  lastAutoSuccessAt = null;
   updateSnapshot({
     status: 'idle',
     completedSteps: 0,
@@ -995,7 +1066,12 @@ export function __setTtcOfflineThrottleMsForTests(ms: number) {
 
 export function __resetTtcOfflineStateForTests() {
   throttleMs = TTC_OFFLINE_THROTTLE_MS;
+  refreshInFlight = null;
+  refreshInFlightKey = null;
+  lastAutoAttemptAt = null;
+  lastAutoSuccessAt = null;
   snapshot = {
+    scheduleRevision: 0,
     status: 'idle',
     completedSteps: 0,
     totalSteps: TOTAL_OFFLINE_STEPS,

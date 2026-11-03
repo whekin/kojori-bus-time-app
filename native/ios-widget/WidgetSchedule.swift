@@ -19,6 +19,8 @@ struct WidgetStop: Codable, Identifiable {
     let direction: String
     let names: [String: String]
     let routes: [String: [WidgetPeriod]]
+    var favoriteId: String? = nil
+    var routeNames: [String: String]? = nil
 
     var name: String { names[WidgetCopy.language] ?? names["en"] ?? stopId }
     var destination: String { WidgetCopy.text(direction) }
@@ -26,7 +28,7 @@ struct WidgetStop: Codable, Identifiable {
         var url = URLComponents()
         url.scheme = "kojoribs"
         url.host = ""
-        url.queryItems = [
+        url.queryItems = favoriteId.map { [URLQueryItem(name: "widgetFavoriteId", value: $0)] } ?? [
             URLQueryItem(name: "widgetMode", value: direction == "toKojori" ? "kojori" : "tbilisi"),
             URLQueryItem(name: "widgetStopId", value: stopId),
         ]
@@ -38,7 +40,8 @@ struct WidgetDeparture: Identifiable {
     let date: Date
     let bus: String
     let confirmed: Bool
-    var id: String { "\(bus)-\(date.timeIntervalSince1970)" }
+    var identity: String? = nil
+    var id: String { identity ?? "\(bus)-\(date.timeIntervalSince1970)" }
     var time: String {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_GB")
@@ -69,8 +72,33 @@ struct WidgetSchedule: Codable {
         return schedule
     }()
 
+    static var current: WidgetSchedule {
+        let group = Bundle.main.object(forInfoDictionaryKey: "KojoriWidgetAppGroup") as? String ?? "group.com.whekin.kojoribus.shared"
+        #if os(iOS)
+        if let container = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: group),
+           let data = try? Data(contentsOf: container.appendingPathComponent("favorites.json")),
+           let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let raw = root["iosSchedule"],
+           let encoded = try? JSONSerialization.data(withJSONObject: raw),
+           let saved = try? JSONDecoder().decode(WidgetSchedule.self, from: encoded),
+           saved.schemaVersion == 2 { return saved }
+        #endif
+        return bundled
+    }
+
+    func resolveStop(_ identifier: String?) -> WidgetStop? {
+        guard let identifier else { return stops.first }
+        if let saved = stops.first(where: { $0.id == identifier || $0.id == "legacy:\(identifier)" }) { return saved }
+        // Old stop-based widgets may use any bundled boarding stop, even one
+        // that was not the app's active stop during migration.
+        if identifier.hasPrefix("toKojori:") || identifier.hasPrefix("toTbilisi:") {
+            return Self.bundled.stops.first { $0.id == identifier }
+        }
+        return nil
+    }
+
     func departures(after now: Date, stopID: String, route: String = "all") -> [WidgetDeparture] {
-        guard let stop = stops.first(where: { $0.id == stopID }) else { return [] }
+        guard let stop = resolveStop(stopID) else { return [] }
         let calendar = Self.calendar
         let midnight = calendar.startOfDay(for: now)
         let formatter = DateFormatter()
@@ -84,14 +112,20 @@ struct WidgetSchedule: Codable {
             guard let day = calendar.date(byAdding: .day, value: offset, to: midnight) else { continue }
             let dateString = formatter.string(from: day)
             let weekday = calendar.component(.weekday, from: day) - 1
-            for bus in ["380", "316"] where route == "all" || route == bus {
-                let periods = stop.routes[bus] ?? []
+            for key in stop.routes.keys.sorted() {
+                let bus = stop.routeNames?[key] ?? key
+                guard route == "all" || route == bus else { continue }
+                let periods = stop.routes[key] ?? []
                 let exact = periods.first { $0.serviceDates.contains(dateString) }
+                let listedDates = periods.flatMap(\.serviceDates)
+                if exact == nil, !periods.contains(where: { $0.serviceDates.isEmpty }),
+                   let last = listedDates.max(), dateString <= last { continue }
                 guard let period = exact ?? periods.first(where: { $0.covers(weekday: weekday) }) else { continue }
                 for minutes in period.minutes where minutes >= 0 && minutes < 48 * 60 {
                     guard let departure = calendar.date(byAdding: .minute, value: minutes, to: day),
                           departure >= now else { continue }
-                    result.append(WidgetDeparture(date: departure, bus: bus, confirmed: exact != nil))
+                    result.append(WidgetDeparture(date: departure, bus: bus, confirmed: exact != nil,
+                                                  identity: "\(key)-\(departure.timeIntervalSince1970)"))
                 }
             }
         }

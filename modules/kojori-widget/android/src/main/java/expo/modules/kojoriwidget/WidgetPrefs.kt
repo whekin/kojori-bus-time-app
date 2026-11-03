@@ -3,12 +3,12 @@ package expo.modules.kojoriwidget
 import android.content.Context
 import java.util.UUID
 
-// Must match WIDGET_STATE_SCHEMA_VERSION in src/services/android-widget.ts.
-// Payloads with any other version render as "open app to load".
-internal const val WIDGET_STATE_SCHEMA_VERSION = 2
+// Must match FAVORITES_WIDGET_SCHEMA in src/transit/widget.ts.
+// Version 2 remains readable while existing widgets migrate to favorites.
+internal const val WIDGET_STATE_SCHEMA_VERSION = 3
 
 internal fun isSupportedWidgetState(root: org.json.JSONObject?): Boolean =
-  root?.optInt("schemaVersion", 1) == WIDGET_STATE_SCHEMA_VERSION
+  root != null && root.optInt("schemaVersion", 1) in 2..WIDGET_STATE_SCHEMA_VERSION
 
 object WidgetPrefs {
   private const val PREFS_NAME = "kojori_bus_widget"
@@ -23,12 +23,22 @@ object WidgetPrefs {
 
   fun getStateJson(context: Context): String? = prefs(context).getString(KEY_STATE_JSON, null)
 
-  fun setDirection(context: Context, direction: String) {
-    prefs(context).edit().putString(KEY_DIRECTION, direction).apply()
+  fun setDirection(context: Context, direction: String, widgetId: Int = -1) {
+    prefs(context).edit().putString(if (widgetId < 0) KEY_DIRECTION else "${KEY_DIRECTION}_$widgetId", direction).apply()
   }
 
-  fun getDirection(context: Context): String =
-    prefs(context).getString(KEY_DIRECTION, "kojori") ?: "kojori"
+  fun getDirection(context: Context, widgetId: Int = -1): String {
+    val saved = prefs(context).getString("${KEY_DIRECTION}_$widgetId", null)
+      ?: prefs(context).getString(KEY_DIRECTION, "kojori") ?: "kojori"
+    val root = getStateJson(context)?.let { runCatching { org.json.JSONObject(it) }.getOrNull() }
+    val order = root?.optJSONArray("favoriteOrder") ?: return saved
+    val ids = (0 until order.length()).map { order.optString(it) }
+    if (saved in ids) return saved
+    val migrated = root?.optJSONObject("legacySelections")?.optString(saved)
+    if (migrated != null && migrated in ids) return migrated
+    val legacyDirection = if (saved == "kojori") "toKojori" else if (saved == "tbilisi") "toTbilisi" else null
+    return ids.firstOrNull { legacyDirection != null && it.startsWith("legacy:$legacyDirection:") } ?: ids.firstOrNull() ?: ""
+  }
 
   fun getActionToken(context: Context): String {
     val prefs = prefs(context)

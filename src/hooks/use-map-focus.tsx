@@ -1,11 +1,10 @@
 import React, { createContext, useContext, useState } from 'react';
 
-import type { StopDirection } from '@/constants/curated-stops';
 import type { TabRoute } from '@/hooks/use-tab-nav';
 import type { StopInfo } from '@/services/ttc';
 
 export type FocusedMapStop = StopInfo & {
-  direction: StopDirection;
+  tripId: string;
   returnRoute?: TabRoute;
   requestedAt: number;
 };
@@ -13,7 +12,7 @@ export type FocusedMapStop = StopInfo & {
 export type StopSheetReturnRequest = {
   route: TabRoute;
   stopId: string;
-  direction: StopDirection;
+  tripId: string;
   requestedAt: number;
 };
 
@@ -23,7 +22,7 @@ type MapFocusContextValue = {
   clearStopFocus: () => void;
   requestStopFocus: (
     stop: StopInfo,
-    direction: StopDirection,
+    tripId: string,
     options?: { returnRoute?: TabRoute },
   ) => void;
   requestStopSheetReturn: () => void;
@@ -44,12 +43,12 @@ export function MapFocusProvider({ children }: { children: React.ReactNode }) {
 
   function requestStopFocus(
     stop: StopInfo,
-    direction: StopDirection,
+    tripId: string,
     options?: { returnRoute?: TabRoute },
   ) {
     setFocusedStop({
       ...stop,
-      direction,
+      tripId,
       returnRoute: options?.returnRoute,
       requestedAt: Date.now(),
     });
@@ -65,7 +64,7 @@ export function MapFocusProvider({ children }: { children: React.ReactNode }) {
     setStopSheetReturnRequest({
       route: focusedStop.returnRoute,
       stopId: focusedStop.id,
-      direction: focusedStop.direction,
+      tripId: focusedStop.tripId,
       requestedAt: Date.now(),
     });
   }

@@ -1,27 +1,49 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import { useQueries, useQueryClient } from '@tanstack/react-query';
 import * as Location from 'expo-location';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, BackHandler, Easing, Pressable, StyleSheet, Text, useWindowDimensions, View, type StyleProp, type ViewStyle } from 'react-native';
 import MapView, { Callout, Marker, Polyline, type MapMarker, type MapPressEvent, type Region } from 'react-native-maps';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { DirectionSwitch } from '@/components/stop-selector';
+import { MapEmptyState } from '@/components/map-empty-state';
+import {
+  hasCoordinates,
+  headsignLabel,
+  kojoriPatternDirection,
+  kojoriTripDirection,
+  mapTripAccent,
+  plainStop,
+  routePointsOf,
+  stopAdditions,
+  tripHasStop,
+  tripWithoutStop,
+  type KojoriDirection,
+} from '@/components/map-trip';
+import { TripSwitch } from '@/components/stop-selector';
 import { TtcStatusChip } from '@/components/ttc-status-banner';
 import { getCuratedStopIds } from '@/constants/curated-stops';
 import { GOOGLE_DARK_MAP_STYLE, GOOGLE_LIGHT_MAP_STYLE } from '@/constants/map-style';
 import { alpha, BottomTabInset } from '@/constants/theme';
-import { useActiveDirection } from '@/hooks/use-active-direction';
-import { useArrivals } from '@/hooks/use-arrivals';
 import { useAppColors, useResolvedAppThemeMode } from '@/hooks/use-app-colors';
 import { useI18n } from '@/hooks/use-i18n';
 import { useMapFocus } from '@/hooks/use-map-focus';
 import { useReducedMotion } from '@/hooks/use-reduced-motion';
-import { useRoutePolylines } from '@/hooks/use-route-polylines';
-import { useRouteStops } from '@/hooks/use-route-stops';
-import { getDemoVehiclePositions, useVehiclePositions } from '@/hooks/use-vehicle-positions';
+import { getDemoVehiclePositions } from '@/hooks/use-vehicle-positions';
 import { useSettings } from '@/hooks/use-settings';
 import { useTabNav } from '@/hooks/use-tab-nav';
-import { findStop, type StopInfo } from '@/services/ttc';
+import {
+  findStop,
+  ROUTES,
+  type ArrivalTime,
+  type PolylinePoint,
+  type StopInfo,
+  type VehiclePosition,
+} from '@/services/ttc';
+import { arrivalsQuery, geometryQuery, positionsQuery, stopsQuery } from '@/transit/data';
+import { useFavorites } from '@/transit/favorites';
+import { patternKey, tripPatterns, tripStopId, tripStops, type Boarding } from '@/transit/model';
+import { routeColor, transitModeIcon, useFavoriteTitle } from '@/transit/ui';
 import { simplifyPolyline, splitPolylinesByOverlap } from '@/utils/polyline-offset';
 import {
   buildPolylineMetrics,
@@ -40,11 +62,27 @@ const DEFAULT_REGION: Region = {
   longitudeDelta: 0.1,
 };
 
-const MAP_BOUNDS = {
+type MapBounds = {
+  latMin: number;
+  latMax: number;
+  lonMin: number;
+  lonMax: number;
+};
+
+// Kojori trips keep the hand-tuned frame around Tbilisi and the Kojori road.
+const KOJORI_MAP_BOUNDS: MapBounds = {
   latMin: 41.55,
   latMax: 41.75,
   lonMin: 44.65,
   lonMax: 44.87,
+};
+// Any other trip is framed by its own routes plus this much slack.
+const ROUTE_BOUNDS_MARGIN_DEGREES = 0.05;
+const FALLBACK_MAP_BOUNDS: MapBounds = {
+  latMin: 41.55,
+  latMax: 41.9,
+  lonMin: 44.6,
+  lonMax: 45.1,
 };
 
 type ExploreScreenProps = {
@@ -52,12 +90,69 @@ type ExploreScreenProps = {
   suspendNativeMap?: boolean;
 };
 
-function routeAccent(bus: '380' | '316', colors: ReturnType<typeof useAppColors>) {
-  return bus === '380' ? colors.route380 : colors.route316;
+type MapRoute = {
+  key: string;
+  boarding: Boarding;
+  direction: KojoriDirection | null;
+  stops: StopInfo[];
+  points: PolylinePoint[];
+};
+
+type MapVehiclePosition = VehiclePosition & { routeKey: string };
+
+const NO_STOPS: StopInfo[] = [];
+const NO_VEHICLES: VehiclePosition[] = [];
+
+// Module-level combiners: TanStack structurally shares their output, so the
+// arrays below keep their identity until the underlying data really changes.
+function combineData<T>(results: { data: T | undefined }[]) {
+  return results.map(result => result.data);
 }
 
-function isTrackedBusLine(value: string): value is '380' | '316' {
-  return value === '380' || value === '316';
+function combineVehicles(results: {
+  data: VehiclePosition[] | undefined;
+  isError: boolean;
+  isFetching: boolean;
+  status: string;
+}[]) {
+  return {
+    vehicles: results.map(result => (result.isError ? NO_VEHICLES : (result.data ?? NO_VEHICLES))),
+    isFetching: results.some(result => result.isFetching),
+    settled: results.every(result => result.status !== 'pending'),
+  };
+}
+
+function boundsForPoints(points: PolylinePoint[], kojori: boolean): MapBounds {
+  if (kojori) return KOJORI_MAP_BOUNDS;
+  if (!points.length) return FALLBACK_MAP_BOUNDS;
+  let latMin = Infinity;
+  let latMax = -Infinity;
+  let lonMin = Infinity;
+  let lonMax = -Infinity;
+  for (const point of points) {
+    latMin = Math.min(latMin, point.latitude);
+    latMax = Math.max(latMax, point.latitude);
+    lonMin = Math.min(lonMin, point.longitude);
+    lonMax = Math.max(lonMax, point.longitude);
+  }
+  return {
+    latMin: latMin - ROUTE_BOUNDS_MARGIN_DEGREES,
+    latMax: latMax + ROUTE_BOUNDS_MARGIN_DEGREES,
+    lonMin: lonMin - ROUTE_BOUNDS_MARGIN_DEGREES,
+    lonMax: lonMax + ROUTE_BOUNDS_MARGIN_DEGREES,
+  };
+}
+
+function initialRegionFor(points: PolylinePoint[], kojori: boolean): Region {
+  if (kojori || points.length < 2) return DEFAULT_REGION;
+  const bounds = boundsForPoints(points, false);
+  const margin = ROUTE_BOUNDS_MARGIN_DEGREES;
+  return {
+    latitude: (bounds.latMin + bounds.latMax) / 2,
+    longitude: (bounds.lonMin + bounds.lonMax) / 2,
+    latitudeDelta: Math.max(0.02, (bounds.latMax - bounds.latMin - 2 * margin) * 1.3),
+    longitudeDelta: Math.max(0.02, (bounds.lonMax - bounds.lonMin - 2 * margin) * 1.3),
+  };
 }
 
 function StopPostGlyph({ size, color }: { size: number; color: string }) {
@@ -198,7 +293,6 @@ const REGION_SAMPLE_THROTTLE_MS = 150;
 const REGION_CENTER_EPSILON = 0.00035;
 const REGION_DELTA_EPSILON = 0.0015;
 
-type MapDirection = 'toKojori' | 'toTbilisi';
 type StopMarkerZoomTier = 'overview' | 'mid' | 'close';
 type StopMarkerData = {
   stop: StopInfo;
@@ -210,7 +304,10 @@ type DeclutteredStopMarkers = {
   compact: StopMarkerData[];
 };
 type VehicleSample = {
-  bus: '380' | '316';
+  routeKey: string;
+  /** Route number painted on the pin. */
+  label: string;
+  mode: string;
   vehicleId: string;
   rawCoordinate: { latitude: number; longitude: number };
   heading: number | null;
@@ -219,6 +316,8 @@ type VehicleSample = {
 };
 type VehicleRouteTrack = {
   metrics: PolylineMetrics;
+  /** Set for 380/316 patterns, which use the Kojori road speed model. */
+  direction: KojoriDirection | null;
   trafficAnchorMeters: number | null;
   // Projecting a stop onto the route walks every polyline point. The ETA
   // readout asks for the same boarding stop once per vehicle per render, so
@@ -227,7 +326,6 @@ type VehicleRouteTrack = {
 };
 
 function StopMapMarker({
-  direction,
   stop,
   isPromoted,
   isSimpleOrdinaryStop,
@@ -238,7 +336,6 @@ function StopMapMarker({
   colors,
   onPress,
 }: {
-  direction: MapDirection;
   stop: StopInfo;
   isPromoted: boolean;
   isSimpleOrdinaryStop: boolean;
@@ -272,7 +369,6 @@ function StopMapMarker({
   if (isPromoted) {
     return (
       <Marker
-        key={`stop-${direction}-${stop.id}`}
         coordinate={{ latitude: stop.lat!, longitude: stop.lon! }}
         anchor={STOP_MARKER_ANCHOR}
         tracksViewChanges={trackMarkerViewChanges}
@@ -309,7 +405,6 @@ function StopMapMarker({
 
   return (
     <Marker
-      key={`stop-${direction}-${stop.id}`}
       coordinate={{ latitude: stop.lat!, longitude: stop.lon! }}
       anchor={STOP_MARKER_ANCHOR}
       tracksViewChanges={trackMarkerViewChanges}
@@ -431,8 +526,9 @@ function stopMarkerPriority(
   firstRouteStopId: string | undefined,
   favoriteStopSet: Set<string>,
   curatedStopSet: Set<string>,
+  isKojoriTrip: boolean,
 ) {
-  if (stopId === KOJORI_CENTER_STOP_ID) return 5;
+  if (isKojoriTrip && stopId === KOJORI_CENTER_STOP_ID) return 5;
   if (stopId === firstRouteStopId) return 4;
   if (favoriteStopSet.has(stopId)) return 3;
   if (curatedStopSet.has(stopId)) return 2;
@@ -448,11 +544,15 @@ function isLikelyTbilisiTraffic(point: { latitude: number; longitude: number }) 
 }
 
 function vehicleCruiseSpeedMetersPerSecond(
-  direction: MapDirection,
   progressMeters: number,
   point: { latitude: number; longitude: number },
   track: VehicleRouteTrack,
 ) {
+  const direction = track.direction;
+  // Only the Kojori road has a tuned speed profile; everything else moves at
+  // city traffic pace.
+  if (!direction) return kmhToMetersPerSecond(CITY_SPEED_KMH);
+
   const trafficAnchorMeters = track.trafficAnchorMeters;
   const isAfterTrafficAnchor = trafficAnchorMeters !== null
     ? direction === 'toTbilisi'
@@ -465,19 +565,25 @@ function vehicleCruiseSpeedMetersPerSecond(
   return kmhToMetersPerSecond(KOJORI_SPEED_KMH);
 }
 
+function buildVehicleTrack(route: MapRoute): VehicleRouteTrack | null {
+  if (route.points.length < 2) return null;
+  const metrics = buildPolylineMetrics(route.points);
+  const trafficAnchorMeters = route.direction
+    ? projectStopToRoute(findStop(TBILISI_TRAFFIC_ANCHOR_STOP_ID), metrics)?.distanceMeters ?? null
+    : null;
+  return { metrics, direction: route.direction, trafficAnchorMeters, stopMetersCache: new Map() };
+}
+
 function buildVehicleSample(
-  position: {
-    bus: '380' | '316';
-    vehicleId: string;
-    lat: number;
-    lon: number;
-    heading: number;
-  },
+  position: MapVehiclePosition,
+  route: MapRoute,
   track: VehicleRouteTrack | undefined,
 ): VehicleSample {
   const rawCoordinate = { latitude: position.lat, longitude: position.lon };
   const base: VehicleSample = {
-    bus: position.bus,
+    routeKey: route.key,
+    label: route.boarding.route.shortName,
+    mode: route.boarding.route.mode,
     vehicleId: position.vehicleId,
     rawCoordinate,
     heading: Number.isFinite(position.heading) ? position.heading : null,
@@ -513,24 +619,23 @@ function vehicleArrowSectorAt(sample: VehicleSample, track: VehicleRouteTrack | 
 // Rough ETA from a live vehicle to a stop further along its route, using the
 // same segment speed model that drives the marker animation. Returns null
 // when the bus is off-route, at, or already past the stop.
-function stopMetersOnTrack(track: VehicleRouteTrack, stopId: string): number | null {
-  const cached = track.stopMetersCache.get(stopId);
+function stopMetersOnTrack(track: VehicleRouteTrack, stop: StopInfo): number | null {
+  const cached = track.stopMetersCache.get(stop.id);
   if (cached !== undefined) return cached;
 
-  const meters = projectStopToRoute(findStop(stopId), track.metrics)?.distanceMeters ?? null;
-  track.stopMetersCache.set(stopId, meters);
+  const meters = projectStopToRoute(stop, track.metrics)?.distanceMeters ?? null;
+  track.stopMetersCache.set(stop.id, meters);
   return meters;
 }
 
 function estimateVehicleEtaMinutes(
   sample: VehicleSample,
   track: VehicleRouteTrack | undefined,
-  direction: MapDirection,
-  stopId: string,
+  stop: StopInfo,
 ): number | null {
   if (!sample.onRoute || !track) return null;
 
-  const stopMeters = stopMetersOnTrack(track, stopId);
+  const stopMeters = stopMetersOnTrack(track, stop);
   if (stopMeters == null) return null;
   if (stopMeters <= sample.routeMeters + 30) return null;
 
@@ -539,7 +644,7 @@ function estimateVehicleEtaMinutes(
   while (meters < stopMeters) {
     const chunkMeters = Math.min(500, stopMeters - meters);
     const point = interpolatePolylineAtDistance(track.metrics, meters)?.point ?? sample.rawCoordinate;
-    const speed = vehicleCruiseSpeedMetersPerSecond(direction, meters, point, track);
+    const speed = vehicleCruiseSpeedMetersPerSecond(meters, point, track);
     seconds += chunkMeters / Math.max(1, speed);
     meters += chunkMeters;
   }
@@ -550,7 +655,6 @@ function estimateVehicleEtaMinutes(
 function AnimatedVehicleMarker({
   sample,
   track,
-  direction,
   isActive,
   reduceMotion,
   accent,
@@ -560,7 +664,6 @@ function AnimatedVehicleMarker({
 }: {
   sample: VehicleSample;
   track: VehicleRouteTrack | undefined;
-  direction: MapDirection;
   isActive: boolean;
   reduceMotion: boolean;
   accent: string;
@@ -577,7 +680,6 @@ function AnimatedVehicleMarker({
   // short segments follow the road instead of cutting corners.
   const sampleRef = useRef(sample);
   const trackRef = useRef(track);
-  const directionRef = useRef(direction);
   const displayedMetersRef = useRef<number | null>(null);
   const displayedCoordinateRef = useRef(sample.rawCoordinate);
   const [initialCoordinate] = useState(() => {
@@ -595,7 +697,8 @@ function AnimatedVehicleMarker({
   const pinHeight = VEHICLE_PIN_CANVAS_SIZE;
   const busIconSize = 16;
   const routeFontSize = 10;
-  const routeDigits = sample.bus.split('');
+  const routeDigits = sample.label.split('');
+  const modeIcon = transitModeIcon(sample.mode);
 
   useEffect(() => {
     setCanAnimateNativeMarker(false);
@@ -613,8 +716,7 @@ function AnimatedVehicleMarker({
   useEffect(() => {
     sampleRef.current = sample;
     trackRef.current = track;
-    directionRef.current = direction;
-  }, [sample, track, direction]);
+  }, [sample, track]);
 
   useEffect(() => {
     if (!isActive || !canAnimateNativeMarker) return;
@@ -691,7 +793,6 @@ function AnimatedVehicleMarker({
       if (speedFactor <= 0) return;
 
       const cruiseSpeed = vehicleCruiseSpeedMetersPerSecond(
-        directionRef.current,
         displayed,
         displayedCoordinateRef.current,
         currentTrack,
@@ -762,7 +863,7 @@ function AnimatedVehicleMarker({
         <View collapsable={false} style={styles.vehiclePinContent}>
           <View collapsable={false} style={styles.vehiclePinBusIconSlot}>
             <MaterialCommunityIcons
-              name="bus"
+              name={modeIcon}
               size={busIconSize}
               color="#FFFFFF"
               style={styles.vehiclePinBusIcon}
@@ -771,7 +872,7 @@ function AnimatedVehicleMarker({
           <View style={styles.vehicleRouteDigits}>
             {routeDigits.map((digit, index) => (
               <Text
-                key={`${sample.bus}-${index}`}
+                key={`${sample.routeKey}-${index}`}
                 allowFontScaling={false}
                 style={[
                   styles.vehicleRouteLabel,
@@ -789,7 +890,7 @@ function AnimatedVehicleMarker({
       <Callout tooltip>
         <View style={styles.vehicleCallout}>
           <View style={[styles.vehicleCalloutIcon, { backgroundColor: accent }]}>
-            <MaterialCommunityIcons name="bus" size={22} color="#FFFFFF" />
+            <MaterialCommunityIcons name={modeIcon} size={22} color="#FFFFFF" />
           </View>
           <View style={styles.vehicleCalloutCopy}>
             <Text style={styles.vehicleCalloutTitle} numberOfLines={1}>
@@ -965,14 +1066,23 @@ export default function ExploreScreen({
   }));
   const colors = isActive ? liveColors : inactiveThemeSnapshot.colors;
   const resolvedThemeMode = isActive ? liveResolvedThemeMode : inactiveThemeSnapshot.resolvedThemeMode;
-  const { t } = useI18n();
+  const { t, ttcLocale, localizedStopName } = useI18n();
   const reduceMotion = useReducedMotion();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const mapRef = useRef<MapView>(null);
-  const { activeDirection, selectDirection } = useActiveDirection();
-  const { settings, update, toggleKojoriFavorite, toggleTbilisiFavorite } = useSettings();
+  const queryClient = useQueryClient();
+  const {
+    state: favoritesState,
+    selected,
+    isLoaded: favoritesLoaded,
+    select,
+    setStop,
+    save,
+  } = useFavorites();
+  const tripTitle = useFavoriteTitle();
+  const { settings } = useSettings();
   const { focusedStop, clearStopFocus, requestStopFocus, requestStopSheetReturn } = useMapFocus();
   const navigateToTab = useTabNav();
   const lastFitKeyRef = useRef<string | null>(null);
@@ -983,12 +1093,58 @@ export default function ExploreScreen({
   const [hasUserLocation, setHasUserLocation] = useState(false);
   const [isLocating, setIsLocating] = useState(false);
   const [locationMessage, setLocationMessage] = useState<string | null>(null);
-  const [currentRegion, setCurrentRegion] = useState<Region>(DEFAULT_REGION);
   const [demoNow, setDemoNow] = useState(() => Date.now());
-  const [inactiveMapDirection, setInactiveMapDirection] = useState(activeDirection);
+  // While the tab is hidden the map keeps drawing the trip it last showed, so
+  // switching trips elsewhere does not churn the native map off-screen.
+  const [inactiveTripId, setInactiveTripId] = useState(selected?.id ?? null);
 
-  const direction = isActive ? activeDirection : inactiveMapDirection;
+  const trip = isActive
+    ? selected
+    : (favoritesState.favorites.find(favorite => favorite.id === inactiveTripId) ?? selected);
+  const tripId = trip?.id ?? null;
+  const tripKojoriDirection = trip ? kojoriTripDirection(trip) : null;
+  const isKojoriTrip = tripKojoriDirection !== null;
+  const mapAccent = mapTripAccent(trip, colors);
   const useCompactMapControls = windowWidth < 390;
+
+  // One boarding per route pattern — the lines, stops and vehicles drawn.
+  const patterns = useMemo(() => (trip ? tripPatterns(trip) : []), [trip]);
+  const stopsData = useQueries({
+    queries: patterns.map(boarding => ({ ...stopsQuery(boarding, ttcLocale), enabled: isActive })),
+    combine: combineData<StopInfo[]>,
+  });
+  const geometryData = useQueries({
+    queries: patterns.map(boarding => ({ ...geometryQuery(boarding), enabled: isActive })),
+    combine: combineData<PolylinePoint[]>,
+  });
+  const liveVehicles = useQueries({
+    queries: patterns.map(boarding => positionsQuery(boarding, isActive)),
+    combine: combineVehicles,
+  });
+  const isFetching = liveVehicles.isFetching;
+
+  const routePoints = useMemo(
+    () => geometryData.map((geometry, index) => routePointsOf(geometry, stopsData[index])),
+    [geometryData, stopsData],
+  );
+  const mapRoutes = useMemo<MapRoute[]>(
+    () => patterns.map((boarding, index) => ({
+      key: patternKey(boarding),
+      boarding,
+      direction: kojoriPatternDirection(boarding),
+      stops: stopsData[index] ?? NO_STOPS,
+      points: routePoints[index] ?? [],
+    })),
+    [patterns, routePoints, stopsData],
+  );
+  const allRoutePoints = useMemo(() => routePoints.flat(), [routePoints]);
+  const mapBounds = useMemo(
+    () => boundsForPoints(allRoutePoints, isKojoriTrip),
+    [allRoutePoints, isKojoriTrip],
+  );
+  const [currentRegion, setCurrentRegion] = useState<Region>(() =>
+    initialRegionFor(allRoutePoints, isKojoriTrip),
+  );
 
   useEffect(() => {
     if (!isActive && !suspendNativeMap) return;
@@ -1005,39 +1161,33 @@ export default function ExploreScreen({
   }, [isActive, liveColors, liveResolvedThemeMode, suspendNativeMap]);
 
   useEffect(() => {
-    if (!isActive || inactiveMapDirection === activeDirection) return;
-    setInactiveMapDirection(activeDirection);
-  }, [activeDirection, inactiveMapDirection, isActive]);
+    const selectedId = selected?.id ?? null;
+    if (!isActive || inactiveTripId === selectedId) return;
+    setInactiveTripId(selectedId);
+  }, [inactiveTripId, isActive, selected?.id]);
+
+  const hasMapView = !suspendNativeMap && tripId !== null;
 
   useEffect(() => {
-    if (!suspendNativeMap) return;
+    if (hasMapView) return;
     setMapReady(false);
     setMapTimedOut(false);
     lastFitKeyRef.current = null;
-  }, [suspendNativeMap]);
+  }, [hasMapView]);
 
   useEffect(() => {
-    if (!isActive || mapReady) return;
+    if (!isActive || mapReady || !hasMapView) return;
     const id = setTimeout(() => setMapTimedOut(true), 8000);
     return () => clearTimeout(id);
-  }, [isActive, mapReady]);
-
-  const { data: toKojoriRouteData } = useRoutePolylines('toKojori');
-  const { data: toTbilisiRouteData } = useRoutePolylines('toTbilisi');
-  const { stops: routeStops } = useRouteStops(direction);
-  const { data: livePositions = [], refetch, isFetching } = useVehiclePositions(direction, isActive);
-  const {
-    arrivals: focusedStopArrivals,
-    isFetching: isFetchingFocusedStopArrivals,
-  } = useArrivals(focusedStop?.id ?? '', focusedStop?.direction, isActive && Boolean(focusedStop));
+  }, [hasMapView, isActive, mapReady]);
 
   useEffect(() => {
-    if (!settings.cancelledBusDemo || !isActive) return;
+    if (!settings.cancelledBusDemo || !isActive || !isKojoriTrip) return;
 
     setDemoNow(Date.now());
     const intervalId = setInterval(() => setDemoNow(Date.now()), 10_000);
     return () => clearInterval(intervalId);
-  }, [isActive, settings.cancelledBusDemo]);
+  }, [isActive, isKojoriTrip, settings.cancelledBusDemo]);
 
   const spinAnim = useRef(new Animated.Value(0)).current;
 
@@ -1086,69 +1236,114 @@ export default function ExploreScreen({
     outputRange: ['0deg', '360deg'],
   });
 
-  const positions = useMemo(() => {
-    if (!settings.cancelledBusDemo) return livePositions;
+  const positions = useMemo<MapVehiclePosition[]>(() => {
+    const live = mapRoutes.flatMap((route, index) =>
+      (liveVehicles.vehicles[index] ?? NO_VEHICLES).map(position => ({ ...position, routeKey: route.key })),
+    );
+    if (!settings.cancelledBusDemo || !tripKojoriDirection) return live;
 
-    const liveWithoutDemo = livePositions.filter(position => !position.vehicleId.startsWith('demo-'));
-    return [
-      ...getDemoVehiclePositions(direction, demoNow),
-      ...liveWithoutDemo,
-    ];
-  }, [demoNow, direction, livePositions, settings.cancelledBusDemo]);
-  const routeData = direction === 'toKojori' ? toKojoriRouteData : toTbilisiRouteData;
-  const focusedRouteData = focusedStop?.direction === 'toKojori' ? toKojoriRouteData : toTbilisiRouteData;
-  const routePolylines = routeData?.polylines;
-  const vehicleRouteTracks = useMemo<Partial<Record<'380' | '316', VehicleRouteTrack>>>(() => {
-    if (!routePolylines) return {};
+    // The cancelled-bus demo only knows the 380/316 Kojori lines.
+    const demo = getDemoVehiclePositions(tripKojoriDirection, demoNow).flatMap(position => {
+      const route = mapRoutes.find(candidate => candidate.boarding.route.id === ROUTES[position.bus].id);
+      return route ? [{ ...position, routeKey: route.key }] : [];
+    });
+    return [...demo, ...live.filter(position => !position.vehicleId.startsWith('demo-'))];
+  }, [demoNow, liveVehicles.vehicles, mapRoutes, settings.cancelledBusDemo, tripKojoriDirection]);
 
-    return (['316', '380'] as const).reduce<Partial<Record<'380' | '316', VehicleRouteTrack>>>((tracks, bus) => {
-      const points = routePolylines[bus] ?? [];
-      if (points.length < 2) return tracks;
-
-      const metrics = buildPolylineMetrics(points);
-      const trafficAnchorMeters = projectStopToRoute(findStop(TBILISI_TRAFFIC_ANCHOR_STOP_ID), metrics)?.distanceMeters ?? null;
-      tracks[bus] = { metrics, trafficAnchorMeters, stopMetersCache: new Map() };
-      return tracks;
-    }, {});
-  }, [routePolylines]);
+  const vehicleRouteTracks = useMemo(() => {
+    const tracks = new Map<string, VehicleRouteTrack>();
+    mapRoutes.forEach(route => {
+      const track = buildVehicleTrack(route);
+      if (track) tracks.set(route.key, track);
+    });
+    return tracks;
+  }, [mapRoutes]);
   const vehicleSamples = useMemo(() => {
-    return positions.map(position => buildVehicleSample(position, vehicleRouteTracks[position.bus]));
-  }, [positions, vehicleRouteTracks]);
-  // The boarding stop for this direction: toKojori boards in Tbilisi.
-  const boardingStopId = direction === 'toKojori'
-    ? settings.activeTbilisiStopId
-    : settings.activeKojoriStopId;
+    const routes = new Map(mapRoutes.map(route => [route.key, route]));
+    return positions.flatMap(position => {
+      const route = routes.get(position.routeKey);
+      return route ? [buildVehicleSample(position, route, vehicleRouteTracks.get(route.key))] : [];
+    });
+  }, [mapRoutes, positions, vehicleRouteTracks]);
+  // The boarding stop on each pattern: where the ETA readout counts down to.
+  const activeStopId = trip ? tripStopId(trip) : '';
+  const boardingStops = useMemo(() => {
+    const stops = new Map<string, StopInfo>();
+    trip?.boardings
+      .filter(boarding => boarding.stop.id === activeStopId)
+      .forEach(boarding => stops.set(patternKey(boarding), boarding.stop));
+    return stops;
+  }, [activeStopId, trip]);
   // ETA walks the route in 500m chunks per vehicle. Kept out of the render
   // body so panning and zooming (which commit `currentRegion`) never redo it.
   const vehicleMarkers = useMemo(() => {
-    const destination = direction === 'toKojori' ? t('cityKojori') : t('cityTbilisi');
+    const routes = new Map(mapRoutes.map(route => [route.key, route]));
 
     return vehicleSamples.map(sample => {
-      const track = vehicleRouteTracks[sample.bus];
-      const etaMinutes = estimateVehicleEtaMinutes(sample, track, direction, boardingStopId);
+      const route = routes.get(sample.routeKey)!;
+      const track = vehicleRouteTracks.get(sample.routeKey);
+      const boardingStop = boardingStops.get(sample.routeKey);
+      const etaMinutes = boardingStop ? estimateVehicleEtaMinutes(sample, track, boardingStop) : null;
 
       return {
         sample,
         track,
-        accent: routeAccent(sample.bus, colors),
-        title: `${sample.bus} ${t('directionTo')}${destination}`,
+        accent: routeColor(route.boarding.route.id, colors, trip),
+        title: `${sample.label} ${t('directionTo')}${headsignLabel(route.boarding.pattern.headsign, t)}`,
         subtitle: etaMinutes != null
           ? t('mapVehicleEta', { minutes: etaMinutes })
           : t('mapVehicle', { id: sample.vehicleId }),
       };
     });
-  }, [boardingStopId, colors, direction, t, vehicleRouteTracks, vehicleSamples]);
+  }, [boardingStops, colors, mapRoutes, t, trip, vehicleRouteTracks, vehicleSamples]);
+
+  // Stop focus can come from another trip (the home screen's selector, or a
+  // trip switch while the tray is open), so actions resolve the trip by id.
+  const findTrip = (id: string | undefined) =>
+    id ? favoritesState.favorites.find(favorite => favorite.id === id) : undefined;
+  const focusedTrip = focusedStop ? (findTrip(focusedStop.tripId) ?? trip) : undefined;
   // The tray animates out after the focus is cleared, so it renders from the
   // last stop that was focused rather than from the live one — reading the
   // live value would empty the tray mid-exit and collapse its height.
   const [trayStop, setTrayStop] = useState(focusedStop);
-  const focusedLiveArrivals = useMemo(
-    () => focusedStopArrivals
-      .filter(arrival => arrival.realtime && isTrackedBusLine(arrival.shortName))
-      .slice(0, 3),
-    [focusedStopArrivals],
-  );
-  const [trayArrivals, setTrayArrivals] = useState({
+  const trayTrip = trayStop ? (findTrip(trayStop.tripId) ?? trip) : undefined;
+  const trayPatterns = useMemo(() => (trayTrip ? tripPatterns(trayTrip) : []), [trayTrip]);
+  // Same query keys as the map's own stop lists, so this is a cache read
+  // unless the tray belongs to another trip.
+  const trayPatternStops = useQueries({
+    queries: trayPatterns.map(boarding => ({ ...stopsQuery(boarding, ttcLocale), enabled: isActive })),
+    combine: combineData<StopInfo[]>,
+  });
+  const arrivalBoarding: Boarding | null = focusedStop && focusedTrip?.boardings[0]
+    ? { ...focusedTrip.boardings[0], stop: plainStop(focusedStop) }
+    : null;
+  const [focusedArrivalsQuery] = useQueries({
+    queries: (arrivalBoarding ? [arrivalBoarding] : []).map(boarding =>
+      arrivalsQuery(boarding, ttcLocale, isActive),
+    ),
+  });
+  const focusedStopArrivals = focusedArrivalsQuery?.data;
+  const isFetchingFocusedStopArrivals = focusedArrivalsQuery?.isFetching ?? false;
+  const focusedLiveArrivals = useMemo(() => {
+    if (!focusedTrip) return [];
+    const tripRoutePatterns = tripPatterns(focusedTrip);
+    return (focusedStopArrivals ?? [])
+      .flatMap(arrival => {
+        const boarding = tripRoutePatterns.find(candidate =>
+          candidate.route.shortName === arrival.shortName &&
+          candidate.pattern.patternSuffix === arrival.patternSuffix,
+        );
+        return arrival.realtime && boarding
+          ? [{ arrival, routeId: boarding.route.id }]
+          : [];
+      })
+      .sort((a, b) => a.arrival.realtimeArrivalMinutes - b.arrival.realtimeArrivalMinutes)
+      .slice(0, 3);
+  }, [focusedStopArrivals, focusedTrip]);
+  const [trayArrivals, setTrayArrivals] = useState<{
+    arrivals: { arrival: ArrivalTime; routeId: string }[];
+    isFetching: boolean;
+  }>({
     arrivals: focusedLiveArrivals,
     isFetching: isFetchingFocusedStopArrivals,
   });
@@ -1170,54 +1365,45 @@ export default function ExploreScreen({
   // halo captures its icon once and would otherwise bake in the accent of the
   // previously focused stop (`trayStop` lags by a render). The tray follows
   // the held stop so it keeps its colour while animating out.
-  const focusedStopAccent = focusedStop?.direction === 'toKojori' ? colors.route380 : colors.route316;
-  const trayAccent = trayStop?.direction === 'toKojori' ? colors.route380 : colors.route316;
-  const focusedStopIsSaved = trayStop
-    ? trayStop.direction === 'toKojori'
-      ? settings.tbilisiFavorites.includes(trayStop.id)
-      : settings.kojoriFavorites.includes(trayStop.id)
-    : false;
-  const focusedStopFavoriteCount = trayStop?.direction === 'toKojori'
-    ? settings.tbilisiFavorites.length
-    : settings.kojoriFavorites.length;
-  const focusedStopSaveDisabled = focusedStopIsSaved && focusedStopFavoriteCount <= 1;
-  const focusedStopIsActive = trayStop
-    ? trayStop.direction === 'toKojori'
-      ? settings.activeTbilisiStopId === trayStop.id
-      : settings.activeKojoriStopId === trayStop.id
-    : false;
+  const focusedStopAccent = mapTripAccent(focusedTrip, colors);
+  const trayAccent = mapTripAccent(trayTrip, colors);
+  const trayStopLabel = trayStop ? localizedStopName(trayStop) : '';
+  const focusedStopIsSaved = trayStop && trayTrip ? tripHasStop(trayTrip, trayStop.id) : false;
+  // Saving a stop adds a boarding for every route of the trip that serves it.
+  const trayStopAdditions = trayStop && trayTrip && !focusedStopIsSaved
+    ? stopAdditions(trayTrip, trayPatternStops, plainStop(trayStop))
+    : [];
+  const focusedStopSaveDisabled = focusedStopIsSaved
+    ? !trayTrip || tripStops(trayTrip).length <= 1
+    : trayStopAdditions.length === 0;
+  const focusedStopIsActive = trayStop && trayTrip ? tripStopId(trayTrip) === trayStop.id : false;
   const focusedStopCoordinate =
     typeof focusedStop?.lat === 'number' && typeof focusedStop.lon === 'number'
       ? { latitude: focusedStop.lat, longitude: focusedStop.lon }
       : null;
 
   const splitPolylines = useMemo(() => {
-    if (!routePolylines) return null;
-
-    const polyline380 = routePolylines['380'] ?? [];
-    const polyline316 = routePolylines['316'] ?? [];
-
     // The casing runs under the full line of each route — exclusive stretches
     // and the shared zebra alike — so the stripes never sit bare on the map.
-    const casing = {
-      '380': simplifyPolyline(polyline380, ROUTE_LINE_SIMPLIFY_TOLERANCE_METERS),
-      '316': simplifyPolyline(polyline316, ROUTE_LINE_SIMPLIFY_TOLERANCE_METERS),
-    };
+    const casing = routePoints.map(points => simplifyPolyline(points, ROUTE_LINE_SIMPLIFY_TOLERANCE_METERS));
 
-    if (polyline380.length < 2 || polyline316.length < 2) {
+    // Two routes that share road (380 and 316 into Kojori) stripe the shared
+    // stretch in both colours. Any other count draws each line whole.
+    if (routePoints.length !== 2 || routePoints[0].length < 2 || routePoints[1].length < 2) {
       return {
-        '380': { exclusive: casing['380'] },
-        '316': { exclusive: casing['316'] },
+        exclusive: casing,
         casing,
         sharedZebra: [],
       };
     }
 
-    const split = splitPolylinesByOverlap(polyline380, polyline316, SHARED_ROUTE_STRIPE_METERS);
+    const split = splitPolylinesByOverlap(routePoints[0], routePoints[1], SHARED_ROUTE_STRIPE_METERS);
 
     return {
-      '380': { exclusive: simplifyPolyline(split.route1.exclusive, ROUTE_LINE_SIMPLIFY_TOLERANCE_METERS) },
-      '316': { exclusive: simplifyPolyline(split.route2.exclusive, ROUTE_LINE_SIMPLIFY_TOLERANCE_METERS) },
+      exclusive: [
+        simplifyPolyline(split.route1.exclusive, ROUTE_LINE_SIMPLIFY_TOLERANCE_METERS),
+        simplifyPolyline(split.route2.exclusive, ROUTE_LINE_SIMPLIFY_TOLERANCE_METERS),
+      ],
       casing,
       sharedZebra: split.sharedZebra
         .map(segment => ({
@@ -1226,55 +1412,64 @@ export default function ExploreScreen({
         }))
         .filter(segment => segment.coords.length >= 2),
     };
-  }, [routePolylines]);
+  }, [routePoints]);
+  // Earlier routes in the trip draw on top, as 380 always sat over 316.
+  const routeDrawOrder = mapRoutes.map((route, index) => ({ route, index })).reverse();
 
-  const groupedCounts = useMemo(() => ({
-    '380': positions.filter(position => position.bus === '380').length,
-    '316': positions.filter(position => position.bus === '316').length,
-  }), [positions]);
+  const groupedCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    positions.forEach(position => counts.set(position.routeKey, (counts.get(position.routeKey) ?? 0) + 1));
+    return counts;
+  }, [positions]);
 
   const showMarkers = useMemo(() => {
     return currentRegion.latitudeDelta < 0.5;
   }, [currentRegion.latitudeDelta]);
   const stopMarkerZoomTier = getStopMarkerZoomTier(currentRegion.latitudeDelta);
   // One shared alpha ramp for the whole stop layer: crossing a zoom tier or
-  // flipping direction swaps a lot of markers at once, and fading them in
+  // switching trips swaps a lot of markers at once, and fading them in
   // together costs three commits instead of one per marker.
   const stopMarkerRevealOpacity = useSteppedReveal(
-    `${direction}:${stopMarkerZoomTier}`,
+    `${tripId}:${stopMarkerZoomTier}`,
     isActive && !reduceMotion,
   );
   const routeLineWidth = ROUTE_LINE_WIDTH_BY_TIER[stopMarkerZoomTier];
   const routeCasingColor = ROUTE_CASING_COLOR[resolvedThemeMode === 'dark' ? 'dark' : 'light'];
   const showOrdinaryStopMarkers = stopMarkerZoomTier !== 'overview';
-  const favoriteStopIds = direction === 'toKojori' ? settings.tbilisiFavorites : settings.kojoriFavorites;
-  const curatedStopIds = getCuratedStopIds(direction);
 
   const stopMarkers = useMemo(() => {
-    const favoriteStopSet = new Set(favoriteStopIds);
+    if (!trip) return [];
+    const savedStops = tripStops(trip);
+    const favoriteStopSet = new Set(savedStops.map(stop => stop.id));
+    const curatedStopIds = tripKojoriDirection ? getCuratedStopIds(tripKojoriDirection) : [];
     const curatedStopSet = new Set(curatedStopIds);
-    const promotedStopSet = new Set([...favoriteStopIds, ...curatedStopIds]);
-    const firstRouteStopId = routeStops[0]?.id;
-    const routeStopMap = new Map(routeStops.map(stop => [stop.id, stop]));
-    const stopsWithPromotedFallbacks = [
-      ...routeStops,
-      ...Array.from(promotedStopSet)
-        .filter(stopId => !routeStopMap.has(stopId))
+    const promotedStopSet = new Set([...favoriteStopSet, ...curatedStopSet]);
+    const firstRouteStopId = mapRoutes[0]?.stops[0]?.id;
+    const routeStopMap = new Map<string, StopInfo>();
+    mapRoutes.forEach(route => route.stops.forEach(stop => {
+      if (!routeStopMap.has(stop.id)) routeStopMap.set(stop.id, stop);
+    }));
+    const fallbackStops = [
+      ...savedStops,
+      ...curatedStopIds
         .map(stopId => findStop(stopId))
-        .filter((stop): stop is NonNullable<ReturnType<typeof findStop>> => Boolean(stop)),
+        .filter((stop): stop is StopInfo => Boolean(stop)),
     ];
+    fallbackStops.forEach(stop => {
+      if (!routeStopMap.has(stop.id)) routeStopMap.set(stop.id, stop);
+    });
 
-    return stopsWithPromotedFallbacks
-      .filter(stop => typeof stop.lat === 'number' && typeof stop.lon === 'number')
+    return Array.from(routeStopMap.values())
+      .filter(hasCoordinates)
       .filter(stop => stop.id !== focusedStop?.id)
       .filter(stop => showOrdinaryStopMarkers || promotedStopSet.has(stop.id))
       .map(stop => ({
         stop,
         isPromoted: favoriteStopSet.has(stop.id) || curatedStopSet.has(stop.id),
-        priority: stopMarkerPriority(stop.id, firstRouteStopId, favoriteStopSet, curatedStopSet),
+        priority: stopMarkerPriority(stop.id, firstRouteStopId, favoriteStopSet, curatedStopSet, isKojoriTrip),
       }))
       .sort((a, b) => a.priority - b.priority);
-  }, [curatedStopIds, favoriteStopIds, focusedStop?.id, routeStops, showOrdinaryStopMarkers]);
+  }, [focusedStop?.id, isKojoriTrip, mapRoutes, showOrdinaryStopMarkers, trip, tripKojoriDirection]);
 
   const visibleStopMarkers = useMemo(() => {
     return declutterPromotedStopMarkers(
@@ -1288,20 +1483,20 @@ export default function ExploreScreen({
   const fullStopMarkers = visibleStopMarkers.visible;
   const compactStopMarkers = visibleStopMarkers.compact;
 
-  function handleCenterOnBus(bus: '380' | '316') {
-    const busPositions = positions.filter(p => p.bus === bus);
-    if (busPositions.length === 0) return;
+  function handleCenterOnRoute(routeKey: string) {
+    const routePositions = positions.filter(p => p.routeKey === routeKey);
+    if (routePositions.length === 0) return;
 
-    if (busPositions.length === 1) {
+    if (routePositions.length === 1) {
       mapRef.current?.animateToRegion({
-        latitude: busPositions[0].lat,
-        longitude: busPositions[0].lon,
+        latitude: routePositions[0].lat,
+        longitude: routePositions[0].lon,
         latitudeDelta: 0.05,
         longitudeDelta: 0.04,
       }, 500);
     } else {
       mapRef.current?.fitToCoordinates(
-        busPositions.map(p => ({ latitude: p.lat, longitude: p.lon })),
+        routePositions.map(p => ({ latitude: p.lat, longitude: p.lon })),
         {
           edgePadding: { top: 100, right: 60, bottom: 160, left: 60 },
           animated: true,
@@ -1311,36 +1506,38 @@ export default function ExploreScreen({
   }
 
   useEffect(() => {
-    if (!isActive || positions.length === 0 || focusedStop) return;
+    if (!isActive || !mapReady || !tripId || focusedStop || !liveVehicles.settled) return;
 
-    // Fit the fleet once per direction while this native map stays mounted.
-    // Keying on the vehicle set
-    // made the camera yank away from wherever the user had panned every time
-    // a bus appeared or dropped off.
-    const fitKey = direction;
+    // Fit once per trip while this native map stays mounted. Keying on the
+    // vehicle set made the camera yank away from wherever the user had panned
+    // every time a bus appeared or dropped off. With no bus on the road the
+    // trip's own lines frame the view instead.
+    const fitKey = tripId;
     if (fitKey === lastFitKeyRef.current) return;
 
-    lastFitKeyRef.current = fitKey;
+    const coordinates = positions.length > 0
+      ? positions.map(position => ({ latitude: position.lat, longitude: position.lon }))
+      : splitPolylines.casing.flat();
+    if (coordinates.length === 0) return;
+
+    // The key is claimed when the fit actually runs: positions or geometry
+    // landing inside the delay re-run this effect, and claiming it up front
+    // let that cleanup cancel the only fit.
     const timeoutId = setTimeout(() => {
-      mapRef.current?.fitToCoordinates(
-        positions.map(position => ({
-          latitude: position.lat,
-          longitude: position.lon,
-        })),
-        {
-          edgePadding: {
-            top: 100,
-            right: 60,
-            bottom: 160,
-            left: 60,
-          },
-          animated: true,
+      lastFitKeyRef.current = fitKey;
+      mapRef.current?.fitToCoordinates(coordinates, {
+        edgePadding: {
+          top: 100,
+          right: 60,
+          bottom: 160,
+          left: 60,
         },
-      );
+        animated: true,
+      });
     }, 250);
 
     return () => clearTimeout(timeoutId);
-  }, [direction, focusedStop, isActive, positions]);
+  }, [focusedStop, isActive, liveVehicles.settled, mapReady, positions, splitPolylines.casing, tripId]);
 
   useEffect(() => {
     if (!isActive || !mapReady || !focusedStop) return;
@@ -1359,7 +1556,7 @@ export default function ExploreScreen({
         return;
       }
 
-      const fallbackCoordinates = Object.values(focusedRouteData?.polylines ?? {}).flat();
+      const fallbackCoordinates = splitPolylines.casing.flat();
       if (fallbackCoordinates.length >= 2) {
         mapRef.current?.fitToCoordinates(fallbackCoordinates, {
           edgePadding: { top: 100, right: 60, bottom: 160, left: 60 },
@@ -1369,7 +1566,7 @@ export default function ExploreScreen({
     }, 180);
 
     return () => clearTimeout(timeoutId);
-  }, [focusedRouteData?.polylines, focusedStop, isActive, mapReady]);
+  }, [focusedStop, isActive, mapReady, splitPolylines.casing]);
 
   useEffect(() => {
     if (!isActive || !focusedStop) return;
@@ -1381,10 +1578,6 @@ export default function ExploreScreen({
 
     return () => subscription.remove();
   }, [clearStopFocus, focusedStop, isActive]);
-
-  useEffect(() => {
-    lastFitKeyRef.current = null;
-  }, [direction]);
 
   // Show the user-location dot whenever permission is already granted, without
   // prompting — the locate button remains the only place that requests it.
@@ -1437,12 +1630,12 @@ export default function ExploreScreen({
 
   function handleRegionChange(region: Region) {
     const clampedRegion = {
-      latitude: Math.max(MAP_BOUNDS.latMin, Math.min(MAP_BOUNDS.latMax, region.latitude)),
-      longitude: Math.max(MAP_BOUNDS.lonMin, Math.min(MAP_BOUNDS.lonMax, region.longitude)),
+      latitude: Math.max(mapBounds.latMin, Math.min(mapBounds.latMax, region.latitude)),
+      longitude: Math.max(mapBounds.lonMin, Math.min(mapBounds.lonMax, region.longitude)),
       latitudeDelta: region.latitudeDelta,
       longitudeDelta: region.longitudeDelta,
     };
-    
+
     // Bounce back only when meaningfully outside the bounds — re-animating on
     // sub-epsilon clamp deltas made the edge feel springy on every gesture.
     const clampDelta = Math.max(
@@ -1452,7 +1645,7 @@ export default function ExploreScreen({
     if (clampDelta > 0.002) {
       mapRef.current?.animateToRegion(clampedRegion, 300);
     }
-    
+
     setCurrentRegion(previousRegion => (
       shouldUpdateMapRegion(previousRegion, clampedRegion)
         ? clampedRegion
@@ -1484,16 +1677,22 @@ export default function ExploreScreen({
   }
 
   function applyFocusedStop() {
-    if (!focusedStop) return;
+    if (!focusedStop || !focusedTrip) return;
 
-    selectDirection(focusedStop.direction, { persist: 'deferred' });
-
-    if (focusedStop.direction === 'toKojori') {
-      update({ activeTbilisiStopId: focusedStop.id });
+    if (tripHasStop(focusedTrip, focusedStop.id)) {
+      select(focusedTrip.id);
+      setStop(focusedTrip.id, focusedStop.id);
       return;
     }
 
-    update({ activeKojoriStopId: focusedStop.id });
+    // Departures only run from saved stops, so boarding somewhere new saves it.
+    if (trayStopAdditions.length > 0) {
+      save({
+        ...focusedTrip,
+        boardings: [...focusedTrip.boardings, ...trayStopAdditions],
+        stopId: focusedStop.id,
+      });
+    }
   }
 
   function handleShowFocusedStopDepartures() {
@@ -1502,18 +1701,29 @@ export default function ExploreScreen({
   }
 
   function handleToggleFocusedStopSaved() {
-    if (!focusedStop) return;
+    if (!focusedStop || !focusedTrip || focusedStopSaveDisabled) return;
 
-    if (focusedStop.direction === 'toKojori') {
-      toggleTbilisiFavorite(focusedStop.id);
+    if (focusedStopIsSaved) {
+      const next = tripWithoutStop(focusedTrip, focusedStop.id);
+      if (next) save(next);
       return;
     }
 
-    toggleKojoriFavorite(focusedStop.id);
+    save({ ...focusedTrip, boardings: [...focusedTrip.boardings, ...trayStopAdditions] });
   }
 
-  if (suspendNativeMap) {
+  function handleRefreshVehicles() {
+    patterns.forEach(boarding => {
+      void queryClient.refetchQueries({ queryKey: positionsQuery(boarding, true).queryKey, exact: true });
+    });
+  }
+
+  if (suspendNativeMap || !favoritesLoaded) {
     return <View style={styles.screen} />;
+  }
+
+  if (!trip) {
+    return <MapEmptyState />;
   }
 
   return (
@@ -1543,57 +1753,53 @@ export default function ExploreScreen({
         onRegionChange={handleRegionChangeSample}
         onRegionChangeComplete={handleRegionChange}
         onPress={handleMapPress}>
-        {splitPolylines
-          ? (
-            <>
-              {(['316', '380'] as const).map((bus) => {
-                const casing = splitPolylines.casing[bus];
-                return casing.length >= 2 ? (
-                  <Polyline
-                    key={`route-${bus}-casing`}
-                    coordinates={casing}
-                    strokeColor={routeCasingColor}
-                    strokeWidth={routeLineWidth + ROUTE_CASING_EXTRA_WIDTH}
-                    zIndex={1}
-                    lineCap="round"
-                    lineJoin="round"
-                  />
-                ) : null;
-              })}
-              {(['316', '380'] as const).map((bus) => {
-                const { exclusive } = splitPolylines[bus];
-                const color = routeAccent(bus, colors);
-                return exclusive.length >= 2 ? (
-                  <Polyline
-                    key={`route-${bus}-exclusive`}
-                    coordinates={exclusive}
-                    strokeColor={color}
-                    strokeWidth={routeLineWidth}
-                    zIndex={2}
-                    lineCap="round"
-                    lineJoin="round"
-                  />
-                ) : null;
-              })}
-              {/* Round caps, not butt: consecutive stripes share an endpoint,
-                  and at a bend two butt-capped strokes leave the outside of
-                  the turn uncovered — a notch the casing shows straight
-                  through. The half-width the caps add overlaps into the
-                  neighbouring stripe, which is exactly what closes it. */}
-              {splitPolylines.sharedZebra.map((seg, i) => (
-                <Polyline
-                  key={`zebra-${i}`}
-                  coordinates={seg.coords}
-                  strokeColor={routeAccent(seg.colorIndex === 0 ? '380' : '316', colors)}
-                  strokeWidth={routeLineWidth}
-                  zIndex={3}
-                  lineCap="round"
-                  lineJoin="round"
-                />
-              ))}
-            </>
-          )
-          : null}
+        {routeDrawOrder.map(({ route, index }) => {
+          const casing = splitPolylines.casing[index] ?? [];
+          return casing.length >= 2 ? (
+            <Polyline
+              key={`route-${route.key}-casing`}
+              coordinates={casing}
+              strokeColor={routeCasingColor}
+              strokeWidth={routeLineWidth + ROUTE_CASING_EXTRA_WIDTH}
+              zIndex={1}
+              lineCap="round"
+              lineJoin="round"
+            />
+          ) : null;
+        })}
+        {routeDrawOrder.map(({ route, index }) => {
+          const exclusive = splitPolylines.exclusive[index] ?? [];
+          return exclusive.length >= 2 ? (
+            <Polyline
+              key={`route-${route.key}-exclusive`}
+              coordinates={exclusive}
+              strokeColor={routeColor(route.boarding.route.id, colors, trip)}
+              strokeWidth={routeLineWidth}
+              zIndex={2}
+              lineCap="round"
+              lineJoin="round"
+            />
+          ) : null;
+        })}
+        {/* Round caps, not butt: consecutive stripes share an endpoint,
+            and at a bend two butt-capped strokes leave the outside of
+            the turn uncovered — a notch the casing shows straight
+            through. The half-width the caps add overlaps into the
+            neighbouring stripe, which is exactly what closes it. */}
+        {splitPolylines.sharedZebra.map((seg, i) => {
+          const route = mapRoutes[seg.colorIndex];
+          return route ? (
+            <Polyline
+              key={`zebra-${i}`}
+              coordinates={seg.coords}
+              strokeColor={routeColor(route.boarding.route.id, colors, trip)}
+              strokeWidth={routeLineWidth}
+              zIndex={3}
+              lineCap="round"
+              lineJoin="round"
+            />
+          ) : null;
+        })}
         {/* One flat keyed list: decluttering re-buckets stops between the full
             and compact tiers on every pan/zoom, and rendering them as two
             sibling fragments remounted (blinked) every marker that crossed. */}
@@ -1602,30 +1808,27 @@ export default function ExploreScreen({
           ...compactStopMarkers.map(({ stop }) => ({ stop, isPromoted: false, compact: true })),
         ].map(({ stop, isPromoted, compact }) => {
           const isSimpleOrdinaryStop = compact || (!isPromoted && stopMarkerZoomTier === 'mid');
-          const stopAccent = direction === 'toKojori' ? colors.route380 : colors.route316;
 
           return (
             <StopMapMarker
-              key={`stop-${direction}-${stop.id}`}
-              direction={direction}
+              key={`stop-${tripId}-${stop.id}`}
               stop={stop}
               isPromoted={isPromoted}
               isSimpleOrdinaryStop={isSimpleOrdinaryStop}
-              markerColor={stopAccent}
+              markerColor={mapAccent}
               revealOpacity={stopMarkerRevealOpacity}
               styles={styles}
               resolvedThemeMode={resolvedThemeMode}
               colors={colors}
-              onPress={() => requestStopFocus(stop, direction)}
+              onPress={() => requestStopFocus(stop, trip.id)}
             />
           );
         })}
         {showMarkers && vehicleMarkers.map(({ sample, track, accent, title, subtitle }) => (
           <AnimatedVehicleMarker
-            key={`${sample.bus}-${sample.vehicleId}`}
+            key={`${sample.routeKey}-${sample.vehicleId}`}
             sample={sample}
             track={track}
-            direction={direction}
             isActive={isActive}
             reduceMotion={reduceMotion}
             accent={accent}
@@ -1670,20 +1873,21 @@ export default function ExploreScreen({
 
       {/* Top controls */}
       <View style={[styles.topPanel, useCompactMapControls && styles.topPanelCompact, { top: insets.top + 12 }]}>
-        <DirectionSwitch
-          accentColor={direction === 'toKojori' ? colors.route380 : colors.route316}
+        <TripSwitch
+          accentColor={mapAccent}
           compact={useCompactMapControls}
           style={[styles.directionSwitch, useCompactMapControls && styles.directionSwitchCompact]}
         />
 
         <View style={[styles.legendRow, useCompactMapControls && styles.legendRowCompact]}>
-          {(['380', '316'] as const).map(bus => {
-            const accent = routeAccent(bus, colors);
-            const count = groupedCounts[bus];
+          {mapRoutes.map(route => {
+            const bus = route.boarding.route.shortName;
+            const accent = routeColor(route.boarding.route.id, colors, trip);
+            const count = groupedCounts.get(route.key) ?? 0;
             const hasActiveBuses = count > 0;
             return (
-              <Pressable 
-                key={bus} 
+              <Pressable
+                key={route.key}
                 accessibilityRole="button"
                 accessibilityLabel={t('mapRouteVehiclesCount', { bus, count })}
                 accessibilityHint={hasActiveBuses ? t('mapCenterRouteVehicles', { bus }) : undefined}
@@ -1693,7 +1897,7 @@ export default function ExploreScreen({
                   useCompactMapControls && styles.legendChipCompact,
                   hasActiveBuses && styles.legendChipClickable,
                 ]}
-                onPress={() => hasActiveBuses && handleCenterOnBus(bus)}
+                onPress={() => hasActiveBuses && handleCenterOnRoute(route.key)}
                 disabled={!hasActiveBuses}>
                 <View style={[styles.legendDot, useCompactMapControls && styles.legendDotCompact, { backgroundColor: accent }]} />
                 <Text style={[styles.legendLabel, useCompactMapControls && styles.legendLabelCompact]}>{bus}</Text>
@@ -1707,7 +1911,7 @@ export default function ExploreScreen({
             accessibilityLabel={isFetching ? t('mapRefreshingLive') : t('mapRefreshLive')}
             accessibilityState={{ busy: isFetching, disabled: isFetching }}
             style={[styles.refreshChip, useCompactMapControls && styles.refreshChipCompact]}
-            onPress={() => refetch()}
+            onPress={handleRefreshVehicles}
             disabled={isFetching}>
             <Animated.View style={{ transform: [{ rotate: spinRotation }] }}>
               <MaterialCommunityIcons
@@ -1771,11 +1975,11 @@ export default function ExploreScreen({
             <View style={styles.focusedStopTrayContent}>
               <View style={styles.focusedStopTrayHeader}>
                 <View style={styles.focusedStopTrayCopy}>
-                  <Text style={styles.focusedStopTrayEyebrow}>
-                    {trayStop.direction === 'toKojori' ? t('cityKojori') : t('cityTbilisi')}
+                  <Text style={styles.focusedStopTrayEyebrow} numberOfLines={1}>
+                    {trayTrip ? tripTitle(trayTrip) : ''}
                   </Text>
                   <Text style={styles.focusedStopTrayTitle} numberOfLines={1}>
-                    {trayStop.label}
+                    {trayStopLabel}
                   </Text>
                   <Text style={[styles.focusedStopTrayCode, { color: trayAccent }]}>
                     #{trayStop.id.split(':')[1] ?? trayStop.id}
@@ -1798,9 +2002,9 @@ export default function ExploreScreen({
               </View>
               {trayArrivals.arrivals.length > 0 || trayArrivals.isFetching ? (
                 <View style={styles.focusedStopLiveArrivals}>
-                  {trayArrivals.arrivals.length > 0 ? trayArrivals.arrivals.map(arrival => {
-                    const bus = arrival.shortName as '380' | '316';
-                    const busAccent = routeAccent(bus, colors);
+                  {trayArrivals.arrivals.length > 0 ? trayArrivals.arrivals.map(({ arrival, routeId }) => {
+                    const bus = arrival.shortName;
+                    const busAccent = routeColor(routeId, colors, trayTrip);
                     const minutes = Math.max(0, Math.round(arrival.realtimeArrivalMinutes));
                     const minutesLabel = minutes < 1
                       ? t('commonNow')
@@ -1835,14 +2039,14 @@ export default function ExploreScreen({
                 </View>
               ) : null}
               <View
-                accessibilityLabel={t('mapStopActionsFor', { stop: trayStop.label })}
+                accessibilityLabel={t('mapStopActionsFor', { stop: trayStopLabel })}
                 style={styles.focusedStopTrayActions}>
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel={
                     focusedStopIsSaved
-                      ? t('mapRemoveSavedStopA11y', { stop: trayStop.label })
-                      : t('mapSaveStopA11y', { stop: trayStop.label })
+                      ? t('mapRemoveSavedStopA11y', { stop: trayStopLabel })
+                      : t('mapSaveStopA11y', { stop: trayStopLabel })
                   }
                   accessibilityState={{ selected: focusedStopIsSaved, disabled: focusedStopSaveDisabled }}
                   onPress={handleToggleFocusedStopSaved}
@@ -1867,7 +2071,7 @@ export default function ExploreScreen({
                 </Pressable>
                 <Pressable
                   accessibilityRole="button"
-                  accessibilityLabel={t('mapShowNextBusesA11y', { stop: trayStop.label })}
+                  accessibilityLabel={t('mapShowNextBusesA11y', { stop: trayStopLabel })}
                   onPress={handleShowFocusedStopDepartures}
                   style={[
                     styles.focusedStopTrayAction,

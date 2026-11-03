@@ -12,13 +12,15 @@ import {
 } from 'react-native';
 
 import { StopMapPicker } from '@/components/stop-map-picker';
-import { alpha } from '@/constants/theme';
-import { useActiveDirection } from '@/hooks/use-active-direction';
+import { alpha, Fonts, Spacing } from '@/constants/theme';
 import { useAppColors } from '@/hooks/use-app-colors';
 import { useI18n } from '@/hooks/use-i18n';
 import { useMapFocus } from '@/hooks/use-map-focus';
 import { useTabNav, type TabRoute } from '@/hooks/use-tab-nav';
-import { type SharedDirection } from '@/hooks/use-settings';
+import { useFavorites } from '@/transit/favorites';
+import { reverseTrip } from '@/transit/model';
+import { useTripUi } from '@/transit/trip-ui';
+import { useFavoriteTitle } from '@/transit/ui';
 import { createThemedStyles } from '@/utils/themed-styles';
 
 const MONO = Platform.select({ android: 'monospace', ios: 'Menlo', default: 'monospace' });
@@ -35,7 +37,7 @@ interface StopSelectorProps {
   stops: StopSelectorItem[];
   activeStopId: string;
   accentColor: string;
-  direction: SharedDirection;
+  tripId: string;
   onSelectStop: (id: string) => void;
   /** Stop the rider is standing closest to, highlighted on the map. */
   closestStopId?: string | null;
@@ -50,21 +52,12 @@ function stopCode(id: string) {
   return '#' + (id.split(':')[1] ?? id);
 }
 
-function originLabel(
-  direction: SharedDirection,
-  t: ReturnType<typeof useI18n>['t'],
-) {
-  return direction === 'toKojori' ? t('cityTbilisi') : t('cityKojori');
-}
-
-function destinationLabel(
-  direction: SharedDirection,
-  t: ReturnType<typeof useI18n>['t'],
-) {
-  return direction === 'toKojori' ? t('cityKojori') : t('cityTbilisi');
-}
-
-export function DirectionSwitch({
+/**
+ * Compact trip control on the stop map. With a saved return trip it flips
+ * direction in place, as the Kojori app always did; otherwise it opens the
+ * trip chooser.
+ */
+export function TripSwitch({
   accentColor,
   compact = false,
   style,
@@ -73,25 +66,77 @@ export function DirectionSwitch({
   compact?: boolean;
   style?: StyleProp<ViewStyle>;
 }) {
-  const colors = useAppColors();
-  const styles = useStopSelectorStyles();
-  const { activeDirection, selectDirection } = useActiveDirection();
-  const { t } = useI18n();
-  const origin = originLabel(activeDirection, t);
-  const destination = destinationLabel(activeDirection, t);
-  const nextDirection = activeDirection === 'toKojori' ? 'toTbilisi' : 'toKojori';
+  const { state, selected, select } = useFavorites();
+  const { openPicker } = useTripUi();
+  const tripTitle = useFavoriteTitle();
+  if (!selected) return null;
+  const reverse = reverseTrip(selected, state.favorites);
+  const destination = tripTitle(selected);
+  const origin = reverse ? tripTitle(reverse) : null;
+  const many = state.favorites.length > 2 || !reverse;
 
   function handlePress(event: GestureResponderEvent) {
     event.stopPropagation();
-    selectDirection(nextDirection, { persist: 'deferred' });
+    if (reverse && !many) select(reverse.id);
+    else openPicker();
+  }
+
+  return <DirectionToggle origin={origin} destination={destination} accentColor={accentColor}
+    compact={compact} style={style} many={many} onPress={handlePress}
+    onLongPress={reverse ? () => select(reverse.id) : undefined} />;
+}
+
+/** Shared direction control; callers own selection and persistence. */
+export function DirectionToggle({
+  origin, destination, accentColor, compact = false, style, many = false, onPress, onLongPress, variant = 'pill',
+}: {
+  variant?: 'pill' | 'heading';
+  origin: string | null;
+  destination: string;
+  accentColor: string;
+  compact?: boolean;
+  style?: StyleProp<ViewStyle>;
+  many?: boolean;
+  onPress: (event: GestureResponderEvent) => void;
+  onLongPress?: () => void;
+}) {
+  const colors = useAppColors();
+  const styles = useStopSelectorStyles();
+  const { t } = useI18n();
+  if (variant === 'heading' && origin) {
+    return (
+      <View style={[{ flexDirection: 'row', alignItems: 'center', gap: Spacing.two }, style]}>
+        <Text style={{ flex: 1, color: colors.textDim, fontFamily: Fonts.serif, fontSize: 21, lineHeight: 27 }}
+          numberOfLines={2}>{origin}</Text>
+        <Pressable accessibilityRole="button"
+          accessibilityLabel={t('directionAccessibility', { origin, destination })}
+          onPress={onPress} testID="card-direction-toggle"
+          style={({ pressed }) => ({
+            width: 44, height: 44, borderRadius: 22,
+            alignItems: 'center', justifyContent: 'center',
+            backgroundColor: alpha(accentColor, pressed ? '40' : '1F'),
+            borderColor: alpha(accentColor, '55'), borderWidth: 1,
+          })}>
+          <MaterialCommunityIcons name="swap-horizontal" size={23} color={colors.text} />
+        </Pressable>
+        <Text style={{ flex: 1, color: colors.text, fontFamily: Fonts.serif, fontSize: 21,
+          lineHeight: 27, fontWeight: '700', textAlign: 'right' }}
+          numberOfLines={2}>{destination}</Text>
+      </View>
+    );
   }
 
   return (
     <Pressable
       testID="boarding-direction-toggle"
       accessibilityRole="button"
-      accessibilityLabel={t('directionAccessibility', { origin, destination })}
-      onPress={handlePress}
+      accessibilityLabel={
+        origin
+          ? t('directionAccessibility', { origin, destination })
+          : destination
+      }
+      onPress={onPress}
+      onLongPress={onLongPress}
       hitSlop={6}
       style={({ pressed }) => [
         styles.directionSwitch,
@@ -107,8 +152,8 @@ export function DirectionSwitch({
           compact && styles.directionRouteSegmentCompact,
           { backgroundColor: accentColor },
         ]}>
-        {compact ? <MaterialCommunityIcons name="arrow-right" size={14} color="#fff" /> : null}
-        {!compact ? (
+        {compact || !origin ? <MaterialCommunityIcons name="arrow-right" size={14} color="#fff" /> : null}
+        {!compact && origin ? (
           <Text
             style={styles.directionRouteText}
             numberOfLines={1}
@@ -117,7 +162,7 @@ export function DirectionSwitch({
             {origin}
           </Text>
         ) : null}
-        {!compact ? <MaterialCommunityIcons name="arrow-right" size={14} color="#fff" /> : null}
+        {!compact && origin ? <MaterialCommunityIcons name="arrow-right" size={14} color="#fff" /> : null}
         <Text
           style={[styles.directionRouteText, compact && styles.directionRouteTextCompact]}
           numberOfLines={1}
@@ -127,7 +172,11 @@ export function DirectionSwitch({
         </Text>
       </View>
       <View style={[styles.directionSwapSegment, compact && styles.directionSwapSegmentCompact]}>
-        <MaterialCommunityIcons name="swap-horizontal" size={17} color={colors.textDim} />
+        <MaterialCommunityIcons
+          name={many ? 'chevron-down' : 'swap-horizontal'}
+          size={17}
+          color={colors.textDim}
+        />
       </View>
     </Pressable>
   );
@@ -142,7 +191,7 @@ export function StopSelector({
   stops,
   activeStopId,
   accentColor,
-  direction,
+  tripId,
   onSelectStop,
   closestStopId,
   userLocation,
@@ -162,7 +211,7 @@ export function StopSelector({
   if (!activeStop) return null;
 
   function handleOpenFullMap() {
-    requestStopFocus(activeStop, direction, { returnRoute: mapReturnRoute });
+    requestStopFocus(activeStop, tripId, { returnRoute: mapReturnRoute });
     navigateToTab?.('explore');
   }
 
@@ -176,7 +225,7 @@ export function StopSelector({
       onSelectStop={onSelectStop}
       onOpenFullMap={handleOpenFullMap}
       onRequestLocation={onRequestLocation}
-      directionSwitch={showDirectionSwitch ? <DirectionSwitch accentColor={accentColor} compact /> : undefined}
+      directionSwitch={showDirectionSwitch ? <TripSwitch accentColor={accentColor} compact /> : undefined}
     />
   );
 
@@ -186,8 +235,10 @@ export function StopSelector({
     stop => typeof stop.lat === 'number' && typeof stop.lon === 'number',
   );
 
-  if (!hasGeometry) {
+  if (!hasGeometry || Platform.OS === 'web') {
     return (
+      <View style={styles.fallbackStack}>
+      {showDirectionSwitch ? <TripSwitch accentColor={accentColor} compact style={styles.fallbackSwitch} /> : null}
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={t('stopShowOnMap', { stop: activeStop.label })}
@@ -207,6 +258,24 @@ export function StopSelector({
         </View>
         <Text style={[styles.fallbackCode, { fontFamily: MONO }]}>{stopCode(activeStop.id)}</Text>
       </Pressable>
+      {stops.length > 1 ? (
+        <View style={styles.fallbackChips}>
+          {stops.map(stop => (
+            <Pressable
+              key={stop.id}
+              accessibilityRole="button"
+              accessibilityState={{ selected: stop.id === activeStop.id }}
+              onPress={() => onSelectStop(stop.id)}
+              style={[
+                styles.fallbackChip,
+                stop.id === activeStop.id && { borderColor: accentColor, backgroundColor: alpha(accentColor, '1F') },
+              ]}>
+              <Text style={styles.fallbackChipText} numberOfLines={1}>{stop.label}</Text>
+            </Pressable>
+          ))}
+        </View>
+      ) : null}
+      </View>
     );
   }
 
@@ -268,6 +337,19 @@ function createStyles(C: ReturnType<typeof useAppColors>) {
       paddingHorizontal: 14,
       paddingVertical: 12,
     },
+    fallbackStack: { gap: 10, alignItems: 'stretch' },
+    fallbackSwitch: { alignSelf: 'flex-start' },
+    fallbackChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+    fallbackChip: {
+      height: 32,
+      maxWidth: '100%',
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: C.border,
+      paddingHorizontal: 12,
+      justifyContent: 'center',
+    },
+    fallbackChipText: { color: C.text, fontSize: 13, fontWeight: '700' },
     fallbackCopy: { flex: 1, minWidth: 0, gap: 2 },
     fallbackLabel: {
       color: C.textFaint,

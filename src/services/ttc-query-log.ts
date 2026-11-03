@@ -4,6 +4,7 @@ const STORAGE_KEY = '@ttc_query_log_v1';
 const MAX_LOG_ENTRIES = 240;
 
 export type TtcQueryKind =
+  | 'catalog'
   | 'arrivals'
   | 'vehicle-positions'
   | 'schedule'

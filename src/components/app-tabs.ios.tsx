@@ -58,8 +58,9 @@ export default function AppTabs({
 
   useEffect(() => {
     const subscription = Linking.addEventListener('url', ({ url }) => {
-      const mode = Linking.parse(url).queryParams?.widgetMode;
-      if (mode === 'kojori' || mode === 'tbilisi') {
+      const params = Linking.parse(url).queryParams;
+      const mode = params?.widgetMode;
+      if (params?.widgetFavoriteId || mode === 'kojori' || mode === 'tbilisi') {
         setActiveRoute('index');
         setNavStateRequest({ selectedScreenKey: 'index', baseProvenance: provenance.current });
       }

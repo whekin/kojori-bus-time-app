@@ -1,6 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
-import { AppState, Platform } from 'react-native';
 
 import {
   DEFAULT_APP_PALETTE,
@@ -9,7 +8,6 @@ import {
   type AppPaletteId,
   type AppThemeMode,
 } from '@/constants/theme';
-import { syncAndroidWidgetState } from '@/services/android-widget';
 import {
   DEFAULT_KOJORI_FAVORITES,
   DEFAULT_TBILISI_FAVORITES,
@@ -27,9 +25,9 @@ export const DEFAULT_BOARDING_STOP_ID = {
 export type SharedDirection = 'toKojori' | 'toTbilisi';
 /**
  * Governs what happens when the user opens the app:
- * - 'ask': show the start screen so the user picks a destination manually.
- * - 'smart': use the device location to auto-pick (falls back to 'ask' if detection fails or is slow).
- * - 'remember': bypass the start screen and resume the last chosen direction.
+ * - 'ask': open the favorites list.
+ * - 'smart': suggest an unambiguous nearby favorite, otherwise show the list.
+ * - 'remember': open the last selected favorite.
  */
 export type LaunchBehavior = 'ask' | 'smart' | 'remember';
 export type TtcHealthDemo = 'off' | 'degraded' | 'offline' | 'rate-limited' | 'device-offline' | 'schedule-stale';
@@ -47,7 +45,7 @@ export interface Settings {
   widgetKojoriStopId: string;
   /** Default widget stop when showing → Kojori */
   widgetTbilisiStopId: string;
-  /** Shared route direction used by Home and Timetable */
+  /** Legacy direction retained to migrate version-2 stop settings. */
   sharedDirection: SharedDirection;
   /** Selected visual palette for chrome + route accents */
   paletteId: AppPaletteId;
@@ -137,40 +135,6 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
       .catch(() => { })
       .finally(() => setIsLoaded(true));
   }, []);
-
-  useEffect(() => {
-    if (!isLoaded || Platform.OS !== 'android') return;
-
-    function syncWidget() {
-      return syncAndroidWidgetState({
-        activeKojoriStopId: settings.widgetKojoriStopId,
-        activeTbilisiStopId: settings.widgetTbilisiStopId,
-        paletteId: settings.paletteId,
-        language: settings.language,
-      }).catch(() => { });
-    }
-
-    void syncWidget();
-
-    // No periodic re-sync: items carry absolute departure epochs for a full
-    // week and the widget refreshes itself on a native minute tick, so the
-    // payload only changes when settings change or the app comes back.
-    const appState = AppState.addEventListener('change', state => {
-      if (state === 'active') {
-        void syncWidget();
-      }
-    });
-
-    return () => {
-      appState.remove();
-    };
-  }, [
-    isLoaded,
-    settings.paletteId,
-    settings.language,
-    settings.widgetKojoriStopId,
-    settings.widgetTbilisiStopId,
-  ]);
 
   const persist = (next: Settings) => {
     AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(next)).catch(() => { });

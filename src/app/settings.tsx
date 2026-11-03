@@ -16,7 +16,6 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   useWindowDimensions,
   View,
 } from 'react-native';
@@ -24,14 +23,9 @@ import { Carousel, type CarouselRef } from 'react-native-reanimated-carousel';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { BAKED_AT } from '@/assets/ttc-baked';
-import {
-  ScrollableBottomSheet,
-  ScrollableBottomSheetScrollView,
-} from '@/components/scrollable-bottom-sheet';
+import { ScrollableBottomSheet } from '@/components/scrollable-bottom-sheet';
 import { SettingsSwitch } from '@/components/settings-switch';
-import { StopChoiceRow } from '@/components/stop-choice-row';
-import { StopPickerModal } from '@/components/stop-picker-modal';
-import { getCuratedStopIds, type StopDirection } from '@/constants/curated-stops';
+import { SettingsTripsCard, useTripCountLabel } from '@/components/settings-trips';
 import {
   alpha,
   APP_PALETTES,
@@ -45,12 +39,12 @@ import {
 import { useAppColors, useResolvedAppThemeMode } from '@/hooks/use-app-colors';
 import { useI18n, type TranslationKey } from '@/hooks/use-i18n';
 import { useLocation, type LocationErrorCode } from '@/hooks/use-location';
-import { useRouteStops } from '@/hooks/use-route-stops';
 import { useSettings, type LaunchBehavior, type TtcHealthDemo } from '@/hooks/use-settings';
-import { useStopNames } from '@/hooks/use-stop-names';
 import { useTtcQueryLogSnapshot } from '@/hooks/use-ttc-query-log';
 import { useTtcOfflineStatus } from '@/hooks/use-ttc-offline';
-import { findStop, StopInfo } from '@/services/ttc';
+import { useTransitCopy } from '@/transit/copy';
+import { clearTransitData } from '@/transit/data';
+import { useFavorites } from '@/transit/favorites';
 import { createThemedStyles } from '@/utils/themed-styles';
 import {
     clearAllTtcCache,
@@ -450,61 +444,6 @@ function TtcQueryLogCard({
   );
 }
 
-function FavoritesCard({
-  favoriteIds,
-  direction,
-  accentColor,
-  stopNames,
-  canRemove,
-  onRemove,
-  onManage,
-}: {
-  favoriteIds: string[];
-  direction: StopDirection;
-  accentColor: string;
-  stopNames: Record<string, string>;
-  canRemove: boolean;
-  onRemove: (id: string) => void;
-  onManage: () => void;
-}) {
-  const { styles } = useStyles();
-  const { t } = useI18n();
-
-  return (
-    <View style={styles.card}>
-      {favoriteIds.map((id, i) => {
-        const shortId = id.split(':')[1] ?? id;
-        const label = stopNames[id] ?? `Stop #${shortId}`;
-        const stop = findStop(id) ?? { id, label };
-
-        return (
-          <View key={id}>
-            <View style={styles.stopRowInset}>
-              <StopChoiceRow
-                stop={{ ...stop, label }}
-                direction={direction}
-                accentColor={accentColor}
-                selected
-                onRemove={() => onRemove(id)}
-                removeDisabled={!canRemove}
-              />
-            </View>
-            {i < favoriteIds.length - 1 ? <View style={styles.itemDivider} /> : null}
-          </View>
-        );
-      })}
-      <View style={styles.itemDivider} />
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={t('stopAddAnother')}
-        style={styles.manageBtn}
-        onPress={onManage}>
-        <Text style={[styles.manageBtnText, { color: accentColor }]}>{t('stopAddAnother')}</Text>
-      </Pressable>
-    </View>
-  );
-}
-
 function DataRefreshCard({
   status,
   refreshingDataset,
@@ -705,160 +644,6 @@ function DataRefreshCard({
   );
 }
 
-function WidgetStopCard({
-  title,
-  stopId,
-  direction,
-  accentColor,
-  stopNames,
-  onManage,
-}: {
-  title: string;
-  stopId: string;
-  direction: StopDirection;
-  accentColor: string;
-  stopNames: Record<string, string>;
-  onManage: () => void;
-}) {
-  const { styles } = useStyles();
-  const { t } = useI18n();
-  const shortId = stopId.split(':')[1] ?? stopId;
-  const label = stopNames[stopId] ?? `Stop #${shortId}`;
-  const stop = findStop(stopId) ?? { id: stopId, label };
-
-  return (
-    <View style={styles.card}>
-      <View style={styles.stopRowInset}>
-        <StopChoiceRow
-          stop={{ ...stop, label }}
-          direction={direction}
-          accentColor={accentColor}
-          selected
-          eyebrow={title}
-        />
-      </View>
-      <View style={styles.itemDivider} />
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={t('commonChange')}
-        style={styles.manageBtn}
-        onPress={onManage}>
-        <Text style={[styles.manageBtnText, { color: accentColor }]}>{t('commonChange')}</Text>
-      </Pressable>
-    </View>
-  );
-}
-
-function SingleStopPickerModal({
-  visible,
-  title,
-  direction,
-  selectedId,
-  accentColor,
-  stopNames,
-  onSelect,
-  onClose,
-}: {
-  visible: boolean;
-  title: string;
-  direction: 'toKojori' | 'toTbilisi';
-  selectedId: string;
-  accentColor: string;
-  stopNames: Record<string, string>;
-  onSelect: (id: string) => void;
-  onClose: () => void;
-}) {
-  const [search, setSearch] = useState('');
-  const { modalStyles, colors } = useStyles();
-  const { t } = useI18n();
-  const { stops: routeStops, isLoading } = useRouteStops(direction);
-  const insets = useSafeAreaInsets();
-  const { height } = useWindowDimensions();
-  const query = search.trim().toLowerCase();
-  const sheetMaxHeight = Math.round(height * 0.82);
-  const listHeight = Math.max(220, sheetMaxHeight - 152);
-
-  const enriched = useMemo<StopInfo[]>(
-    () => routeStops.map(s => ({ id: s.id, label: stopNames[s.id] ?? s.label })),
-    [routeStops, stopNames],
-  );
-
-  const filtered = useMemo(() => {
-    const routeStopMap = new Map(enriched.map(stop => [stop.id, stop]));
-    const curatedStops = getCuratedStopIds(direction)
-      .map(id => routeStopMap.get(id) ?? findStop(id))
-      .filter((stop): stop is StopInfo => Boolean(stop))
-      .map(stop => ({ ...stop, label: stopNames[stop.id] ?? stop.label }));
-    const curatedSet = new Set(curatedStops.map(stop => stop.id));
-    const all = [
-      ...curatedStops,
-      ...enriched.filter(stop => !curatedSet.has(stop.id)),
-    ];
-    if (!query) return all;
-    return all.filter(s => s.label.toLowerCase().includes(query) || s.id.includes(query));
-  }, [direction, enriched, query, stopNames]);
-
-  // The sheet already renders nothing while hidden; bail before building the
-  // stop rows so a settings render does not walk the full stop list.
-  if (!visible) return null;
-
-  return (
-    <ScrollableBottomSheet
-      visible={visible}
-      onClose={onClose}
-      snapPoint="82%"
-      contentStyle={[modalStyles.sheetContent, { paddingBottom: Math.max(insets.bottom, 16) }]}>
-      <View style={modalStyles.sheetHeader}>
-        <Text style={modalStyles.sheetTitle}>{title}</Text>
-      </View>
-
-      <View style={modalStyles.searchWrap}>
-        <TextInput
-          style={modalStyles.searchInput}
-          placeholder={t('stopSearch')}
-          placeholderTextColor={colors.textFaint}
-          value={search}
-          onChangeText={setSearch}
-          autoFocus
-          autoCorrect={false}
-          clearButtonMode="while-editing"
-        />
-        {isLoading ? <ActivityIndicator color={colors.textDim} size="small" style={modalStyles.spinner} /> : null}
-      </View>
-
-      <ScrollableBottomSheetScrollView
-        style={[modalStyles.list, { height: listHeight }]}
-        contentContainerStyle={modalStyles.listContent}
-        keyboardShouldPersistTaps="handled">
-        {filtered.length === 0 ? (
-          <Text style={modalStyles.emptyText}>
-            {isLoading ? t('stopLoading') : t('stopNoneFound')}
-          </Text>
-        ) : null}
-        {filtered.map((item) => {
-          const isSelected = item.id === selectedId;
-
-          return (
-            <StopChoiceRow
-              key={item.id}
-              stop={item}
-              direction={direction}
-              accentColor={accentColor}
-              selected={isSelected}
-              showCheck
-              onPress={() => {
-                onSelect(item.id);
-                onClose();
-              }}
-              onMapPress={onClose}
-            />
-          );
-        })}
-      </ScrollableBottomSheetScrollView>
-    </ScrollableBottomSheet>
-  );
-}
-
 function PaletteCard({
   paletteId,
   selected,
@@ -1024,19 +809,20 @@ export default function SettingsScreen({ isActive = true, onSubmenuChange }: {
   const [availableWidth, setAvailableWidth] = useState(windowWidth);
   const { colors, styles } = useStyles();
   const resolvedThemeMode = useResolvedAppThemeMode();
-  const { settings, toggleKojoriFavorite, toggleTbilisiFavorite, update, hasManualDirectionOverride } = useSettings();
-  const { t, formatCount, languageOptions, resolvedLanguage, setLanguage } = useI18n();
-  const stopNames = useStopNames();
+  const { settings, update } = useSettings();
+  const { t, languageOptions, resolvedLanguage, setLanguage } = useI18n();
+  const copy = useTransitCopy();
+  const tripCountLabel = useTripCountLabel();
+  const { state: favoritesState } = useFavorites();
   const offlineStatus = useTtcOfflineStatus();
   const queryClient = useQueryClient();
-  const [modal, setModal] = useState<'kojori' | 'tbilisi' | 'widget-kojori' | 'widget-tbilisi' | null>(null);
   const [showPermissionModal, setShowPermissionModal] = useState(false);
   const [noticeModal, setNoticeModal] = useState<NoticeModalState | null>(null);
   const [activeSection, setActiveSection] = useState<SettingsSection | null>(null);
   const wideLayout = availableWidth >= 720;
   const columnWidth = activeSection === null ? MaxContentWidth : 600;
   const wideCardWidth = (Math.min(availableWidth, MaxContentWidth) - 52) / 2;
-  const isInSubmenu = activeSection !== null || modal !== null;
+  const isInSubmenu = activeSection !== null;
   useEffect(() => {
     onSubmenuChange?.(isInSubmenu);
   }, [isInSubmenu, onSubmenuChange]);
@@ -1048,7 +834,7 @@ export default function SettingsScreen({ isActive = true, onSubmenuChange }: {
 
   const backGesture = PanResponder.create({
     onMoveShouldSetPanResponderCapture: (_event, gesture) =>
-      Platform.OS === 'ios' && isActive && activeSection !== null && modal === null
+      Platform.OS === 'ios' && isActive && activeSection !== null
       && startsSettingsBackGesture(gesture),
     onPanResponderRelease: (_event, gesture) => {
       if (completesSettingsBackGesture(gesture)) goBackToSections();
@@ -1271,7 +1057,7 @@ export default function SettingsScreen({ isActive = true, onSubmenuChange }: {
   async function handleClearCache() {
     Alert.alert(
       t('settingsClearCacheTitle'),
-      t('settingsClearCacheMessage'),
+      copy('settingsClearCacheKeeps'),
       [
         { text: t('commonCancel'), style: 'cancel' },
         {
@@ -1279,7 +1065,10 @@ export default function SettingsScreen({ isActive = true, onSubmenuChange }: {
           style: 'destructive',
           onPress: async () => {
             try {
+              // Only downloaded data goes; trips and settings live under
+              // their own storage keys and survive the reload.
               await clearAllTtcCache(queryClient);
+              await clearTransitData(queryClient);
               if (Platform.OS === 'web') {
                 window.location.reload();
               } else {
@@ -1354,36 +1143,29 @@ export default function SettingsScreen({ isActive = true, onSubmenuChange }: {
   const launchBehaviorStatus = (() => {
     if (settings.launchBehavior === 'ask') {
       return {
-        title: t('settingsAskEveryTime'),
-        note: t('settingsAskNote'),
+        title: copy('settingsLaunchChooser'),
+        note: copy('settingsLaunchChooserNote'),
       };
     }
 
     if (settings.launchBehavior === 'remember') {
       return {
-        title: t('settingsRestoreDirection'),
-        note: t('settingsRestoreNote'),
+        title: copy('settingsLaunchLast'),
+        note: copy('settingsLaunchLastNote'),
       };
     }
 
     if (permission === 'granted') {
-      if (hasManualDirectionOverride) {
-        return {
-          title: t('settingsLocationManualTitle'),
-          note: t('settingsLocationManualNote'),
-        };
-      }
-
       return {
-        title: t('settingsLocationLaunchTitle'),
-        note: t('settingsLocationLaunchNote'),
+        title: copy('settingsLaunchNearest'),
+        note: copy('settingsLaunchNearestNote'),
       };
     }
 
     if (permission === 'denied') {
       return {
         title: t('settingsLocationOffTitle'),
-        note: t('settingsLocationOffNote'),
+        note: copy('settingsLaunchLocationOffNote'),
       };
     }
 
@@ -1399,9 +1181,9 @@ export default function SettingsScreen({ isActive = true, onSubmenuChange }: {
     { value: 'dark' as const, label: t('settingsThemeDarkShort'), caption: t('settingsThemeAlwaysMoody') },
   ];
   const launchBehaviorOptions = [
-    { value: 'ask' as const, label: t('settingsAskEveryTime'), caption: t('settingsAskNote') },
-    { value: 'smart' as const, label: t('locationUseMine'), caption: t('settingsLocationLaunchNote') },
-    { value: 'remember' as const, label: t('settingsRestoreDirection'), caption: t('settingsRestoreNote') },
+    { value: 'ask' as const, label: copy('settingsLaunchChooser'), caption: copy('settingsLaunchChooserNote') },
+    { value: 'smart' as const, label: copy('settingsLaunchNearest'), caption: copy('settingsLaunchNearestNote') },
+    { value: 'remember' as const, label: copy('settingsLaunchLast'), caption: copy('settingsLaunchLastNote') },
   ];
   const ttcHealthDemoOptions: { value: TtcHealthDemo; label: string; caption: string }[] = [
     { value: 'off', label: t('settingsTtcDemoOff'), caption: t('settingsTtcDemoOffNote') },
@@ -1419,7 +1201,7 @@ export default function SettingsScreen({ isActive = true, onSubmenuChange }: {
     : selectedThemeMode === 'light'
       ? t('settingsThemeLightShort')
       : t('settingsThemeDarkShort');
-  const totalFavoriteStops = settings.kojoriFavorites.length + settings.tbilisiFavorites.length;
+  const tripCount = tripCountLabel(favoritesState.favorites.length);
   const lastDataRefreshLabel = t('settingsLastDataRefresh', {
     value: formatLastSync(offlineStatus.lastSyncAt, t, resolvedLanguage),
   });
@@ -1441,15 +1223,13 @@ export default function SettingsScreen({ isActive = true, onSubmenuChange }: {
     paletteCarouselRef.current?.scrollTo({ index: nextIndex, animated });
   };
   const sectionTitles: Record<SettingsSection, string> = {
-    commute: t('settingsSectionCommute'),
+    commute: copy('tripsSectionTitle'),
     appearance: t('settingsSectionAppearance'),
     widget: t('settingsSectionWidget'),
     data: t('settingsSectionData'),
     about: t('settingsSectionAbout'),
   };
   const headerTitle = activeSection ? sectionTitles[activeSection] : t('settingsTitle');
-  const widgetKojoriStopLabel = stopNames[settings.widgetTbilisiStopId] ?? settings.widgetTbilisiStopId;
-  const widgetTbilisiStopLabel = stopNames[settings.widgetKojoriStopId] ?? settings.widgetKojoriStopId;
 
   function renderSectionCard({
     section,
@@ -1597,12 +1377,9 @@ export default function SettingsScreen({ isActive = true, onSubmenuChange }: {
             <View style={[styles.sectionCardStack, wideLayout && styles.sectionCardGrid]}>
               {renderSectionCard({
                 section: 'commute',
-                title: t('settingsSectionCommute'),
-                note: t('settingsSectionCommuteNote'),
-                summary: t('settingsSectionCommuteSummary', {
-                  launch: launchBehaviorStatus.title,
-                  count: formatCount('stops', totalFavoriteStops),
-                }),
+                title: copy('tripsSectionTitle'),
+                note: copy('tripsSectionNote'),
+                summary: `${tripCount} · ${launchBehaviorStatus.title}`,
                 accentColor: colors.route380,
               })}
               {renderSectionCard({
@@ -1619,11 +1396,8 @@ export default function SettingsScreen({ isActive = true, onSubmenuChange }: {
               {Platform.OS !== 'web' ? renderSectionCard({
                 section: 'widget',
                 title: t('settingsSectionWidget'),
-                note: Platform.OS === 'ios' ? t('settingsIosWidgetNote') : t('settingsSectionWidgetNote'),
-                summary: Platform.OS === 'ios' ? t('settingsIosWidgetSummary') : t('settingsSectionWidgetSummary', {
-                  kojori: widgetKojoriStopLabel,
-                  tbilisi: widgetTbilisiStopLabel,
-                }),
+                note: t('settingsIosWidgetNote'),
+                summary: copy('settingsWidgetSummary'),
                 accentColor: colors.route316,
               }) : null}
               {renderSectionCard({
@@ -1896,8 +1670,14 @@ export default function SettingsScreen({ isActive = true, onSubmenuChange }: {
         {activeSection === 'commute' ? (
           <>
         <View style={styles.sectionMeta}>
+          <Text style={styles.sectionHeader}>{copy('tripsHeader')}</Text>
+          <Text style={styles.sectionNote}>{copy('tripsHeaderNote')}</Text>
+        </View>
+        <SettingsTripsCard />
+
+        <View style={styles.sectionMeta}>
           <Text style={styles.sectionHeader}>{t('settingsOnLaunch')}</Text>
-          <Text style={styles.sectionNote}>{t('settingsOnLaunchNote')}</Text>
+          <Text style={styles.sectionNote}>{copy('settingsLaunchNote')}</Text>
         </View>
         <View style={styles.card}>
           {launchBehaviorOptions.map((option, index) => {
@@ -1962,40 +1742,13 @@ export default function SettingsScreen({ isActive = true, onSubmenuChange }: {
             </Text>
           </View>
         </View>
-
-        <View style={styles.sectionMeta}>
-          <Text style={styles.sectionHeader}>{t('settingsKojoriStops')}</Text>
-          <Text style={styles.sectionNote}>{t('settingsKojoriStopsNote')}</Text>
-        </View>
-        <FavoritesCard
-          favoriteIds={settings.kojoriFavorites}
-          direction="toTbilisi"
-          accentColor={colors.route316}
-          stopNames={stopNames}
-          canRemove={settings.kojoriFavorites.length > 1}
-          onRemove={toggleKojoriFavorite}
-          onManage={() => setModal('kojori')}
-        />
-
-        <View style={styles.sectionMeta}>
-          <Text style={styles.sectionHeader}>{t('settingsTbilisiStops')}</Text>
-        </View>
-        <FavoritesCard
-          favoriteIds={settings.tbilisiFavorites}
-          direction="toKojori"
-          accentColor={colors.route380}
-          stopNames={stopNames}
-          canRemove={settings.tbilisiFavorites.length > 1}
-          onRemove={toggleTbilisiFavorite}
-          onManage={() => setModal('tbilisi')}
-        />
           </>
         ) : null}
 
         {activeSection === 'widget' && Platform.OS === 'ios' ? (
           <View style={styles.sectionMeta}>
             <Text style={styles.sectionHeader}>{t('settingsSectionWidget')}</Text>
-            <Text style={styles.sectionNote}>{t('settingsIosWidgetInstructions')}</Text>
+            <Text style={styles.sectionNote}>{copy('settingsWidgetIosNote')}</Text>
           </View>
         ) : null}
 
@@ -2003,7 +1756,7 @@ export default function SettingsScreen({ isActive = true, onSubmenuChange }: {
           <>
             <View style={styles.sectionMeta}>
               <Text style={styles.sectionHeader}>{t('settingsAndroidWidget')}</Text>
-              <Text style={styles.sectionNote}>{t('settingsAndroidWidgetNote')}</Text>
+              <Text style={styles.sectionNote}>{t('settingsAndroidWidgetNote')} {copy('settingsWidgetAndroidNote')}</Text>
             </View>
             {KojoriWidget?.canPinWidget() ? (
               <View style={styles.card}>
@@ -2028,27 +1781,6 @@ export default function SettingsScreen({ isActive = true, onSubmenuChange }: {
                 })}
               </View>
             ) : null}
-            <View style={styles.sectionMeta}>
-              <Text style={styles.sectionHeader}>{t('settingsWidgetStops')}</Text>
-              <Text style={styles.sectionNote}>{t('settingsWidgetStopsNote')}</Text>
-            </View>
-            <WidgetStopCard
-              title={t('settingsWidgetKojoriStop')}
-              stopId={settings.widgetTbilisiStopId}
-              direction="toKojori"
-              accentColor={colors.route380}
-              stopNames={stopNames}
-              onManage={() => setModal('widget-tbilisi')}
-            />
-            <View style={styles.sectionSpacer} />
-            <WidgetStopCard
-              title={t('settingsWidgetTbilisiStop')}
-              stopId={settings.widgetKojoriStopId}
-              direction="toTbilisi"
-              accentColor={colors.route316}
-              stopNames={stopNames}
-              onManage={() => setModal('widget-kojori')}
-            />
           </>
         ) : null}
 
@@ -2326,44 +2058,6 @@ export default function SettingsScreen({ isActive = true, onSubmenuChange }: {
         ) : null}
       </ScrollView>
 
-      <StopPickerModal
-        visible={modal === 'kojori'}
-        title={t('timetableKojoriStops')}
-        direction="toTbilisi"
-        favoriteIds={settings.kojoriFavorites}
-        accentColor={colors.route316}
-        onToggle={toggleKojoriFavorite}
-        onClose={() => setModal(null)}
-      />
-      <StopPickerModal
-        visible={modal === 'tbilisi'}
-        title={t('timetableTbilisiStops')}
-        direction="toKojori"
-        favoriteIds={settings.tbilisiFavorites}
-        accentColor={colors.route380}
-        onToggle={toggleTbilisiFavorite}
-        onClose={() => setModal(null)}
-      />
-      <SingleStopPickerModal
-        visible={modal === 'widget-tbilisi'}
-        title={t('settingsWidgetKojoriStop')}
-        direction="toKojori"
-        selectedId={settings.widgetTbilisiStopId}
-        accentColor={colors.route380}
-        stopNames={stopNames}
-        onSelect={id => update({ widgetTbilisiStopId: id })}
-        onClose={() => setModal(null)}
-      />
-      <SingleStopPickerModal
-        visible={modal === 'widget-kojori'}
-        title={t('settingsWidgetTbilisiStop')}
-        direction="toTbilisi"
-        selectedId={settings.widgetKojoriStopId}
-        accentColor={colors.route316}
-        stopNames={stopNames}
-        onSelect={id => update({ widgetKojoriStopId: id })}
-        onClose={() => setModal(null)}
-      />
       <LegalModal
         visible={legalModal !== null}
         title={legalModal === 'privacy' ? t('settingsPrivacyPolicy') : t('settingsTermsOfService')}
@@ -2627,7 +2321,6 @@ function createStyles(C: AppColors) {
     sectionMeta: { marginTop: 24, marginBottom: 10, gap: 4 },
     sectionHeader: { color: C.textFaint, fontSize: 10, fontWeight: '700', letterSpacing: 2.5 },
     sectionNote: { color: C.textDim, fontSize: 12, lineHeight: 17 },
-    sectionSpacer: { height: 12 },
 
     card: { backgroundColor: C.surface, borderRadius: 16, borderWidth: 1, borderColor: C.border, overflow: 'hidden' },
     adminSection: { marginTop: 2 },
@@ -2648,17 +2341,6 @@ function createStyles(C: AppColors) {
     },
     adminCardTitle: { color: C.text, fontSize: 13, fontWeight: '800', letterSpacing: 1.1 },
     adminCardNote: { color: C.textDim, fontSize: 12, lineHeight: 17 },
-    favRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 13, gap: 10 },
-    stopRowInset: { paddingHorizontal: 10, paddingVertical: 10 },
-    favDot: { width: 7, height: 7, borderRadius: 3.5, flexShrink: 0 },
-    favLabel: { flex: 1, color: C.text, fontSize: 15, fontWeight: '500' },
-    widgetCopy: { flex: 1, gap: 2 },
-    widgetTitle: { color: C.textFaint, fontSize: 11, fontWeight: '700', letterSpacing: 1.3 },
-    widgetValue: { color: C.text, fontSize: 15, fontWeight: '500' },
-    removeBtn: { padding: 4 },
-    removeBtnDisabled: { opacity: 0.2 },
-    removeText: { fontSize: 13, fontWeight: '700' },
-    stopCodeInline: { color: C.textFaint, fontSize: 12, flexShrink: 0 },
     manageBtn: { paddingHorizontal: 16, paddingVertical: 14, alignItems: 'center' },
     manageBtnText: { fontSize: 14, fontWeight: '600' },
     itemDivider: { height: 1, backgroundColor: C.border, marginLeft: 16 },
@@ -3098,23 +2780,6 @@ const styles = StyleSheet.create({
 function createModalStyles(C: AppColors) {
   return StyleSheet.create({
     screen: { flex: 1, backgroundColor: C.bg },
-    sheetContent: { paddingHorizontal: 18, gap: 14 },
-    sheetHeader: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      gap: 14,
-    },
-    sheetTitle: { flex: 1, color: C.text, fontSize: 20, fontWeight: '700', letterSpacing: -0.3 },
-    closeButton: {
-      width: 34,
-      height: 34,
-      borderRadius: 17,
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: C.surfaceHigh,
-    },
-    closeText: { color: C.textDim, fontSize: 24, lineHeight: 28 },
     header: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -3127,26 +2792,5 @@ function createModalStyles(C: AppColors) {
     backBtn: { width: 40, alignItems: 'flex-start' },
     backText: { color: C.text, fontSize: 22 },
     headerTitle: { color: C.text, fontSize: 17, fontWeight: '600' },
-    searchWrap: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      paddingHorizontal: 14,
-      backgroundColor: C.surfaceHigh,
-      borderRadius: 12,
-      borderWidth: 1,
-      borderColor: C.border,
-    },
-    searchInput: { flex: 1, color: C.text, fontSize: 15, paddingVertical: 12 },
-    spinner: { marginLeft: 8 },
-    list: { borderRadius: 14 },
-    listContent: { paddingBottom: 8, gap: 10 },
-    separator: { height: 1, backgroundColor: C.border, marginLeft: 48 },
-    stopRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, gap: 12 },
-    disabled: { opacity: 0.3 },
-    checkbox: { width: 20, height: 20, borderRadius: 6, borderWidth: 1.5, borderColor: C.borderStrong, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-    checkmark: { width: 10, height: 10, borderRadius: 2 },
-    stopLabel: { flex: 1, color: C.textDim, fontSize: 15, fontWeight: '500' },
-    stopCode: { color: C.textFaint, fontSize: 12, flexShrink: 0 },
-    emptyText: { color: C.textFaint, textAlign: 'center', paddingVertical: 40, fontSize: 14 },
   });
 }
