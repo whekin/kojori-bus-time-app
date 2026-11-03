@@ -2,6 +2,7 @@ import { useQueries } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { AppState } from "react-native";
 
+import { arrivalSource, backendRows, fetchBackendDepartures } from "./backend";
 import { useI18n } from "@/hooks/use-i18n";
 import {
   arrivalsQuery,
@@ -62,15 +63,14 @@ export function useFavoriteDepartures(
       all.findIndex((other) => lookupStopId(b) === lookupStopId(other)) === i,
   );
   const arrivals = useQueries({
-    queries: arrivalBoardings.map((b) => arrivalsQuery(b, ttcLocale, active)),
+    queries: arrivalBoardings.map((b) => arrivalsQuery(b, ttcLocale, active && arrivalSource === "ttc")),
   });
   const evidencePatterns = patterns.filter(requiresVehicleEvidence);
   const evidence = useQueries({
     queries: evidencePatterns.map((b) => positionsQuery(b, active, 30_000)),
   });
-  const rows = boardings
-    .flatMap((boarding) => {
-      if (!active) return [];
+  const contexts = boardings
+    .map((boarding) => {
       const schedule =
         schedules[
           patterns.findIndex((b) => patternKey(b) === patternKey(boarding))
@@ -114,16 +114,23 @@ export function useFavoriteDepartures(
               now + 7 * 86_400_000,
             )
       ).slice(0, 32);
-      return mergeTransitArrivals(
-        boarding,
-        scheduled,
-        arrival?.data ?? [],
-        now,
-        arrival?.dataUpdatedAt ?? 0,
-        vehicleCount,
-      );
-    })
-    .sort((a, b) => a.epochMs - b.epochMs);
+      return { boarding, scheduled, arrival, vehicleCount, evidenceAt: vehicles?.isError ? 0 : vehicles?.dataUpdatedAt ?? 0 };
+    });
+  const backend = useQueries({
+    queries: contexts.map(({ boarding, scheduled, vehicleCount, evidenceAt }) => ({
+      queryKey: ['gzaap', 'departures', boardingKey(boarding), scheduled.map(r => [r.key, r.epochMs, r.scheduledEpochMs, r.confirmed]), vehicleCount],
+      enabled: active && arrivalSource === 'gzaap',
+      staleTime: 20000,
+      retry: false,
+      refetchInterval: active && arrivalSource === 'gzaap' ? 30000 : false as const,
+      queryFn: ({ signal }: { signal: AbortSignal }) => fetchBackendDepartures(boarding, scheduled, { count: vehicleCount, observedAt: evidenceAt }, signal),
+    })),
+  });
+  const rows = contexts.flatMap(({ boarding, scheduled, arrival, vehicleCount }, index) => {
+    if (!active) return [];
+    if (arrivalSource === 'gzaap') return backendRows(backend[index]?.data, backend[index]?.isError ?? false, scheduled, now);
+    return mergeTransitArrivals(boarding, scheduled, arrival?.data ?? [], now, arrival?.dataUpdatedAt ?? 0, vehicleCount);
+  }).sort((a, b) => a.epochMs - b.epochMs);
   const missingStops = boardings.filter((boarding) => {
     const schedule =
       schedules[
@@ -148,22 +155,23 @@ export function useFavoriteDepartures(
         .length > 0
     );
   });
-  const liveQueries = arrivals.filter((query) => query.dataUpdatedAt > 0);
+  const sourceQueries = arrivalSource === "gzaap" ? backend : arrivals;
+  const liveQueries = sourceQueries.filter((query) => query.dataUpdatedAt > 0);
   return {
     rows,
     servedToday,
     missingStops,
     loading: schedules.some((query) => query.isLoading),
-    refreshing: [...schedules, ...arrivals].some((query) => query.isFetching),
+    refreshing: [...schedules, ...sourceQueries].some((query) => query.isFetching),
     hasSchedule: schedules.some((query) => Boolean(query.data?.length)),
     failedCount: schedules.filter((query) => query.isError).length,
-    liveFailed: arrivals.some((query) => query.isError),
+    liveFailed: sourceQueries.some((query) => query.isError),
     updatedAt: liveQueries.length
-      ? Math.min(...liveQueries.map((query) => query.dataUpdatedAt))
+      ? Math.min(...liveQueries.map((query) => arrivalSource === "gzaap" ? (query.data as { observedAt?: number } | undefined)?.observedAt ?? 0 : query.dataUpdatedAt))
       : 0,
     refresh: () =>
       Promise.all(
-        [...schedules, ...arrivals, ...evidence].map((query) =>
+        [...schedules, ...sourceQueries, ...evidence].map((query) =>
           query.refetch(),
         ),
       ),

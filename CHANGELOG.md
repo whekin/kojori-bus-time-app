@@ -4,6 +4,8 @@
 
 ### New
 
+- Experimental Gzaap backend source for departure cards, enabled per build; defaults remain TTC, with local timetable fallback when the backend is unavailable.
+
 - Trips: follow any TTC bus, metro or cable-car route, not just 380 and 316. A trip is one or more routes heading the same way, boarded at any of your saved stops — Departures, Map and Timetable show the trip you picked exactly as they showed Kojori before.
 - Adding a trip takes three taps: route, direction, boarding stop (nearest stops first). The app then suggests other routes from that stop going the same way and offers to add the way back.
 - The start screen shows one card per trip, with a trip and its way back sharing a card: "to Tbilisi" in large type, a "↩ Kojori" button to turn around, and the real route drawn faintly behind, from your stop to the end of the line. The direction pill on the stop map flips to the return trip or opens the list. The Timetable has Today, Tomorrow and any date from a calendar, marking which days TTC has confirmed.
