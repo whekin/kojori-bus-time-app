@@ -2,7 +2,14 @@
 
 ## [UNRELEASED]
 
+### Infra
+- Backend beta builds now record their source, checksum and feature flags; passed-early cards can be limited by route direction.
+
 ### New
+
+- Experimental departure cards can show when a bus passed early, remove its matching expected departure and hide the notice at the scheduled time.
+
+- Test builds can share already-fetched 380/316 bus positions with Gzaap to improve route history, without sending rider location.
 
 - Experimental Gzaap backend source for departure cards, enabled per build; defaults remain TTC, with local timetable fallback when the backend is unavailable.
 

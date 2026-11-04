@@ -3,6 +3,11 @@ import type { ResolvedLanguage } from './languages';
 // Voice guide: warm, local, calm; never cutesy for late-night, stranded-user, or TTC-error states.
 export const translations = {
   en: {
+    passedEarlyTitle: 'Already passed early',
+    passedEarlyInterval: 'Passed around {from}–{to}',
+    passedEarlySchedule: 'Scheduled for {time}',
+    passedEarlyWeeklySchedule: 'Last known weekly timetable: {time}',
+    passedEarlyA11y: 'Bus {route} already passed, around {from} to {to}. Scheduled for {scheduled}.',
     cityKojori: 'Kojori',
     cityTbilisi: 'Tbilisi',
     commonSystem: 'System',
@@ -317,6 +322,11 @@ export const translations = {
     mapConfigIssue: 'The API key may be invalid or Maps SDK for Android is not enabled.\nEnable it at console.cloud.google.com -> APIs & Services -> Library -> "Maps SDK for Android".',
   },
   ka: {
+    passedEarlyTitle: 'უკვე გაიარა, დროზე ადრე',
+    passedEarlyInterval: 'გაიარა დაახლოებით {from}–{to}',
+    passedEarlySchedule: 'განრიგით: {time}',
+    passedEarlyWeeklySchedule: 'ბოლო ცნობილი კვირის განრიგით: {time}',
+    passedEarlyA11y: 'ავტობუსმა {route} უკვე გაიარა, დაახლოებით {from}-დან {to}-მდე. განრიგით: {scheduled}.',
     cityKojori: 'კოჯორი',
     cityTbilisi: 'თბილისი',
     commonSystem: 'სისტემა',
@@ -631,6 +641,11 @@ export const translations = {
     mapConfigIssue: 'API key შეიძლება არასწორია ან Maps SDK for Android ჩართული არ არის.\nჩართეთ console.cloud.google.com -> APIs & Services -> Library -> "Maps SDK for Android".',
   },
   ru: {
+    passedEarlyTitle: 'Уже проехал раньше',
+    passedEarlyInterval: 'Проехал примерно в {from}–{to}',
+    passedEarlySchedule: 'По расписанию — {time}',
+    passedEarlyWeeklySchedule: 'По последнему недельному расписанию — {time}',
+    passedEarlyA11y: 'Автобус {route} уже проехал, примерно с {from} до {to}. По расписанию — {scheduled}.',
     cityKojori: 'Коджори',
     cityTbilisi: 'Тбилиси',
     commonSystem: 'Система',

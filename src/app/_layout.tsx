@@ -1,3 +1,4 @@
+import { PassedEarlyPreview } from '@/components/passed-early-preview';
 import { DefaultTheme, ThemeProvider, type Theme } from '@react-navigation/native';
 import { focusManager, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useGlobalSearchParams } from 'expo-router';
@@ -217,7 +218,7 @@ function AppThemeShell() {
         style={resolvedMode === 'light' ? 'dark' : 'light'}
       />
       <View style={[styles.appSurface, { backgroundColor: colors.bg }]}>
-        <AppReady />
+        {__DEV__ && process.env.EXPO_PUBLIC_GZAAP_PASSED_DEMO === 'true' ? <PassedEarlyPreview /> : <AppReady />}
       </View>
     </ThemeProvider>
   );

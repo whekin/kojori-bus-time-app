@@ -2,6 +2,7 @@ import { useQueries } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { AppState } from "react-native";
 
+import { fetchPassedEarly, passedEarlyEnabled, passedEarlyBoardingEnabled, watchPassedEarlyExpiry, removePassedSlots, selectPassedEarly } from "./passed-early";
 import { arrivalSource, backendRows, fetchBackendDepartures } from "./backend";
 import { useI18n } from "@/hooks/use-i18n";
 import {
@@ -126,11 +127,30 @@ export function useFavoriteDepartures(
       queryFn: ({ signal }: { signal: AbortSignal }) => fetchBackendDepartures(boarding, scheduled, { count: vehicleCount, observedAt: evidenceAt }, signal),
     })),
   });
-  const rows = contexts.flatMap(({ boarding, scheduled, arrival, vehicleCount }, index) => {
+  const passed = useQueries({
+    queries: boardings.map(boarding => ({
+      queryKey: ['gzaap', 'passed-early', boardingKey(boarding)],
+      enabled: active && passedEarlyEnabled && passedEarlyBoardingEnabled(boarding) && requiresVehicleEvidence(boarding),
+      retry: false,
+      staleTime: 8000,
+      refetchInterval: active && passedEarlyEnabled && passedEarlyBoardingEnabled(boarding) && requiresVehicleEvidence(boarding) ? 15000 : false as const,
+      queryFn: ({ signal }: { signal: AbortSignal }) => fetchPassedEarly(boarding, signal),
+    })),
+  });
+  const [expiryClock, setExpiryClock] = useState(0);
+  const cardNow = Math.max(now, expiryClock);
+  const passedEarlyCards = active && passedEarlyEnabled ? contexts.flatMap(({ boarding, scheduled }, index) =>
+    !passedEarlyBoardingEnabled(boarding) ? [] : selectPassedEarly(passed[index]?.data, passed[index]?.isError ?? false, scheduled, cardNow)) : [];
+  const nextExpiry = passedEarlyCards.length ? Math.min(...passedEarlyCards.map(c => c.hideAt), ...passed.map(q => q.data?.validUntil ?? Infinity).filter(deadline => deadline > cardNow)) : 0;
+  useEffect(() => {
+    if (!active || !nextExpiry) return;
+    return watchPassedEarlyExpiry(nextExpiry, setExpiryClock);
+  }, [active, nextExpiry]);
+  const rows = removePassedSlots(contexts.flatMap(({ boarding, scheduled, arrival, vehicleCount }, index) => {
     if (!active) return [];
     if (arrivalSource === 'gzaap') return backendRows(backend[index]?.data, backend[index]?.isError ?? false, scheduled, now);
     return mergeTransitArrivals(boarding, scheduled, arrival?.data ?? [], now, arrival?.dataUpdatedAt ?? 0, vehicleCount);
-  }).sort((a, b) => a.epochMs - b.epochMs);
+  }).filter(row => row.epochMs > cardNow), passedEarlyCards).sort((a, b) => a.epochMs - b.epochMs);
   const missingStops = boardings.filter((boarding) => {
     const schedule =
       schedules[
@@ -159,6 +179,7 @@ export function useFavoriteDepartures(
   const liveQueries = sourceQueries.filter((query) => query.dataUpdatedAt > 0);
   return {
     rows,
+    passedEarlyCards,
     servedToday,
     missingStops,
     loading: schedules.some((query) => query.isLoading),
@@ -171,7 +192,7 @@ export function useFavoriteDepartures(
       : 0,
     refresh: () =>
       Promise.all(
-        [...schedules, ...sourceQueries, ...evidence].map((query) =>
+        [...schedules, ...sourceQueries, ...evidence, ...(passedEarlyEnabled ? passed.filter((_, i) => passedEarlyBoardingEnabled(boardings[i]) && requiresVehicleEvidence(boardings[i])) : [])].map((query) =>
           query.refetch(),
         ),
       ),

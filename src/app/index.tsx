@@ -18,6 +18,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { PassedEarlyCard } from "@/components/passed-early-card";
 import { StopSelector } from "@/components/stop-selector";
 import { TtcStatusTopBar } from "@/components/ttc-status-top-bar";
 import { alpha, BottomTabInset, type AppColors } from "@/constants/theme";
@@ -808,6 +809,7 @@ function TripDeparturesView({
             <ErrorBanner message={copy("stopsChanged")} />
           ) : null}
 
+          {data.passedEarlyCards.map(card => <PassedEarlyCard key={card.id} card={card} />)}
           <SectionDivider label={t("homeNext")} style={styles.nextDivider} />
           <NextCard
             dep={next}

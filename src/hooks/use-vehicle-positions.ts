@@ -1,3 +1,4 @@
+import { submitPositionObservations } from '@/transit/observations';
 import { queryOptions, useQueries, type UseQueryResult } from '@tanstack/react-query';
 
 import { BAKED_POLYLINES } from '@/assets/ttc-baked';
@@ -70,6 +71,7 @@ function hasValidCoordinate(position: VehiclePosition) {
 async function fetchPositionsForRoute(bus: BusLine, direction: Direction): Promise<LiveVehiclePosition[]> {
   const route = ROUTES[bus];
   const response = await fetchVehiclePositions(route.id, route[direction]);
+  void submitPositionObservations(route.id, route[direction], response[route[direction]] ?? [], Date.now());
   const rawPositions = Object.values(response).flat()
     .map(position => ({ ...position, bus }))
     .filter(hasValidCoordinate);

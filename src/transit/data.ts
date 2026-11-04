@@ -1,3 +1,4 @@
+import { submitPositionObservations } from "./observations";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { QueryClient, queryOptions } from "@tanstack/react-query";
 
@@ -476,6 +477,10 @@ export function positionsQuery(
         "vehicle-positions",
         signal,
       );
+      // Only report the requested direction; a malformed extra pattern must not
+      // be attributed to this boarding. Upload never blocks the TTC query.
+      void submitPositionObservations(boarding.route.id, boarding.pattern.patternSuffix,
+        data[boarding.pattern.patternSuffix] ?? [], Date.now());
       return Object.values(data)
         .flat()
         .filter(
