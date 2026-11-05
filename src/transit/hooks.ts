@@ -1,8 +1,10 @@
+import {etaPreviewEnabled,etaPreviewBoardingEnabled,fetchEtaPreview,selectEtaPreview} from './eta-preview';
+import {watchDeadline,displayNow} from './deadline';
 import { useQueries } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { AppState } from "react-native";
 
-import { fetchPassedEarly, passedEarlyEnabled, passedEarlyBoardingEnabled, watchPassedEarlyExpiry, removePassedSlots, selectPassedEarly } from "./passed-early";
+import { fetchPassedEarly, passedEarlyEnabled, passedEarlyBoardingEnabled, removePassedSlots, selectPassedEarly } from "./passed-early";
 import { arrivalSource, backendRows, fetchBackendDepartures } from "./backend";
 import { useI18n } from "@/hooks/use-i18n";
 import {
@@ -137,14 +139,24 @@ export function useFavoriteDepartures(
       queryFn: ({ signal }: { signal: AbortSignal }) => fetchPassedEarly(boarding, signal),
     })),
   });
+  const etaEnabled=active&&etaPreviewEnabled&&arrivalSource==='ttc'&&boardings.some(etaPreviewBoardingEnabled);
+  const eta=useQueries({queries:boardings.map(boarding=>({
+    queryKey:['gzaap','eta-preview',boardingKey(boarding)],
+    enabled:etaEnabled&&etaPreviewBoardingEnabled(boarding),retry:false,staleTime:8000,
+    refetchInterval:etaEnabled&&etaPreviewBoardingEnabled(boarding)?15000:false as const,
+    queryFn:({signal}:{signal:AbortSignal})=>fetchEtaPreview(boarding,signal),
+  }))});
   const [expiryClock, setExpiryClock] = useState(0);
-  const cardNow = Math.max(now, expiryClock);
+  const cardNow = displayNow(now, expiryClock);
   const passedEarlyCards = active && passedEarlyEnabled ? contexts.flatMap(({ boarding, scheduled }, index) =>
     !passedEarlyBoardingEnabled(boarding) ? [] : selectPassedEarly(passed[index]?.data, passed[index]?.isError ?? false, scheduled, cardNow)) : [];
-  const nextExpiry = passedEarlyCards.length ? Math.min(...passedEarlyCards.map(c => c.hideAt), ...passed.map(q => q.data?.validUntil ?? Infinity).filter(deadline => deadline > cardNow)) : 0;
+  const etaPredictions=etaEnabled?boardings.flatMap((boarding,index)=>etaPreviewBoardingEnabled(boarding)?selectEtaPreview(eta[index]?.data,eta[index]?.isError??false,cardNow):[]):[];
+  const passedExpiry = passedEarlyCards.length ? Math.min(...passedEarlyCards.map(c => c.hideAt), ...passed.map(q => q.data?.validUntil ?? Infinity).filter(deadline => deadline > cardNow)) : 0;
+  const etaExpiry=etaPredictions.length?Math.min(...etaPredictions.map(p=>p.hideAt)):0;
+  const nextExpiry=Math.min(...[passedExpiry,etaExpiry].filter(t=>t>cardNow),Infinity);
   useEffect(() => {
-    if (!active || !nextExpiry) return;
-    return watchPassedEarlyExpiry(nextExpiry, setExpiryClock);
+    if (!active || !Number.isFinite(nextExpiry)) return;
+    return watchDeadline(nextExpiry, setExpiryClock);
   }, [active, nextExpiry]);
   const rows = removePassedSlots(contexts.flatMap(({ boarding, scheduled, arrival, vehicleCount }, index) => {
     if (!active) return [];
@@ -180,6 +192,7 @@ export function useFavoriteDepartures(
   return {
     rows,
     passedEarlyCards,
+    etaPreview:{enabled:etaEnabled,predictions:etaPredictions,now:cardNow,loading:etaEnabled&&eta.some((q,i)=>etaPreviewBoardingEnabled(boardings[i])&&q.isLoading)},
     servedToday,
     missingStops,
     loading: schedules.some((query) => query.isLoading),
@@ -192,7 +205,7 @@ export function useFavoriteDepartures(
       : 0,
     refresh: () =>
       Promise.all(
-        [...schedules, ...sourceQueries, ...evidence, ...(passedEarlyEnabled ? passed.filter((_, i) => passedEarlyBoardingEnabled(boardings[i]) && requiresVehicleEvidence(boardings[i])) : [])].map((query) =>
+        [...schedules, ...sourceQueries, ...evidence, ...(etaEnabled?eta.filter((_,i)=>etaPreviewBoardingEnabled(boardings[i])):[]), ...(passedEarlyEnabled ? passed.filter((_, i) => passedEarlyBoardingEnabled(boardings[i]) && requiresVehicleEvidence(boardings[i])) : [])].map((query) =>
           query.refetch(),
         ),
       ),

@@ -48,12 +48,4 @@ export function removePassedSlots(rows:TransitDeparture[],cards:PassedEarlyCard[
  return rows.filter(row=>!cards.some(card=>card.departureKey===row.key&&row.boarding.route.id===card.boarding.route.id&&row.boarding.pattern.patternSuffix===card.boarding.pattern.patternSuffix&&row.boarding.stop.id===card.boarding.stop.id));
 }
 
-/** Recheck if a native timer fires slightly early; never wait for the next poll. */
-export function watchPassedEarlyExpiry(deadline:number,onExpire:(now:number)=>void,clock=()=>Date.now(),schedule=(callback:()=>void,delay:number)=>{
- const timer=setTimeout(callback,delay);return ()=>clearTimeout(timer);
-}) {
- let disposed=false,cancel=()=>{};
- const check=()=>{if(disposed)return;const now=clock();if(now<deadline)cancel=schedule(check,Math.max(1,deadline-now));else onExpire(now);};
- cancel=schedule(check,Math.max(0,deadline-clock()));
- return ()=>{disposed=true;cancel();};
-}
+export {watchDeadline as watchPassedEarlyExpiry} from './deadline';

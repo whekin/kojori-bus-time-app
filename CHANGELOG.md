@@ -7,6 +7,8 @@
 
 ### New
 
+- Add a separate Gzaap ETA preview behind a build flag, with arrival ranges, receipt freshness and automatic TTC fallback. The preview is off by default.
+
 - Experimental departure cards can show when a bus passed early, remove its matching expected departure and hide the notice at the scheduled time.
 
 - Test builds can share already-fetched 380/316 bus positions with Gzaap to improve route history, without sending rider location.

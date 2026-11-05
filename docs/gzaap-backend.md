@@ -39,3 +39,11 @@ Final row binding uses the local scheduled row key, handling floating-point ETA 
 `src/transit/gzaap-contract.ts` is generated from the backend wire contract. From the backend checkout, run `bun scripts/sync-contract.ts --check` to verify parity or omit `--check` to regenerate.
 
 The local preview build writes a `.apk.json` sidecar containing source revision, working-copy status, APK SHA-256, architecture, OTA state and explicit flags. Rebuild with the flags off to revert the beta, preserving app data. No Play Store release or OTA publication is part of this run.
+
+## Own ETA preview (off by default)
+
+`EXPO_PUBLIC_GZAAP_ETA_PREVIEW=true` opts into a separate experimental arrival-range block for covered 380/316 boardings. It requires the ordinary arrivals source to stay `ttc`. `EXPO_PUBLIC_GZAAP_ETA_PATTERNS` can restrict directions. Serving also requires the independent server `ETA_PREVIEW_ENABLED` control; both controls remain off for the preparation release, including the standard Android beta builder.
+
+The preview never binds vehicle estimates to timetable rows, removes TTC departures or changes widget data. Missing, malformed, stale, expired, unsupported or failed responses fall back to the ordinary TTC UI. The default build makes no ETA requests. No operations-panel or Coolify credentials are sent to this public endpoint.
+
+`EXPO_PUBLIC_GZAAP_ETA_DEMO=true` is a development-only synthetic visual fixture for range/fallback/expiry checks. It makes no network requests and is guarded by `__DEV__`. The Android builder explicitly disables it and own ETA while preserving observations/passed-early beta flags.

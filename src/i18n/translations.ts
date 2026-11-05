@@ -3,6 +3,14 @@ import type { ResolvedLanguage } from './languages';
 // Voice guide: warm, local, calm; never cutesy for late-night, stranded-user, or TTC-error states.
 export const translations = {
   en: {
+    etaPreviewTitle: "Gzaap · experimental ETA",
+    etaPreviewRange: "{from}–{to} min",
+    etaPreviewSingle: "~{minutes} min",
+    etaPreviewFreshness: "Position received {seconds}s ago",
+    etaPreviewFallback: "No fresh Gzaap estimate. Showing TTC departures.",
+    etaPreviewLoading: "Checking the Gzaap estimate…",
+    etaPreviewNote: "Estimates cover observed buses. TTC departures are shown below.",
+
     passedEarlyTitle: 'Already passed early',
     passedEarlyInterval: 'Passed around {from}–{to}',
     passedEarlySchedule: 'Scheduled for {time}',
@@ -322,6 +330,14 @@ export const translations = {
     mapConfigIssue: 'The API key may be invalid or Maps SDK for Android is not enabled.\nEnable it at console.cloud.google.com -> APIs & Services -> Library -> "Maps SDK for Android".',
   },
   ka: {
+    etaPreviewTitle: "Gzaap · საცდელი პროგნოზი",
+    etaPreviewRange: "{from}–{to} წთ",
+    etaPreviewSingle: "~{minutes} წთ",
+    etaPreviewFreshness: "პოზიცია მიღებულია {seconds} წამის წინ",
+    etaPreviewFallback: "Gzaap-ის ახალი პროგნოზი ჯერ არ არის. ნაჩვენებია TTC-ის მონაცემები.",
+    etaPreviewLoading: "Gzaap-ის პროგნოზს ვამოწმებთ…",
+    etaPreviewNote: "პროგნოზი დაკვირვებული ავტობუსებისთვისაა. TTC-ის მონაცემები ქვემოთაა.",
+
     passedEarlyTitle: 'უკვე გაიარა, დროზე ადრე',
     passedEarlyInterval: 'გაიარა დაახლოებით {from}–{to}',
     passedEarlySchedule: 'განრიგით: {time}',
@@ -641,6 +657,14 @@ export const translations = {
     mapConfigIssue: 'API key შეიძლება არასწორია ან Maps SDK for Android ჩართული არ არის.\nჩართეთ console.cloud.google.com -> APIs & Services -> Library -> "Maps SDK for Android".',
   },
   ru: {
+    etaPreviewTitle: "Gzaap · тестовый прогноз",
+    etaPreviewRange: "{from}–{to} мин",
+    etaPreviewSingle: "~{minutes} мин",
+    etaPreviewFreshness: "Данные получены {seconds} с назад",
+    etaPreviewFallback: "Свежего прогноза Gzaap пока нет. Показываем отправления TTC.",
+    etaPreviewLoading: "Проверяем прогноз Gzaap…",
+    etaPreviewNote: "Прогноз для наблюдаемых автобусов. Отправления TTC — ниже.",
+
     passedEarlyTitle: 'Уже проехал раньше',
     passedEarlyInterval: 'Проехал примерно в {from}–{to}',
     passedEarlySchedule: 'По расписанию — {time}',

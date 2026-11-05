@@ -15,7 +15,7 @@ try {
  await Bun.write(manifestPath, original.replace(marker, marker.replace('"true"', '"false"')));
  child = Bun.spawn(['./gradlew', ':app:assembleRelease', '-PreactNativeArchitectures=arm64-v8a'], {
   cwd: resolve(root, 'android'), stdout: 'inherit', stderr: 'inherit',
-  env: { ...process.env, EXPO_PUBLIC_GZAAP_OBSERVATIONS: 'true', EXPO_PUBLIC_GZAAP_ARRIVALS: 'ttc', EXPO_PUBLIC_GZAAP_PASSED_EARLY: 'true', EXPO_PUBLIC_GZAAP_PASSED_PATTERNS: '1:R97505/0:01,1:R97505/1:01,1:R98445/0:01,1:R98445/1:01', EXPO_PUBLIC_GZAAP_PASSED_DEMO: 'false', NODE_ENV: 'production' },
+  env: { ...process.env, EXPO_PUBLIC_GZAAP_ETA_PREVIEW: 'false', EXPO_PUBLIC_GZAAP_ETA_DEMO: 'false', EXPO_PUBLIC_GZAAP_OBSERVATIONS: 'true', EXPO_PUBLIC_GZAAP_ARRIVALS: 'ttc', EXPO_PUBLIC_GZAAP_PASSED_EARLY: 'true', EXPO_PUBLIC_GZAAP_PASSED_PATTERNS: '1:R97505/0:01,1:R97505/1:01,1:R98445/0:01,1:R98445/1:01', EXPO_PUBLIC_GZAAP_PASSED_DEMO: 'false', NODE_ENV: 'production' },
  });
  if (await child.exited !== 0) throw new Error('Android preview build failed');
  await mkdir(resolve(output, '..'), { recursive: true });
