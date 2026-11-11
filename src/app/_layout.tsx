@@ -1,3 +1,4 @@
+import { PwaSupport } from '@/components/pwa-support';
 import { EtaPreviewDemo } from '@/components/eta-preview-demo';
 import { PassedEarlyPreview } from '@/components/passed-early-preview';
 import { DefaultTheme, ThemeProvider, type Theme } from '@react-navigation/native';
@@ -142,6 +143,7 @@ function AppReady() {
   return (
     <TripUiContext.Provider value={tripUi}>
       <WidgetSync />
+      <PwaSupport />
       {!waitingForSmart ? (
         <AppReveal>
           <AppTabs

@@ -3,9 +3,12 @@
 ## [UNRELEASED]
 
 ### Infra
+- Add a production Docker image and Coolify hosting configuration for the PWA at `gzaap.whekin.dev`.
 - Backend beta builds now record their source, checksum and feature flags; passed-early cards can be limited by route direction.
 
 ### New
+
+- Install the web app on the Home Screen without sideloading. The production web build caches all app screens for offline startup and includes installation guidance in English, Georgian and Russian. Live departures still require internet; native widgets remain exclusive to the native app.
 
 - Add a separate Gzaap ETA preview behind a build flag, with arrival ranges, receipt freshness and automatic TTC fallback. The preview is off by default.
 

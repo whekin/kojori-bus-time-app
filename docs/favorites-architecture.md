@@ -54,7 +54,7 @@ TTC's direct responses did not expose CORS headers during verification; browser 
 
 The Expo web output is now `server`. A hosted web build needs **both** client assets and the exported server, as described in the [Expo API route documentation](https://docs.expo.dev/router/web/api-routes/). No hosting deployment was performed during this pass.
 
-The web map uses OpenStreetMap street tiles with attribution and saved route geometry; native maps use their platform provider. Street tiles need a connection. Persisted transit data supports cached display, but this pass does not add a web service worker for loading the entire website without a server.
+The web map uses OpenStreetMap street tiles with attribution and saved route geometry; native maps use their platform provider. Street tiles need a connection. Persisted transit data supports cached display, and `bun run web:build` now adds a versioned service worker to cache the app screens and assets for offline startup after the first successful online load. API responses and map tiles are not cached by that worker. See the README for hosting and update behavior.
 
 ## Verification
 

@@ -13,6 +13,8 @@
     "android:apk:release": "NODE_ENV=production sh -c 'cd android && ./gradlew assembleRelease'",
     "ios": "NODE_ENV=development expo run:ios",
     "web": "NODE_ENV=development expo start --web",
+    "web:build": "NODE_ENV=production expo export -p web && bun scripts/build-pwa.ts",
+    "web:serve": "NODE_ENV=production bun scripts/serve-web.ts",
     "bake:ttc": "bun scripts/bake-ttc.ts",
     "bake:check": "bun scripts/check-baked-freshness.ts",
     "i18n:check": "bun scripts/check-i18n-parity.ts",

@@ -1,3 +1,4 @@
+import { PwaInstallCard } from '@/components/pwa-support';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { useQuery } from '@tanstack/react-query';
 import React, { useEffect, useRef, useState } from 'react';
@@ -446,6 +447,7 @@ export function StartScreen({ onDone }: { onDone: () => void }) {
           <TtcStatusChip constrained />
         </View>
 
+        <PwaInstallCard />
         <View style={styles.header}>
           <Text style={[styles.title, { fontFamily: DISPLAY }]}>
             {state.favorites.length ? t('startTitle') : copy('tripsEmpty')}

@@ -82,7 +82,49 @@ What they do:
 - `bun run release:android:build`: builds the Android production AAB with EAS
 - `bun run release:android:submit`: submits the latest production build to Play Console
 
-## Install on iPhone
+## Install the web app (PWA)
+
+The web build can be installed from Safari with **Share → Add to Home Screen**.
+Enable **Open as Web App** if offered. No Apple Account or signing renewal is
+needed. Other browsers expose their own install action. Installation guidance
+appears in the trip chooser and Settings and disappears in standalone mode.
+
+Build and preview the production app:
+
+```bash
+bun run web:build
+PORT=8097 bun run web:serve
+```
+
+Deploy both `dist/client` and `dist/server` on a compatible Expo server host,
+with HTTPS at the domain root. The included Bun server serves both outputs;
+put it behind an HTTPS reverse proxy for hosting. Deploy client and server as one
+release and restart the server after changing the export, so cached HTML and
+assets always belong to the same build. `/ttc` must reach the server,
+not a static fallback. Serve `/sw.js` with revalidation (`Cache-Control: no-cache`)
+and JavaScript content type. `web:build` generates the worker after Expo export;
+plain `expo export` alone does not prepare offline support. The public address is `https://gzaap.whekin.dev`;
+see [PWA deployment](docs/pwa-deployment.md) for the Coolify configuration.
+
+After one successful online load and service-worker installation, all four app
+screens and their assets can reopen offline. Transit data continues to use the
+existing local cache: load the trips you need while online first. Live arrivals
+and map tiles require connectivity and are never cached by the service worker.
+Browser storage can be cleared or evicted, so offline data is not a permanent
+backup. Native Home Screen timetable widgets are available only in the native app.
+
+Updates download in the background on a later online visit. Close all open app
+windows/tabs and reopen to activate a downloaded update; the worker deliberately
+avoids switching builds underneath a running app. Development mode does not
+register the worker. Use a separate origin/port for development and production
+preview to avoid an installed production worker masking development changes.
+
+Before publishing, verify on an iPhone: install from Safari, open saved trips,
+close and reopen in airplane mode, navigate to Timetable and Settings, then
+reconnect. Verify an update preserves trips and preferences. A desktop browser
+check does not replace this device check.
+
+## Install the native app on iPhone
 
 Requires **iOS 16.4+**. The IPA is unsigned; opening it directly in Files does not
 install it. SideStore signs and installs it with your Apple Account. A paid Apple

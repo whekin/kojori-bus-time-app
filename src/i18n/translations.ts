@@ -3,6 +3,10 @@ import type { ResolvedLanguage } from './languages';
 // Voice guide: warm, local, calm; never cutesy for late-night, stranded-user, or TTC-error states.
 export const translations = {
   en: {
+    pwaInstallTitle: "Keep your trips one tap away",
+    pwaInstallInstructions: "On iPhone: open in Safari, tap Share → Add to Home Screen, then Open as Web App if shown. On other devices, use your browser’s install menu.",
+    pwaInstallNote: "Open the app online first to prepare offline use. Saved timetables work offline; live arrivals and map tiles need a connection.",
+
     etaPreviewTitle: "Gzaap · experimental ETA",
     etaPreviewRange: "{from}–{to} min",
     etaPreviewSingle: "~{minutes} min",
@@ -330,6 +334,10 @@ export const translations = {
     mapConfigIssue: 'The API key may be invalid or Maps SDK for Android is not enabled.\nEnable it at console.cloud.google.com -> APIs & Services -> Library -> "Maps SDK for Android".',
   },
   ka: {
+    pwaInstallTitle: "თქვენი მგზავრობები ერთი შეხებით",
+    pwaInstallInstructions: "iPhone-ზე: გახსენით Safari-ში, აირჩიეთ გაზიარება → მთავარ ეკრანზე დამატება, შემდეგ ვებაპად გახსნა, თუ გამოჩნდება. სხვა მოწყობილობებზე გამოიყენეთ ბრაუზერის დაყენების მენიუ.",
+    pwaInstallNote: "ხაზგარეშე გამოყენებისთვის ჯერ გახსენით აპი ინტერნეტით. შენახული განრიგები მუშაობს ინტერნეტის გარეშე; რეალურ დროში მოსვლის მონაცემებსა და რუკას კავშირი სჭირდება.",
+
     etaPreviewTitle: "Gzaap · საცდელი პროგნოზი",
     etaPreviewRange: "{from}–{to} წთ",
     etaPreviewSingle: "~{minutes} წთ",
@@ -657,6 +665,10 @@ export const translations = {
     mapConfigIssue: 'API key შეიძლება არასწორია ან Maps SDK for Android ჩართული არ არის.\nჩართეთ console.cloud.google.com -> APIs & Services -> Library -> "Maps SDK for Android".',
   },
   ru: {
+    pwaInstallTitle: "Ваши поездки — в одно касание",
+    pwaInstallInstructions: "На iPhone: откройте в Safari, нажмите «Поделиться» → «На экран Домой» и включите «Открывать как веб-приложение», если этот пункт есть. На других устройствах используйте меню установки браузера.",
+    pwaInstallNote: "Сначала откройте приложение с интернетом для подготовки к работе офлайн. Сохранённые расписания доступны без сети; прогнозы прибытия и карта требуют подключения.",
+
     etaPreviewTitle: "Gzaap · тестовый прогноз",
     etaPreviewRange: "{from}–{to} мин",
     etaPreviewSingle: "~{minutes} мин",

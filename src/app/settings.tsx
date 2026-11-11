@@ -1,3 +1,4 @@
+import { PwaInstallCard } from '@/components/pwa-support';
 import { Asset } from 'expo-asset';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import Constants from 'expo-constants';
@@ -1347,6 +1348,7 @@ export default function SettingsScreen({ isActive = true, onSubmenuChange }: {
         showsVerticalScrollIndicator={false}>
         {activeSection === null ? (
           <>
+            <PwaInstallCard />
             <View style={[styles.summaryActionStack, wideLayout && styles.summaryActionRow]}>
               {renderSummaryAction({
                 section: 'appearance',
