@@ -1,4 +1,4 @@
-# Google Play Setup Instructions for Kojoring Time App
+# Google Play Setup Instructions for Gzaap
 
 ## Quick Setup (15 minutes)
 
@@ -21,7 +21,7 @@ Add network security config:
 1. Go to https://play.google.com/console
 2. Click "Create Application"
 3. Fill in:
-   - App name: Kojoring Time
+   - App name: Gzaap — Tbilisi Bus Times
    - Default language: English
    - Content classification: Transportation
 4. Upload screenshots (1080x1920, minimum 2, recommended 5+)

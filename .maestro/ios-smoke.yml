@@ -9,7 +9,7 @@ appId: com.whekin.kojoribus
 - openLink: "kojoribs://"
 - runFlow:
     when:
-      visible: "Open in .*Kojoring Time.*"
+      visible: "Open in .*Gzaap.*"
     commands:
       - tapOn: Open
 - extendedWaitUntil:
@@ -76,7 +76,7 @@ appId: com.whekin.kojoribus
 - openLink: "kojoribs://?widgetMode=tbilisi&widgetStopId=1%3A3078"
 - runFlow:
     when:
-      visible: "Open in .*Kojoring Time.*"
+      visible: "Open in .*Gzaap.*"
     commands:
       - tapOn: Open
 - assertVisible:

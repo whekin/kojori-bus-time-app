@@ -2,7 +2,7 @@
 
 Last updated: April 14, 2026
 
-Kojoring Time ("the App") is a transit app for routes 380 and 316 between Kojori and Tbilisi.
+Gzaap ("the App") is a transit app for TTC buses, metro and cable cars in Tbilisi, starting with routes 380 and 316 between Kojori and Tbilisi.
 
 ## 1. Information We Collect
 

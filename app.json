@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Kojoring Time",
+    "name": "Gzaap",
     "slug": "kojori-bus-time",
     "version": "2026.9.23",
     "orientation": "portrait",
@@ -64,7 +64,7 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "Allow Kojoring Time to suggest a nearby saved boarding stop.",
+          "locationWhenInUsePermission": "Allow Gzaap to suggest a nearby saved boarding stop.",
           "locationAlwaysAndWhenInUsePermission": false,
           "locationAlwaysPermission": false,
           "isIosBackgroundLocationEnabled": false,

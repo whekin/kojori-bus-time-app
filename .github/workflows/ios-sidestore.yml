@@ -93,11 +93,11 @@ jobs:
             destination='generic/platform=iOS Simulator'
           fi
           xcodebuild archive \
-            -workspace ios/KojoringTime.xcworkspace \
-            -scheme KojoringTime \
+            -workspace ios/Gzaap.xcworkspace \
+            -scheme Gzaap \
             -configuration Release \
             -destination "$destination" \
-            -archivePath "$RUNNER_TEMP/KojoringTime.xcarchive" \
+            -archivePath "$RUNNER_TEMP/Gzaap.xcarchive" \
             -derivedDataPath "$RUNNER_TEMP/ios-derived-data" \
             ARCHS=arm64 \
             ONLY_ACTIVE_ARCH=YES \
@@ -111,7 +111,7 @@ jobs:
         if: matrix.target == 'device'
         run: |
           set -euo pipefail
-          app="$RUNNER_TEMP/KojoringTime.xcarchive/Products/Applications/KojoringTime.app"
+          app="$RUNNER_TEMP/Gzaap.xcarchive/Products/Applications/Gzaap.app"
           test -s "$app/main.jsbundle"
           test -s "$app/PlugIns/KojoriBusWidget.appex/KojoriBusWidget"
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleSupportedPlatforms:0' "$app/Info.plist")" = iPhoneOS
@@ -119,10 +119,10 @@ jobs:
           file "$app/$executable" | grep arm64
 
           mkdir -p "$RUNNER_TEMP/sidestore/Payload" "$RUNNER_TEMP/ios-artifacts"
-          ditto "$app" "$RUNNER_TEMP/sidestore/Payload/KojoringTime.app"
-          ditto -c -k --keepParent "$RUNNER_TEMP/sidestore/Payload" "$RUNNER_TEMP/ios-artifacts/KojoringTime-sidestore.ipa"
-          unzip -tq "$RUNNER_TEMP/ios-artifacts/KojoringTime-sidestore.ipa"
-          (cd "$RUNNER_TEMP/ios-artifacts" && shasum -a 256 KojoringTime-sidestore.ipa > SHA256SUMS.txt)
+          ditto "$app" "$RUNNER_TEMP/sidestore/Payload/Gzaap.app"
+          ditto -c -k --keepParent "$RUNNER_TEMP/sidestore/Payload" "$RUNNER_TEMP/ios-artifacts/Gzaap-sidestore.ipa"
+          unzip -tq "$RUNNER_TEMP/ios-artifacts/Gzaap-sidestore.ipa"
+          (cd "$RUNNER_TEMP/ios-artifacts" && shasum -a 256 Gzaap-sidestore.ipa > SHA256SUMS.txt)
           {
             echo '### SideStore IPA'
             echo 'Download the **sidestore-ipa** artifact, extract the ZIP, and import the `.ipa` into SideStore.'
@@ -143,18 +143,18 @@ jobs:
       - name: Package simulator app
         if: matrix.target == 'simulator'
         run: |
-          app="$RUNNER_TEMP/KojoringTime.xcarchive/Products/Applications/KojoringTime.app"
+          app="$RUNNER_TEMP/Gzaap.xcarchive/Products/Applications/Gzaap.app"
           test -s "$app/main.jsbundle"
           test -s "$app/PlugIns/KojoriBusWidget.appex/KojoriBusWidget"
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleSupportedPlatforms:0' "$app/Info.plist")" = iPhoneSimulator
-          ditto -c -k --keepParent "$app" "$RUNNER_TEMP/KojoringTime-simulator.zip"
+          ditto -c -k --keepParent "$app" "$RUNNER_TEMP/Gzaap-simulator.zip"
 
       - name: Upload simulator app
         if: matrix.target == 'simulator'
         uses: actions/upload-artifact@v4
         with:
           name: ios-simulator
-          path: ${{ runner.temp }}/KojoringTime-simulator.zip
+          path: ${{ runner.temp }}/Gzaap-simulator.zip
           if-no-files-found: error
           retention-days: 7
           compression-level: 0
@@ -181,10 +181,10 @@ jobs:
         run: |
           set -euo pipefail
           read -r runtime device_type < <(xcrun simctl list runtimes -j | python3 scripts/ios-simulator-device.py)
-          simulator=$(xcrun simctl create KojoringUITest "$device_type" "$runtime")
+          simulator=$(xcrun simctl create GzaapUITest "$device_type" "$runtime")
           xcrun simctl boot "$simulator"
           xcrun simctl bootstatus "$simulator" -b
-          xcrun simctl install "$simulator" "$RUNNER_TEMP/KojoringTime.xcarchive/Products/Applications/KojoringTime.app"
+          xcrun simctl install "$simulator" "$RUNNER_TEMP/Gzaap.xcarchive/Products/Applications/Gzaap.app"
           maestro --device "$simulator" test .maestro/ios-smoke.yml --test-output-dir "$RUNNER_TEMP/ios-ui-checks" --format junit --output "$RUNNER_TEMP/ios-ui-checks/results.xml"
 
       - name: Upload iOS screenshots and UI results
@@ -235,8 +235,8 @@ jobs:
           gh release view "$RELEASE_TAG" > /dev/null
           cd ipa
           sha256sum --check SHA256SUMS.txt
-          asset="kojoring-time-$RELEASE_TAG-sidestore.ipa"
-          mv KojoringTime-sidestore.ipa "$asset"
+          asset="gzaap-$RELEASE_TAG-sidestore.ipa"
+          mv Gzaap-sidestore.ipa "$asset"
           sha256sum "$asset" > "$asset.sha256"
           gh release upload "$RELEASE_TAG" "$asset" "$asset.sha256" --clobber
           echo "IPA published: $(gh release view "$RELEASE_TAG" --json url --jq .url)" >> "$GITHUB_STEP_SUMMARY"

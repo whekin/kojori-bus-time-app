@@ -133,10 +133,10 @@ function releaseNoteBullets(notes: string) {
 function createUpdateMessage(version: string, notes: string) {
   const bullets = releaseNoteBullets(notes);
   const first = bullets[0];
-  if (!first) return `Kojoring Time v${version}`;
+  if (!first) return `Gzaap v${version}`;
 
   const suffix = bullets.length > 1 ? ` (+${bullets.length - 1} more)` : '';
-  return `Kojoring Time v${version}: ${first}${suffix}`;
+  return `Gzaap v${version}: ${first}${suffix}`;
 }
 
 function findChangelogSection(heading: string): string | null {
@@ -499,9 +499,9 @@ if (!isDone(state, 'commit_push')) {
 step('8/10  GitHub release');
 
 if (!isDone(state, 'github_release')) {
-  const apkName = `kojoring-time-${tag}.apk`;
+  const apkName = `gzaap-${tag}.apk`;
   const renamedApkPath = resolve(root, `android/app/build/outputs/apk/release/${apkName}`);
-  const notesFile = resolve(tmpdir(), `kojoring-release-${tag}.md`);
+  const notesFile = resolve(tmpdir(), `gzaap-release-${tag}.md`);
   writeFileSync(notesFile, `${releaseNotes}\n\n### iPhone installation\n\nThe unsigned SideStore IPA and its SHA-256 checksum are attached after the iOS build and UI checks pass. If only the APK is visible, check [iOS build progress](https://github.com/whekin/kojori-bus-time-app/actions/workflows/ios-sidestore.yml).\n\n[Install on iPhone](https://github.com/whekin/kojori-bus-time-app/blob/${tag}/README.md#install-on-iphone) (iOS 16.4+; SideStore signs the IPA with your Apple Account).\n`);
 
   try {
@@ -512,15 +512,15 @@ if (!isDone(state, 'github_release')) {
       const releaseExists = run(`gh release view ${tag}`, { stdio: 'pipe', allowFailure: true }) !== null;
       if (!releaseExists) {
         run(
-          `gh release create ${tag} "${renamedApkPath}" --title "Kojoring Time ${tag}" --notes-file "${notesFile}"`
+          `gh release create ${tag} "${renamedApkPath}" --title "Gzaap ${tag}" --notes-file "${notesFile}"`
         );
       } else {
-        run(`gh release edit ${tag} --title "Kojoring Time ${tag}" --notes-file "${notesFile}"`);
+        run(`gh release edit ${tag} --title "Gzaap ${tag}" --notes-file "${notesFile}"`);
         run(`gh release upload ${tag} "${renamedApkPath}" --clobber`);
       }
     } else {
       run(
-        `gh release create ${tag} "${renamedApkPath}" --title "Kojoring Time ${tag}" --notes-file "${notesFile}"`
+        `gh release create ${tag} "${renamedApkPath}" --title "Gzaap ${tag}" --notes-file "${notesFile}"`
       );
     }
   } finally {

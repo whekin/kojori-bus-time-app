@@ -1,7 +1,7 @@
 {
   "id": "/",
-  "name": "Kojoring Time",
-  "short_name": "Kojoring",
+  "name": "Gzaap — Tbilisi Bus Times",
+  "short_name": "Gzaap",
   "description": "Your saved TTC trips, departures and offline timetables.",
   "start_url": "/",
   "scope": "/",

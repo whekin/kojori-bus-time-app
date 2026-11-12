@@ -1,4 +1,4 @@
-# Kojoring Time
+# Gzaap — Tbilisi Bus Times
 
 A focused TTC transit app built around the routes you actually use. Save a route, its direction and your boarding stop, then check the next departure in one tap.
 
@@ -131,12 +131,12 @@ install it. SideStore signs and installs it with your Apple Account. A paid Appl
 Developer membership is not required.
 
 1. Set up SideStore using its [official guide](https://docs.sidestore.io/docs/installation/install), starting with the linked prerequisites. Complete the first SideStore refresh before importing apps.
-2. On your iPhone, open [Kojoring Time releases](https://github.com/whekin/kojori-bus-time-app/releases/latest). Under **Assets**, download `kojoring-time-vYYYY.M.D-sidestore.ipa` to Files. If only the APK is listed, the [iOS build](https://github.com/whekin/kojori-bus-time-app/actions/workflows/ios-sidestore.yml) may still be running; failed checks prevent IPA publication.
+2. On your iPhone, open [Gzaap releases](https://github.com/whekin/kojori-bus-time-app/releases/latest). Under **Assets**, download `gzaap-vYYYY.M.D-sidestore.ipa` to Files. If only the APK is listed, the [iOS build](https://github.com/whekin/kojori-bus-time-app/actions/workflows/ios-sidestore.yml) may still be running; failed checks prevent IPA publication.
 3. Connect the VPN required by your SideStore setup. In SideStore, open **My Apps**, tap **+**, and choose the downloaded IPA. **Keep app extensions** when asked, so the Home Screen widget is installed.
 4. If iOS requests developer trust, follow the prompt under **Settings → General → VPN & Device Management**. If launch requires Developer Mode, enable it under **Settings → Privacy & Security → Developer Mode**, restart, and confirm on the phone.
-5. Open Kojoring Time once. On iOS 17+, add it from the Home Screen widget gallery; long-press the widget and choose **Edit Widget** to select its stop and routes.
+5. Open Gzaap once. On iOS 17+, add it from the Home Screen widget gallery; long-press the widget and choose **Edit Widget** to select its stop and routes.
 
-With a free Apple Account, refresh Kojoring Time and SideStore before their
+With a free Apple Account, refresh Gzaap and SideStore before their
 seven-day signing period expires. Check the expiry counters in SideStore rather
 than relying solely on background refresh. See the [SideStore FAQ](https://docs.sidestore.io/docs/faq)
 for signing limits and troubleshooting. A widget extension uses an additional App ID.
@@ -158,7 +158,7 @@ Each release includes an adjacent `.ipa.sha256` file. On a Mac, download both
 files into the same folder and verify the IPA with:
 
 ```bash
-shasum -a 256 -c kojoring-time-vYYYY.M.D-sidestore.ipa.sha256
+shasum -a 256 -c gzaap-vYYYY.M.D-sidestore.ipa.sha256
 ```
 
 ## Publishing releases
@@ -177,7 +177,7 @@ IPA has passed validation.
 The iOS workflow builds unsigned arm64 Release apps for device and simulator,
 checks lint, TypeScript, Bun tests and the native offline schedule, then runs the
 Maestro interface flow. Only after both jobs succeed does it upload
-`kojoring-time-vYYYY.M.D-sidestore.ipa` and `.ipa.sha256` to that existing release.
+`gzaap-vYYYY.M.D-sidestore.ipa` and `.ipa.sha256` to that existing release.
 The IPA includes its JavaScript bundle and WidgetKit extension. A guard rejects
 publication if a re-release moved the tag while the build was running. No Apple
 signing certificates, Apple Account credentials, Expo login, or added repository

@@ -4,7 +4,7 @@ Guidelines for AI agents working on this codebase.
 
 ## Project Overview
 
-**Kojoring Time** — favorite-route TTC transit app, with Kojori–Tbilisi routes 380/316 as its bundled starter collection. Built with Expo Router + React Native, targeting Android primarily. Shows real-time departures, full timetables, live vehicle map, and native home screen widgets.
+**Gzaap** (formerly Kojoring Time) — favorite-route TTC transit app, with Kojori–Tbilisi routes 380/316 as its bundled starter collection. Built with Expo Router + React Native, targeting Android primarily. Shows real-time departures, full timetables, live vehicle map, and native home screen widgets.
 
 ## Key Conventions
 
