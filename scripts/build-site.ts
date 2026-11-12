@@ -54,6 +54,14 @@ function render(lang: Language): string {
     } })
     .on('link[rel="canonical"]', { element: el => { el.setAttribute('href', url); } })
     .on('meta[property="og:url"]', { element: el => { el.setAttribute('content', url); } })
+    // App screenshots are taken in each language: /img/screens/<lang>/….
+    .on('[data-localize]', { element: el => {
+      for (const attr of ['src', 'srcset']) {
+        const value = el.getAttribute(attr);
+        if (value) el.setAttribute(attr, value.replace('/img/screens/en/', `/img/screens/${lang}/`));
+      }
+      el.removeAttribute('data-localize');
+    } })
     .on('[data-home]', { element: el => { el.setAttribute('href', pagePath(lang)); } })
     .on('[data-lang]', { element: el => {
       if (el.getAttribute('data-lang') === lang) el.setAttribute('aria-current', 'page');

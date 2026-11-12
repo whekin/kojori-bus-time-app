@@ -102,7 +102,11 @@ native builds and `bun run web` keep `/`). The root belongs to the static
 landing page in `site/` (`/`, `/privacy`, `/terms`). `web:build` runs
 `scripts/build-site.ts`, which copies it to `dist/site` and renders the page once
 per language (`/`, `/ka/`, `/ru/`) from `site/index.html` and the Georgian and
-Russian strings in `scripts/site-strings.ts`. Old app links (`/explore`, `/timetable`, `/settings`) redirect
+Russian strings in `scripts/site-strings.ts` (text the page script shows comes from
+hidden `[data-msg]` elements, so it is translated the same way). App screenshots
+live per language in `site/img/screens/<lang>/` and each page points at its own
+set. The live board on the landing page reads TTC through the app's `/app/ttc` proxy.
+Fonts (Unbounded, Noto Sans Georgian) are self-hosted in `site/fonts/`. Old app links (`/explore`, `/timetable`, `/settings`) redirect
 to `/app/…`, Home Screen installs that still open `/` are sent to `/app/`, and
 `/sw.js` is now a worker that retires the old root-scoped app worker.
 
