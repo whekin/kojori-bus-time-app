@@ -1,4 +1,5 @@
 import 'maplibre-gl/dist/maplibre-gl.css';
+import './geo-map.web.css';
 
 import type * as MapLibreGL from 'maplibre-gl';
 import React, {
@@ -179,7 +180,15 @@ export function GeoMap({
     }
     map.addControl(new lib.AttributionControl({ compact: true }), attributionPosition);
 
+    // maplibre opens the compact attribution until the first drag; start it
+    // folded to its "i" button instead, still a tap away.
+    const foldAttribution = () => {
+      container.querySelector('.maplibregl-ctrl-attrib')?.classList.remove('maplibregl-compact-show');
+    };
+    map.once('idle', foldAttribution);
+
     map.on('load', () => {
+      foldAttribution();
       setContext({ lib, map, styleRevision: 0 });
       handlers.current.onReady?.();
     });

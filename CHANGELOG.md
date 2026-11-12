@@ -7,10 +7,12 @@
 - The web app gets the same Map tab as the phones: a full-screen map with live buses, the stop tray, locate-me and route chips, instead of a small fixed map with zoom buttons.
 - The boarding-stop map on Departures and Timetable now works on the web too, and frames the stops exactly on every device.
 - Web tabs switch instantly instead of flashing a blank page while each screen loads, and the browser back button walks back through tabs. A link straight to the Map, Timetable or Settings tab opens that tab instead of the trip chooser.
-- The web install tip can be dismissed, and offers a one-tap Install button in browsers that support it. The start screen keeps a phone-width column on wide screens.
+- The web install tip is a single slim row: tap it for the Add to Home Screen steps, use the Install button where the browser offers one, or dismiss it. The start screen keeps a phone-width column on wide screens.
+- The map credits on the web start folded into a small "i" instead of a banner across the map.
 
 ### Fixed
 - Icons on the web no longer show as empty boxes for a moment while their font loads.
+- The web app updates itself: a new version takes over as soon as it has downloaded and reloads open windows onto it, instead of waiting until every window is closed (which on an iPhone Home Screen app could mean days).
 
 ### Infra
 - Native builds need a new binary (`runtimeVersion` kojori-native-9): `react-native-maps` is replaced by `@maplibre/maplibre-react-native`, and no Google Maps API key is needed anywhere any more.

@@ -1,0 +1,14 @@
+/* The OSM attribution stays one tap away as a small, quiet "i" instead of a
+   banner across the map: maplibre opens the compact control on first load. */
+.maplibregl-ctrl-attrib.maplibregl-compact:not(.maplibregl-compact-show) {
+  opacity: 0.55;
+  transform: scale(0.85);
+  transform-origin: bottom left;
+  box-shadow: none;
+}
+.maplibregl-ctrl-bottom-right .maplibregl-ctrl-attrib.maplibregl-compact:not(.maplibregl-compact-show) {
+  transform-origin: bottom right;
+}
+.maplibregl-ctrl-attrib.maplibregl-compact-show {
+  font-size: 11px;
+}

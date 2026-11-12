@@ -14,17 +14,38 @@ self.addEventListener('install', event => {
       await caches.delete(CACHE);
       throw error;
     }
+    // Take over as soon as the new build is fully cached. Waiting for every
+    // window to close meant a Home Screen app, which iOS rarely terminates,
+    // could stay on an old build for days.
+    await self.skipWaiting();
   })());
 });
 
 self.addEventListener('activate', event => {
-  event.waitUntil((async () => {
-    // No skipWaiting: existing windows retain a coherent build until closed.
+  const activation = (async () => {
+    let replacedBuild = false;
     for (const name of await caches.keys()) {
-      if (name.startsWith('kojoring-shell-') && name !== CACHE) await caches.delete(name);
+      if (name.startsWith('kojoring-shell-') && name !== CACHE) {
+        await caches.delete(name);
+        replacedBuild = true;
+      }
     }
     await self.clients.claim();
-  })());
+    return replacedBuild;
+  })();
+  event.waitUntil(activation);
+  // Open windows still run the previous build's scripts, whose lazy chunks
+  // are gone from the new cache and the server, so they reload onto this
+  // build; trips and settings live in storage. This must run after
+  // activation settles: fetches wait for an activating worker, so a reload
+  // awaited inside waitUntil would deadlock the page on "Loading".
+  // A first install has nothing stale to replace and leaves the page alone.
+  void activation.then(async replacedBuild => {
+    if (!replacedBuild) return;
+    for (const client of await self.clients.matchAll({ type: 'window' })) {
+      client.navigate(client.url).catch(() => {});
+    }
+  });
 });
 
 self.addEventListener('fetch', event => {

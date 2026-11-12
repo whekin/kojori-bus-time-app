@@ -1,7 +1,7 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { alpha, Fonts, Spacing } from '@/constants/theme';
+import { Spacing } from '@/constants/theme';
 import { useAppColors } from '@/hooks/use-app-colors';
 import { useI18n } from '@/hooks/use-i18n';
 
@@ -50,9 +50,10 @@ export function PwaSupport() {
 }
 
 /**
- * Install tip on the start screen. Hidden once installed or dismissed; where
- * the browser offers its own install prompt the card gets a real button
- * instead of instructions.
+ * Install tip on the start screen: one slim row that stays out of the way.
+ * Where the browser offers its own prompt the row carries an Install button;
+ * elsewhere (Safari) tapping it unfolds the Add to Home Screen steps.
+ * Hidden once installed or dismissed.
  */
 export function PwaInstallCard() {
   const colors = useAppColors();
@@ -60,6 +61,7 @@ export function PwaInstallCard() {
   const [standalone, setStandalone] = useState(true);
   const [dismissed, setDismissed] = useState(true);
   const [canPrompt, setCanPrompt] = useState(false);
+  const [expanded, setExpanded] = useState(false);
 
   useEffect(() => {
     const mode = window.matchMedia('(display-mode: standalone)');
@@ -98,62 +100,61 @@ export function PwaInstallCard() {
 
   return (
     <View style={[styles.card, { backgroundColor: colors.panel, borderColor: colors.border }]}>
-      <View style={[styles.icon, { backgroundColor: alpha(colors.primary, '1F') }]}>
-        <MaterialCommunityIcons name="cellphone-arrow-down" size={20} color={colors.primary} />
+      <View style={styles.row}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityState={canPrompt ? undefined : { expanded }}
+          onPress={canPrompt ? install : () => setExpanded(value => !value)}
+          style={styles.main}>
+          <MaterialCommunityIcons name="cellphone-arrow-down" size={18} color={colors.primary} />
+          <Text style={[styles.title, { color: colors.text }]} numberOfLines={1}>
+            {t('pwaInstallTitle')}
+          </Text>
+          {canPrompt ? (
+            <View style={[styles.installButton, { backgroundColor: colors.primary }]}>
+              <Text style={styles.installText}>{t('pwaInstallAction')}</Text>
+            </View>
+          ) : (
+            <MaterialCommunityIcons
+              name={expanded ? 'chevron-up' : 'chevron-down'}
+              size={18}
+              color={colors.textDim}
+            />
+          )}
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t('pwaInstallDismiss')}
+          onPress={dismiss}
+          hitSlop={10}
+          style={styles.close}>
+          <MaterialCommunityIcons name="close" size={16} color={colors.textFaint} />
+        </Pressable>
       </View>
-      <View style={styles.copy}>
-        <Text style={[styles.title, { color: colors.text }]}>{t('pwaInstallTitle')}</Text>
-        {canPrompt ? null : (
+      {expanded && !canPrompt ? (
+        <View style={styles.details}>
           <Text style={[styles.body, { color: colors.textDim }]}>{t('pwaInstallInstructions')}</Text>
-        )}
-        <Text style={[styles.note, { color: colors.textFaint }]}>{t('pwaInstallNote')}</Text>
-        {canPrompt ? (
-          <Pressable
-            accessibilityRole="button"
-            onPress={install}
-            style={({ pressed }) => [
-              styles.installButton,
-              { backgroundColor: colors.primary, opacity: pressed ? 0.85 : 1 },
-            ]}>
-            <Text style={styles.installText}>{t('pwaInstallAction')}</Text>
-          </Pressable>
-        ) : null}
-      </View>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={t('pwaInstallDismiss')}
-        onPress={dismiss}
-        hitSlop={10}
-        style={styles.close}>
-        <MaterialCommunityIcons name="close" size={18} color={colors.textDim} />
-      </Pressable>
+          <Text style={[styles.note, { color: colors.textFaint }]}>{t('pwaInstallNote')}</Text>
+        </View>
+      ) : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   card: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: Spacing.three,
-    padding: Spacing.three,
-    paddingRight: Spacing.two,
     borderWidth: 1,
-    borderRadius: 18,
-    marginBottom: Spacing.two,
+    borderRadius: 14,
+    paddingLeft: Spacing.three,
+    paddingRight: Spacing.one,
   },
-  icon: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
-  copy: { flex: 1, minWidth: 0, gap: 4 },
-  title: { fontFamily: Fonts.serif, fontSize: 17, lineHeight: 22 },
+  row: { flexDirection: 'row', alignItems: 'center', minHeight: 44 },
+  main: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
+  title: { flexShrink: 1, fontSize: 14, fontWeight: '700' },
+  details: { gap: 4, paddingRight: Spacing.two, paddingBottom: Spacing.three },
   body: { fontSize: 13, lineHeight: 19 },
   note: { fontSize: 12, lineHeight: 17 },
-  installButton: {
-    alignSelf: 'flex-start',
-    marginTop: 6,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 999,
-  },
-  installText: { color: '#FFFFFF', fontSize: 13, fontWeight: '800' },
-  close: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
+  installButton: { marginLeft: 'auto', paddingHorizontal: 12, paddingVertical: 5, borderRadius: 999 },
+  installText: { color: '#FFFFFF', fontSize: 12, fontWeight: '800' },
+  close: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
 });

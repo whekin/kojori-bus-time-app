@@ -2,10 +2,12 @@ import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 
-function worker(failInstall = false) {
+function worker(failInstall = false, existingCaches = ['kojoring-shell-old', 'kojoring-shell-test', 'unrelated-cache']) {
   const handlers: Record<string, (event: any) => void> = {};
   const deleted: string[] = [];
   const cached: string[] = [];
+  const reloaded: string[] = [];
+  let skippedWaiting = false;
   const code = readFileSync(new URL('./service-worker.js', import.meta.url), 'utf8')
     .replace('__BUILD_ID__', 'test').replace('__PRECACHE_ASSETS__;', '["/app.js"];');
   runInNewContext(code, {
@@ -13,7 +15,13 @@ function worker(failInstall = false) {
     Request: class { constructor(public url: string) {} },
     self: {
       location: { origin: 'https://app.test' },
-      clients: { claim: async () => {} },
+      skipWaiting: async () => { skippedWaiting = true; },
+      clients: {
+        claim: async () => {},
+        matchAll: async () => [
+          { url: 'https://app.test/explore', navigate: async (url: string) => { reloaded.push(url); } },
+        ],
+      },
       addEventListener: (name: string, handler: any) => { handlers[name] = handler; },
     },
     caches: {
@@ -24,7 +32,7 @@ function worker(failInstall = false) {
         },
         match: async (url: string) => `cached:${url}`,
       }),
-      keys: async () => ['kojoring-shell-old', 'kojoring-shell-test', 'unrelated-cache'],
+      keys: async () => existingCaches,
       delete: async (name: string) => { deleted.push(name); },
     },
     fetch: () => { throw new Error('offline'); },
@@ -40,7 +48,7 @@ function worker(failInstall = false) {
       respondWith: (promise: Promise<string>) => { result = promise; } });
     return result;
   }
-  return { lifecycle, request, cached, deleted };
+  return { lifecycle, request, cached, deleted, reloaded, skipped: () => skippedWaiting };
 }
 
 test('prepares every screen and lazy asset for offline startup', async () => {
@@ -66,4 +74,25 @@ test('failed installation discards its partial cache; activation preserves other
   const app = worker();
   await app.lifecycle('activate');
   expect(app.deleted).toEqual(['kojoring-shell-old']);
+});
+
+test('a new build takes over once cached and reloads windows still on the old one', async () => {
+  const app = worker();
+  await app.lifecycle('install');
+  expect(app.skipped()).toBe(true);
+  await app.lifecycle('activate');
+  // Reloads start only once activation has settled.
+  expect(app.reloaded).toEqual([]);
+  await new Promise(resolve => setTimeout(resolve, 0));
+  expect(app.reloaded).toEqual(['https://app.test/explore']);
+});
+
+test('a failed install never takes over; a first install reloads nothing', async () => {
+  const failed = worker(true);
+  await expect(failed.lifecycle('install')).rejects.toThrow('network unavailable');
+  expect(failed.skipped()).toBe(false);
+  const first = worker(false, ['kojoring-shell-test']);
+  await first.lifecycle('activate');
+  await new Promise(resolve => setTimeout(resolve, 0));
+  expect(first.reloaded).toEqual([]);
 });
