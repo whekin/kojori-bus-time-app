@@ -1,4 +1,4 @@
-import { TTC_BASE, TTC_API_KEY } from "@/services/ttc-endpoint";
+import { TTC_BASE } from "@/services/ttc-endpoint";
 
 /** Same-origin read access for the web app. This is not an arbitrary URL proxy. */
 export async function GET(request: Request) {
@@ -36,11 +36,16 @@ export async function GET(request: Request) {
   ) {
     return Response.json({ error: "Unsupported TTC request" }, { status: 400 });
   }
+  const token = process.env.GZAAP_GATEWAY_TOKEN;
+  if (!token) return Response.json({ error: "Gateway is unavailable" }, { status: 503, headers: { "Cache-Control": "no-store" } });
+  const gateway = new URL("https://gzaap-api.whekin.dev/internal/ttc");
+  gateway.searchParams.set("path", path);
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 20_000);
   try {
-    const response = await fetch(parsed, {
-      headers: { "x-api-key": process.env.TTC_API_KEY ?? TTC_API_KEY },
+    const response = await fetch(gateway, {
+      headers: { Authorization: `Bearer ${token}` },
+      redirect: "error",
       signal: controller.signal,
     });
     return new Response(response.body, {
@@ -49,10 +54,12 @@ export async function GET(request: Request) {
         "Content-Type":
           response.headers.get("content-type") ?? "application/json",
         "Cache-Control": "no-store",
+        ...(response.headers.get("retry-after") ? { "Retry-After": response.headers.get("retry-after")! } : {}),
+        ...(response.headers.get("x-gzaap-observed-at") ? { "X-Gzaap-Observed-At": response.headers.get("x-gzaap-observed-at")! } : {}),
       },
     });
   } catch {
-    return Response.json({ error: "TTC is unavailable" }, { status: 502 });
+    return Response.json({ error: "TTC is unavailable" }, { status: 502, headers: { "Cache-Control": "no-store" } });
   } finally {
     clearTimeout(timeout);
   }

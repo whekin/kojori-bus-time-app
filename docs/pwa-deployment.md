@@ -24,8 +24,12 @@ provider key is needed: every platform draws OpenFreeMap tiles with MapLibre.
 Experimental backend feature
 flags stay at their defaults.
 
-The optional `TTC_API_KEY` runtime variable overrides the existing TTC key in
-the same-origin `/ttc` endpoint. No database credentials are needed.
+Set server-only `GZAAP_GATEWAY_TOKEN` to the same application-specific secret as
+`PWA_TTC_GATEWAY_TOKEN` on the Gzaap backend. Never use an `EXPO_PUBLIC_` variable
+for this secret. The PWA forwards `/ttc` to the authenticated backend gateway;
+missing credentials or gateway outages fail closed without direct TTC fallback.
+Deploy the backend gateway first, then configure both runtime secrets, then
+this PWA. No database or Coolify credentials are given to the PWA.
 
 ## Verification
 
