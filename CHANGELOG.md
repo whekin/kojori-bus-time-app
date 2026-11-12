@@ -16,6 +16,7 @@
 - The web app updates itself: a new version takes over as soon as it has downloaded and reloads open windows onto it, instead of waiting until every window is closed (which on an iPhone Home Screen app could mean days).
 
 ### Infra
+- The web TTC proxy (`/app/ttc`) now shares answers between visitors: live arrivals for 15 s, bus positions for 4 s, schedules for an hour and routes and stops for six hours, with one TTC request for any number of identical concurrent reads. Requests that reach TTC are capped per visitor (120/min) and for the whole server (1200/min), and TTC rate-limit answers are held for 15 s instead of being retried by every client. All web traffic reaches TTC from one server and one key, so this keeps the number of visitors from deciding how hard we hit TTC.
 - Rename: the iOS project and scheme are now `Gzaap` (CI and Maestro updated) and release assets are `gzaap-<tag>.apk` / `gzaap-<tag>-sidestore.ipa`. The bundle ID, package name, URL scheme, EAS project and storage keys are unchanged, so installs update in place.
 - Native builds need a new binary (`runtimeVersion` kojori-native-9): `react-native-maps` is replaced by `@maplibre/maplibre-react-native`, and no Google Maps API key is needed anywhere any more.
 - Shared map layer in `src/map/` (MapLibre Native on the phones, `maplibre-gl` on the web) with exact Web Mercator framing; `web` and `web:build` copy the maplibre tile worker into `public/maplibre/`.

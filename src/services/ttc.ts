@@ -24,7 +24,8 @@ export async function fetchTtcJson<T>(url: string, kind: TtcQueryKind, signal?: 
     statusCode = res.status;
 
     if (!res.ok) {
-      const isRateLimited = res.status === 520;
+      // TTC answers 520 when it rate-limits; the web proxy answers 429/503 for its own limits.
+      const isRateLimited = res.status === 520 || res.status === 429 || res.status === 503;
       reportTtcFailure(isRateLimited);
       throw new Error(`HTTP ${res.status}`);
     }

@@ -105,7 +105,9 @@ per language (`/`, `/ka/`, `/ru/`) from `site/index.html` and the Georgian and
 Russian strings in `scripts/site-strings.ts` (text the page script shows comes from
 hidden `[data-msg]` elements, so it is translated the same way). App screenshots
 live per language in `site/img/screens/<lang>/` and each page points at its own
-set. The live board on the landing page reads TTC through the app's `/app/ttc` proxy.
+set. The live board on the landing page reads TTC through the app's `/app/ttc` proxy,
+which caches answers and rate-limits upstream requests
+(`src/services/ttc-proxy-cache.ts`).
 Fonts (Unbounded, Noto Sans Georgian) are self-hosted in `site/fonts/`. Old app links (`/explore`, `/timetable`, `/settings`) redirect
 to `/app/…`, Home Screen installs that still open `/` are sent to `/app/`, and
 `/sw.js` is now a worker that retires the old root-scoped app worker.

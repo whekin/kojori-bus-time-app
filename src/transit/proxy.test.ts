@@ -1,9 +1,11 @@
 // @ts-expect-error Bun provides the test module at runtime.
 import { afterEach, expect, it, mock } from "bun:test";
 import { GET } from "@/app/ttc+api";
+import { resetTtcProxyState } from "@/services/ttc-proxy-cache";
 const originalFetch = globalThis.fetch;
 afterEach(() => {
   globalThis.fetch = originalFetch;
+  resetTtcProxyState();
 });
 
 it("rejects arbitrary destinations, unlisted TTC endpoints and unexpected query parameters", async () => {
