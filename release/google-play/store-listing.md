@@ -1,7 +1,7 @@
 # Google Play store listing
 
 ## App name
-Kojoring Time
+Gzaap — Tbilisi Bus Times
 
 ## Package name
 `com.whekin.kojoribus`
@@ -11,7 +11,7 @@ Live bus times and routes for Kojori and Tbilisi.
 
 ## Full description
 
-Kojoring Time is a focused transit app for traveling between Kojori and Tbilisi.
+Gzaap is a focused transit app for traveling between Kojori and Tbilisi.
 
 Use it to:
 - check live and scheduled departures for routes 380 and 316

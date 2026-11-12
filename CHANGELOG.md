@@ -3,6 +3,7 @@
 ## [UNRELEASED]
 
 ### Improved
+- The app is now called **Gzaap** ("Gzaap — Tbilisi Bus Times" in the store and browser), since it follows any TTC route rather than only Kojori. Your trips, widgets and settings carry over unchanged.
 - Maps are drawn with MapLibre on Android, iPhone and the web, using OpenStreetMap tiles styled in the app's own paper tones (with a matching dark mode) and labelled in your app language. Stop and bus markers are real views now, so they no longer clip, flicker or blink when you zoom.
 - The web app gets the same Map tab as the phones: a full-screen map with live buses, the stop tray, locate-me and route chips, instead of a small fixed map with zoom buttons.
 - The boarding-stop map on Departures and Timetable now works on the web too, and frames the stops exactly on every device.
@@ -15,6 +16,7 @@
 - The web app updates itself: a new version takes over as soon as it has downloaded and reloads open windows onto it, instead of waiting until every window is closed (which on an iPhone Home Screen app could mean days).
 
 ### Infra
+- Rename: the iOS project and scheme are now `Gzaap` (CI and Maestro updated) and release assets are `gzaap-<tag>.apk` / `gzaap-<tag>-sidestore.ipa`. The bundle ID, package name, URL scheme, EAS project and storage keys are unchanged, so installs update in place.
 - Native builds need a new binary (`runtimeVersion` kojori-native-9): `react-native-maps` is replaced by `@maplibre/maplibre-react-native`, and no Google Maps API key is needed anywhere any more.
 - Shared map layer in `src/map/` (MapLibre Native on the phones, `maplibre-gl` on the web) with exact Web Mercator framing; `web` and `web:build` copy the maplibre tile worker into `public/maplibre/`.
 - Add a production Docker image and Coolify hosting configuration for the PWA at `gzaap.whekin.dev`.

@@ -2040,10 +2040,10 @@ export default function SettingsScreen({ isActive = true, onSubmenuChange }: {
           <View style={styles.buildDivider} />
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={`Kojoring Time v${APP_VERSION}, build ${BUILD_NUMBER}`}
+            accessibilityLabel={`Gzaap v${APP_VERSION}, build ${BUILD_NUMBER}`}
             onPress={handleBuildTap}
             style={styles.buildTapArea}>
-            <Text style={styles.buildAppName}>Kojoring Time</Text>
+            <Text style={styles.buildAppName}>Gzaap</Text>
             <Text style={styles.buildVersion}>v{APP_VERSION} · build {BUILD_NUMBER}</Text>
           </Pressable>
           <Pressable

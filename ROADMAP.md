@@ -1,6 +1,6 @@
 # Product Roadmap
 
-Kojoring Time should stay a focused, glanceable transit app. The next major step is to make that focused experience portable: instead of being permanently tied to Kojori and central Tbilisi, the app should follow the user's favorite everyday journey.
+Gzaap should stay a focused, glanceable transit app. The next major step is to make that focused experience portable: instead of being permanently tied to Kojori and central Tbilisi, the app should follow the user's favorite everyday journey.
 
 ## Next: Configurable favorite journey
 

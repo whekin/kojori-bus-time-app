@@ -442,7 +442,7 @@ export function StartScreen({ onDone }: { onDone: () => void }) {
         <View style={styles.topBar}>
           <View style={styles.brandRow}>
             <Image source={APP_ICON} style={styles.brandIcon} />
-            <Text style={styles.brandName} numberOfLines={1}>Kojoring Time</Text>
+            <Text style={styles.brandName} numberOfLines={1}>Gzaap</Text>
           </View>
           <TtcStatusChip constrained />
         </View>

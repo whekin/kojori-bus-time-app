@@ -89,7 +89,7 @@ const en = {
     "Widgets show your saved favorites and their timetables. Open the app after changing routes to sync them.",
   addWidget: "Add a widget",
   widgetIos:
-    "Add Kojoring Time from the Home Screen widget gallery, then choose a favorite in Edit Widget.",
+    "Add Gzaap from the Home Screen widget gallery, then choose a favorite in Edit Widget.",
   diagnostics: "Diagnostics",
   system: "System",
   light: "Light",
@@ -177,7 +177,7 @@ const en = {
   settingsLaunchLocationOffNote: "Until location access is allowed, the trip chooser opens.",
   settingsWidgetSummary: "Each widget shows a trip you choose",
   settingsWidgetAndroidNote: "Each widget shows one of your trips at its current boarding stop. Tap the trip name on the widget to switch to the next trip.",
-  settingsWidgetIosNote: "Touch and hold your Home Screen, tap Edit → Add Widget, and find Kojoring Time. Then touch and hold the widget → Edit Widget to choose a trip. Each widget follows that trip’s current boarding stop and works from the timetable saved on this device.",
+  settingsWidgetIosNote: "Touch and hold your Home Screen, tap Edit → Add Widget, and find Gzaap. Then touch and hold the widget → Edit Widget to choose a trip. Each widget follows that trip’s current boarding stop and works from the timetable saved on this device.",
   settingsClearCacheKeeps: "Downloaded timetables, stops and map lines will be removed. Your trips and settings stay saved. The app restarts afterwards.",
 };
 type Copy = Record<keyof typeof en, string>;
@@ -273,7 +273,7 @@ const ru: Copy = {
     "Виджеты показывают избранное и сохранённое расписание. После изменения маршрутов откройте приложение для синхронизации.",
   addWidget: "Добавить виджет",
   widgetIos:
-    "Добавьте Kojoring Time через галерею виджетов, затем выберите избранное в настройках виджета.",
+    "Добавьте Gzaap через галерею виджетов, затем выберите избранное в настройках виджета.",
   diagnostics: "Диагностика",
   system: "Системная",
   light: "Светлая",
@@ -361,7 +361,7 @@ const ru: Copy = {
   settingsLaunchLocationOffNote: "Пока доступ к геолокации не разрешён, будет открываться выбор поездки.",
   settingsWidgetSummary: "Каждый виджет показывает выбранную поездку",
   settingsWidgetAndroidNote: "Каждый виджет показывает одну из ваших поездок на текущей остановке посадки. Нажмите на название поездки в виджете, чтобы переключиться на следующую.",
-  settingsWidgetIosNote: "Удерживайте палец на домашнем экране, нажмите «Править» → «Добавить виджет» и найдите Kojoring Time. Затем удерживайте виджет → «Изменить виджет», чтобы выбрать поездку. Виджет следует за текущей остановкой посадки этой поездки и работает по расписанию, сохранённому на устройстве.",
+  settingsWidgetIosNote: "Удерживайте палец на домашнем экране, нажмите «Править» → «Добавить виджет» и найдите Gzaap. Затем удерживайте виджет → «Изменить виджет», чтобы выбрать поездку. Виджет следует за текущей остановкой посадки этой поездки и работает по расписанию, сохранённому на устройстве.",
   settingsClearCacheKeeps: "Скачанные расписания, остановки и линии на карте будут удалены. Поездки и настройки сохранятся. После этого приложение перезапустится.",
 };
 const ka: Copy = {
@@ -457,7 +457,7 @@ const ka: Copy = {
     "ვიჯეტები რჩეულებსა და შენახულ განრიგს აჩვენებს. მარშრუტების შეცვლის შემდეგ გახსენით აპი სინქრონიზაციისთვის.",
   addWidget: "ვიჯეტის დამატება",
   widgetIos:
-    "დაამატეთ Kojoring Time ვიჯეტების გალერეიდან და ვიჯეტის რედაქტირებით აირჩიეთ რჩეული.",
+    "დაამატეთ Gzaap ვიჯეტების გალერეიდან და ვიჯეტის რედაქტირებით აირჩიეთ რჩეული.",
   diagnostics: "დიაგნოსტიკა",
   system: "სისტემური",
   light: "ნათელი",
@@ -544,7 +544,7 @@ const ka: Copy = {
   settingsLaunchLocationOffNote: "სანამ მდებარეობაზე წვდომა არ არის დაშვებული, გაიხსნება მგზავრობის არჩევა.",
   settingsWidgetSummary: "ყოველი ვიჯეტი თქვენ მიერ არჩეულ მგზავრობას აჩვენებს",
   settingsWidgetAndroidNote: "ყოველი ვიჯეტი აჩვენებს თქვენს ერთ-ერთ მგზავრობას მიმდინარე ასასვლელ გაჩერებაზე. შეეხეთ მგზავრობის სახელს ვიჯეტზე, რომ შემდეგზე გადახვიდეთ.",
-  settingsWidgetIosNote: "მთავარ ეკრანზე ხანგრძლივად დააჭირეთ, აირჩიეთ Edit → Add Widget და მოძებნეთ Kojoring Time. შემდეგ ხანგრძლივად დააჭირეთ ვიჯეტს → Edit Widget და აირჩიეთ მგზავრობა. ვიჯეტი მიჰყვება ამ მგზავრობის მიმდინარე გაჩერებას და მუშაობს მოწყობილობაზე შენახული განრიგით.",
+  settingsWidgetIosNote: "მთავარ ეკრანზე ხანგრძლივად დააჭირეთ, აირჩიეთ Edit → Add Widget და მოძებნეთ Gzaap. შემდეგ ხანგრძლივად დააჭირეთ ვიჯეტს → Edit Widget და აირჩიეთ მგზავრობა. ვიჯეტი მიჰყვება ამ მგზავრობის მიმდინარე გაჩერებას და მუშაობს მოწყობილობაზე შენახული განრიგით.",
   settingsClearCacheKeeps: "ჩამოტვირთული განრიგები, გაჩერებები და რუკის ხაზები წაიშლება. მგზავრობები და პარამეტრები შენარჩუნდება. ამის შემდეგ აპი თავიდან ჩაირთვება.",
 };
 export const transitCopy = { en, ru, ka };

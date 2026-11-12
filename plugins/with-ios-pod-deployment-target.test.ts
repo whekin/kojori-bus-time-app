@@ -2,7 +2,7 @@
 import { expect, it } from 'bun:test';
 import { applyPodDeploymentFloor } from './with-ios-pod-deployment-target';
 
-const podfile = `target 'KojoringTime' do
+const podfile = `target 'Gzaap' do
   post_install do |installer|
     react_native_post_install(
       installer,

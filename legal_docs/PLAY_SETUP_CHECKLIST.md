@@ -9,7 +9,7 @@
 - [ ] Create new app listing
 - [ ] Set package name: [your.package.name]
 - [ ] Add store listing:
-  - [ ] App title (≤30 chars): "Kojoring Time"
+  - [ ] App title (≤30 chars): "Gzaap — Tbilisi Bus Times"
   - [ ] Short description (< 80 chars)
   - [ ] Full description
   - [ ] Screenshots (minimum 2, recommended 5+)

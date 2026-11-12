@@ -85,7 +85,7 @@ struct BusWidgetView: View {
         WidgetCopy.resolvedLanguage(bundleLanguages: [locale.identifier], systemLanguages: Locale.preferredLanguages)
     }
     private var stopName: String {
-        entry.stop?.names[language] ?? entry.stop?.names["en"] ?? "Kojoring Time"
+        entry.stop?.names[language] ?? entry.stop?.names["en"] ?? "Gzaap"
     }
     private var destination: String {
         WidgetCopy.text(entry.stop?.direction ?? "toKojori", language: language)
@@ -169,7 +169,7 @@ struct BusWidgetView: View {
             HStack(spacing: 10) {
                 Image(systemName: "bus.fill").font(.title2).foregroundStyle(.tint)
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("Kojoring Time").font(.caption).foregroundStyle(.secondary)
+                    Text("Gzaap").font(.caption).foregroundStyle(.secondary)
                     Text(destination).font(.title2.weight(.bold))
                 }
                 Spacer(minLength: 0)
@@ -242,7 +242,7 @@ struct KojoriBusWidget: Widget {
         AppIntentConfiguration(kind: "KojoriBusWidget", intent: BusConfiguration.self, provider: BusProvider()) { entry in
             BusWidgetView(entry: entry)
         }
-        .configurationDisplayName("Kojoring Time")
+        .configurationDisplayName("Gzaap")
         .description("Next departure")
         .supportedFamilies(families)
     }
