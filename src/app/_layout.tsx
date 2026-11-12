@@ -17,6 +17,7 @@ import { AnimatedSplashOverlay, AppReveal } from '@/components/animated-icon';
 import AppTabs from '@/components/app-tabs';
 import { StartScreen } from '@/components/start-screen';
 import { TripEditor } from '@/components/trip-editor';
+import { UsageReporter } from '@/components/usage-reporter';
 import { WidgetSync } from '@/components/widget-sync';
 import { AppColorsProvider, useAppColors, useResolvedAppThemeMode } from '@/hooks/use-app-colors';
 import { useLocation } from '@/hooks/use-location';
@@ -153,6 +154,7 @@ function AppReady() {
     <TripUiContext.Provider value={tripUi}>
       <WidgetSync />
       <PwaSupport />
+      <UsageReporter />
       {!waitingForSmart ? (
         <AppReveal>
           <AppTabs

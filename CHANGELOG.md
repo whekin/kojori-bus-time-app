@@ -27,6 +27,7 @@
 - Backend beta builds now record their source, checksum and feature flags; passed-early cards can be limited by route direction.
 
 ### New
+- Gzaap now counts how many people use it, anonymously: at most once a day the app reports that it was used, with only the platform and app version, and the server keeps only daily, weekly and monthly totals. No id, location or trips are sent. Turn it off in Settings → About → Privacy; the privacy policy explains it.
 
 - gzaap.whekin.dev has a landing page in English, Georgian and Russian, in the app's Brake Dust colors: a live departure board for the Tbilisi ⇄ Kojori trip (flip it for the way back), the app's three views in your language, and how to get it on the web, Android and iPhone, with privacy and terms pages. The web app itself moved to gzaap.whekin.dev/app. Old links and Home Screen installs keep working and open the app.
 - Settings → About links to the website. The privacy policy and terms now cover the web app and its connection to TTC, and no longer mention Google Maps.

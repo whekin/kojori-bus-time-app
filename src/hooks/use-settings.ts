@@ -61,6 +61,8 @@ export interface Settings {
   launchBehavior: LaunchBehavior;
   /** App language override, or follow device language */
   language: AppLanguage;
+  /** Send the anonymous daily/weekly/monthly usage count (no ids) */
+  shareUsageCount: boolean;
 }
 
 const DEFAULTS: Settings = {
@@ -78,6 +80,7 @@ const DEFAULTS: Settings = {
   ttcHealthDemo: 'off',
   launchBehavior: 'ask',
   language: 'system',
+  shareUsageCount: true,
 };
 
 // Collapse the legacy two-toggle model (enableSmartDirection + skipStartScreen) onto the new enum.

@@ -2006,6 +2006,23 @@ export default function SettingsScreen({ isActive = true, onSubmenuChange }: {
         {activeSection === 'about' ? (
           <>
         <View style={styles.sectionMeta}>
+          <Text style={styles.sectionHeader}>{t('settingsPrivacy')}</Text>
+        </View>
+        <View style={styles.card}>
+          <View style={styles.toggleRow}>
+            <View style={styles.toggleCopy}>
+              <Text style={styles.toggleLabel}>{t('settingsUsageCount')}</Text>
+              <Text style={styles.toggleNote}>{t('settingsUsageCountNote')}</Text>
+            </View>
+            <SettingsSwitch
+              value={settings.shareUsageCount}
+              onValueChange={value => update({ shareUsageCount: value })}
+              accentColor={colors.primary}
+            />
+          </View>
+        </View>
+
+        <View style={styles.sectionMeta}>
           <Text style={styles.sectionHeader}>{t('settingsLegal')}</Text>
         </View>
         <View style={styles.card}>

@@ -3,6 +3,8 @@ import type { Boarding, TransitDeparture } from './model';
 export type ArrivalSource = 'ttc' | 'gzaap';
 export const arrivalSource: ArrivalSource = process.env.EXPO_PUBLIC_GZAAP_ARRIVALS === 'gzaap' ? 'gzaap' : 'ttc';
 const baseUrl = process.env.EXPO_PUBLIC_GZAAP_API_URL ?? 'https://gzaap-api.whekin.dev';
+/** The Gzaap API origin, without a trailing slash. */
+export const gzaapApiUrl = baseUrl.replace(/\/$/, '');
 export type BackendDepartures = {
   state: 'available' | 'stale' | 'unavailable';
   observedAt: number;

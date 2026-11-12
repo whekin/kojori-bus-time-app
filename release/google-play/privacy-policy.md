@@ -1,12 +1,12 @@
 # Privacy Policy
 
-Last updated: November 12, 2026
+Last updated: November 13, 2026
 
 Gzaap (“the App”) shows departures, timetables and maps for TTC buses, metro and cable cars in Tbilisi. It is available as an Android and iPhone app and as a web app at gzaap.whekin.dev. This policy covers all of them.
 
 ## 1. Information we collect
 
-The App has no accounts and does not collect personal information. Your saved trips, stops and settings are stored on your device.
+The App has no accounts and does not collect personal information. Your saved trips, stops and settings are stored on your device. The only thing the App sends about its own use is the anonymous count described in section 6, which you can turn off.
 
 ## 2. Location data
 
@@ -33,18 +33,22 @@ The TTC public API does not accept requests made directly from web browsers, so 
 
 These services may process network and device data under their own policies.
 
-## 6. Analytics and advertising
+## 6. Anonymous usage count
 
-The App and this website do not use analytics, advertising, tracking or crash-reporting tools, and do not set cookies.
+To know roughly how many people use Gzaap, the App tells our server at gzaap-api.whekin.dev, at most once a day, that it was used, together with the platform (Android, iPhone or web) and the App version. Nothing else is sent: no identifier, location, trips or settings. The server adds one to a daily, weekly and monthly total and keeps only those totals. It does not store your IP address or anything else about the request; the address is used only in memory, to stop one device from inflating the totals. The App remembers on your device when it last reported. You can turn this off in Settings → About → Privacy.
 
-## 7. Children’s privacy
+## 7. Analytics and advertising
+
+Apart from the anonymous count in section 6, the App and this website do not use analytics, advertising, tracking or crash-reporting tools, and do not set cookies.
+
+## 8. Children’s privacy
 
 The App is not intended to collect personal data from children.
 
-## 8. Changes
+## 9. Changes
 
 We may update this policy from time to time. The latest version is always on this page.
 
-## 9. Contact
+## 10. Contact
 
 Questions: https://github.com/whekin/kojori-bus-time-app/issues
