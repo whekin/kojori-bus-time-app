@@ -2,7 +2,7 @@ import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { useQueries, useQueryClient } from '@tanstack/react-query';
 import * as Location from 'expo-location';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, BackHandler, Easing, Pressable, StyleSheet, Text, useWindowDimensions, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Animated, BackHandler, Easing, Platform, Pressable, StyleSheet, Text, useWindowDimensions, View, type StyleProp, type ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { MapEmptyState } from '@/components/map-empty-state';
@@ -2279,11 +2279,18 @@ function createStyles(C: ReturnType<typeof useAppColors>) {
     alignItems: 'center',
     justifyContent: 'flex-start',
     overflow: 'visible',
-    shadowColor: '#000',
-    shadowOpacity: 0.24,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 6,
+    ...Platform.select({
+      // On the web a shadow becomes a box-shadow of this square canvas; a
+      // drop-shadow follows the pin's shape the way the iOS shadow does.
+      web: { filter: 'drop-shadow(0 4px 6px rgba(0, 0, 0, 0.24))' },
+      default: {
+        shadowColor: '#000',
+        shadowOpacity: 0.24,
+        shadowRadius: 8,
+        shadowOffset: { width: 0, height: 4 },
+        elevation: 6,
+      },
+    }),
   },
   vehiclePinShape: {
     position: 'absolute',

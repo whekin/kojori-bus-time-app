@@ -10,6 +10,7 @@
 - Web tabs switch instantly instead of flashing a blank page while each screen loads, and the browser back button walks back through tabs. A link straight to the Map, Timetable or Settings tab opens that tab instead of the trip chooser.
 - The web install tip is a single slim row: tap it for the Add to Home Screen steps, use the Install button where the browser offers one, or dismiss it. The start screen keeps a phone-width column on wide screens.
 - The web tab bar matches the phone app: a floating, frosted bar with a highlight that slides to the selected tab, the same press animation, the selected label in the accent color, content fading out under it, and room for the iPhone Home indicator in the installed web app.
+- Bus pins on the web map no longer sit on a grey square: their shadow follows the pin's shape, as on the phones.
 - The map credits on the web start folded into a small "i" instead of a banner across the map.
 
 ### Fixed
