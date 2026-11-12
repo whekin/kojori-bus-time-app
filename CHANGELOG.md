@@ -2,6 +2,10 @@
 
 ## [UNRELEASED]
 
+### Infra
+- Add an explicit Android ETA pilot build for routes 316/380; ordinary builds keep experimental forecasts off.
+
+
 ### Improved
 - The app is now called **Gzaap** ("Gzaap — Tbilisi Bus Times" in the store and browser), since it follows any TTC route rather than only Kojori. Your trips, widgets and settings carry over unchanged.
 - Maps are drawn with MapLibre on Android, iPhone and the web, using OpenStreetMap tiles styled in the app's own paper tones (with a matching dark mode) and labelled in your app language. Stop and bus markers are real views now, so they no longer clip, flicker or blink when you zoom.
