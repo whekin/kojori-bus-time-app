@@ -2,7 +2,7 @@
  * Shared cache and rate limits for the web proxy (src/app/ttc+api.ts).
  *
  * Every browser on the web app and the landing page reaches TTC through one
- * server, one IP and one API key, and TTC rate-limits (HTTP 520). So identical
+ * server, one IP and one API key, and can encounter TTC failures or rate limits. Identical
  * reads are answered from memory for a short time, concurrent identical reads
  * share one upstream request, and upstream requests are capped per client and
  * overall. Native apps call TTC directly and never pass through here.
@@ -25,6 +25,32 @@ export function ttcCacheTtlMs(apiPath: string): number {
 /** Failures are cached briefly so an outage or a 520 is not retried by every client at once. */
 export const TTC_ERROR_TTL_MS = 5_000;
 export const TTC_RATE_LIMITED_TTL_MS = 15_000;
+
+/** One process-wide pause across all TTC URLs. Successful in-flight requests
+ * cannot cancel a pause raised by another request. Cache hits remain usable. */
+export class TtcProxyCooldown {
+  private until = 0;
+  constructor(private readonly now: () => number = Date.now) {}
+
+  observe(status: number, retryAfter: string | null) {
+    if (status !== 429) return;
+    const now = this.now();
+    const raw = retryAfter?.trim() ?? '';
+    const maximum = 100 * 366 * 86_400_000;
+    let delay = 60_000;
+    if (/^\d+(?:\.\d+)?$/.test(raw)) {
+      delay = Math.min(maximum, Number(raw) * 1000);
+    } else if (/[a-z]/i.test(raw)) {
+      const date = Date.parse(raw);
+      if (Number.isFinite(date)) delay = Math.min(maximum, Math.max(0, date - now));
+    }
+    this.until = Math.max(this.until, now + Math.max(60_000, delay));
+  }
+
+  remainingSeconds() {
+    return Math.max(0, Math.ceil((this.until - this.now()) / 1000));
+  }
+}
 
 type Entry = CachedTtcResponse & { expiresAt: number };
 
@@ -152,6 +178,7 @@ export const TTC_PROXY_LIMITS = {
 
 function createState() {
   return {
+    cooldown: new TtcProxyCooldown(),
     cache: new TtcProxyCache({ maxEntries: 2000, maxBytes: 64 * 1024 * 1024 }),
     clientRequests: new MinuteRateLimiter(TTC_PROXY_LIMITS.clientRequestsPerMinute),
     clientUpstream: new MinuteRateLimiter(TTC_PROXY_LIMITS.clientUpstreamPerMinute),

@@ -5,6 +5,7 @@ import {
   MinuteRateLimiter,
   TTC_PROXY_LIMITS,
   TtcProxyCache,
+  TtcProxyCooldown,
   clientAddress,
   resetTtcProxyState,
   ttcCacheTtlMs,
@@ -116,4 +117,33 @@ it('takes the client address the reverse proxy appended, not one the client sent
   expect(clientAddress(new Headers({ 'x-forwarded-for': '6.6.6.6, 203.0.113.7' }))).toBe('203.0.113.7');
   expect(clientAddress(new Headers({ 'x-real-ip': '203.0.113.8' }))).toBe('203.0.113.8');
   expect(clientAddress(new Headers())).toBe('unknown');
+});
+
+it('pauses all cache misses after 429 while fresh cached data remains available', async () => {
+  let calls = 0;
+  globalThis.fetch = (async () => {
+    calls++;
+    return calls === 1 ? Response.json([]) : Response.json({}, {status:429,headers:{'Retry-After':'900'}});
+  }) as typeof fetch;
+  await call(arrivals('1:1'));
+  const limited = await call(arrivals('1:2'));
+  expect(limited.status).toBe(429);
+  expect(Number(limited.headers.get('retry-after'))).toBeGreaterThanOrEqual(899);
+  expect((await call(arrivals('1:3'), '198.51.100.2')).status).toBe(429);
+  expect((await call(arrivals('1:1'))).status).toBe(200);
+  expect((await call(arrivals('1:2'))).headers.get('retry-after')).not.toBeNull();
+  expect(calls).toBe(2);
+});
+
+it('handles Retry-After seconds, dates, malformed values and overflow without shortening a pause', () => {
+  let now = Date.parse('2026-11-12T10:00:00Z');
+  const pause = new TtcProxyCooldown(() => now);
+  pause.observe(429, '120');expect(pause.remainingSeconds()).toBe(120);
+  pause.observe(200, null);pause.observe(429, '1');expect(pause.remainingSeconds()).toBe(120);
+  now += 120_000;expect(pause.remainingSeconds()).toBe(0);
+  pause.observe(429, new Date(now + 300_000).toUTCString());expect(pause.remainingSeconds()).toBe(300);
+  now += 300_000;pause.observe(429, 'garbage');expect(pause.remainingSeconds()).toBe(60);
+  now += 60_000;pause.observe(520, '900');expect(pause.remainingSeconds()).toBe(0);
+  pause.observe(429, '9'.repeat(400));expect(Number.isFinite(pause.remainingSeconds())).toBe(true);
+  expect(pause.remainingSeconds()).toBeGreaterThan(900);
 });

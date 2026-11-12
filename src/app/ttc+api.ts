@@ -64,6 +64,9 @@ export async function GET(request: Request) {
   const pending = state.cache.pending(key);
   if (pending) return reply(await pending, ttlFor(decodedPath, await pending), "SHARED");
 
+  const cooldown = state.cooldown.remainingSeconds();
+  if (cooldown) return tooMany(cooldown, 429);
+
   const clientWait = state.clientUpstream.hit(client);
   if (clientWait) return tooMany(clientWait, 429);
   const serverWait = state.upstream.hit("all");
@@ -79,7 +82,7 @@ export async function GET(request: Request) {
 
 function ttlFor(apiPath: string, response: CachedTtcResponse) {
   if (response.status >= 200 && response.status < 300) return ttcCacheTtlMs(apiPath);
-  // TTC answers 520 when it rate-limits us.
+  // 520 is an upstream failure, not proof of rate limiting.
   if (response.status === 520 || response.status === 429) return TTC_RATE_LIMITED_TTL_MS;
   return TTC_ERROR_TTL_MS;
 }
@@ -92,6 +95,8 @@ async function fetchUpstream(url: URL): Promise<CachedTtcResponse> {
       headers: { "x-api-key": process.env.TTC_API_KEY ?? TTC_API_KEY },
       signal: controller.signal,
     });
+    // Observe headers immediately: a slow body must not delay the shared pause.
+    ttcProxyState.cooldown.observe(upstream.status, upstream.headers.get("retry-after"));
     return {
       status: upstream.status,
       contentType: upstream.headers.get("content-type") ?? "application/json",
@@ -117,6 +122,7 @@ function reply(response: CachedTtcResponse, freshMs: number, cache: string) {
       // Browsers may reuse a fresh answer for as long as we would.
       "Cache-Control": ok ? `public, max-age=${Math.max(0, Math.floor(freshMs / 1000))}` : "no-store",
       "X-Cache": cache,
+      ...(response.status === 429 ? { "Retry-After": String(Math.max(1, ttcProxyState.cooldown.remainingSeconds())) } : {}),
     },
   });
 }

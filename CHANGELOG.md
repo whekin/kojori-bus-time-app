@@ -9,9 +9,11 @@
 - The boarding-stop map on Departures and Timetable now works on the web too, and frames the stops exactly on every device.
 - Web tabs switch instantly instead of flashing a blank page while each screen loads, and the browser back button walks back through tabs. A link straight to the Map, Timetable or Settings tab opens that tab instead of the trip chooser.
 - The web install tip is a single slim row: tap it for the Add to Home Screen steps, use the Install button where the browser offers one, or dismiss it. The start screen keeps a phone-width column on wide screens.
+- The web tab bar matches the phone app: a floating, frosted bar with a highlight that slides to the selected tab, the same press animation, the selected label in the accent color, content fading out under it, and room for the iPhone Home indicator in the installed web app.
 - The map credits on the web start folded into a small "i" instead of a banner across the map.
 
 ### Fixed
+- The PWA pauses all new TTC requests after HTTP 429, honors Retry-After, and keeps serving fresh cached data during the pause.
 - Icons on the web no longer show as empty boxes for a moment while their font loads.
 - The web app updates itself: a new version takes over as soon as it has downloaded and reloads open windows onto it, instead of waiting until every window is closed (which on an iPhone Home Screen app could mean days).
 
