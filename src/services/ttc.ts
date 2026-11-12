@@ -6,6 +6,7 @@ import {
 } from '@/services/ttc-query-log';
 
 import { TTC_BASE as BASE, TTC_API_KEY as API_KEY } from '@/services/ttc-endpoint';
+import { webPath } from '@/utils/web-base';
 
 const headers = { 'x-api-key': API_KEY };
 export type TtcLocale = 'en' | 'ka';
@@ -18,7 +19,7 @@ export async function fetchTtcJson<T>(url: string, kind: TtcQueryKind, signal?: 
     // TTC does not expose CORS headers. Browser requests use the app's narrow
     // read-only endpoint; native clients continue to reach TTC directly.
     const browser = typeof document !== 'undefined';
-    const target = browser && url.startsWith(BASE) ? `/ttc?path=${encodeURIComponent(url.slice(BASE.length))}` : url;
+    const target = browser && url.startsWith(BASE) ? `${webPath('/ttc')}?path=${encodeURIComponent(url.slice(BASE.length))}` : url;
     const res = await fetch(target, { headers: browser ? undefined : headers, signal });
     statusCode = res.status;
 

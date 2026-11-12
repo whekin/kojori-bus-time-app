@@ -96,13 +96,23 @@ bun run web:build
 PORT=8097 bun run web:serve
 ```
 
-Deploy both `dist/client` and `dist/server` on a compatible Expo server host,
-with HTTPS at the domain root. The included Bun server serves both outputs;
-put it behind an HTTPS reverse proxy for hosting. Deploy client and server as one
-release and restart the server after changing the export, so cached HTML and
-assets always belong to the same build. `/ttc` must reach the server,
-not a static fallback. Serve `/sw.js` with revalidation (`Cache-Control: no-cache`)
-and JavaScript content type. `web:build` generates the worker after Expo export;
+The production web build serves the app under `/app` (Expo
+`experiments.baseUrl`, set only by `web:build` through `GZAAP_WEB_BASE_URL`, so
+native builds and `bun run web` keep `/`). The root belongs to the static
+landing page in `site/` (`/`, `/privacy`, `/terms`). `web:build` runs
+`scripts/build-site.ts`, which copies it to `dist/site` and renders the page once
+per language (`/`, `/ka/`, `/ru/`) from `site/index.html` and the Georgian and
+Russian strings in `scripts/site-strings.ts`. Old app links (`/explore`, `/timetable`, `/settings`) redirect
+to `/app/…`, Home Screen installs that still open `/` are sent to `/app/`, and
+`/sw.js` is now a worker that retires the old root-scoped app worker.
+
+The included Bun server (`scripts/serve-web.ts`) serves `dist/site`,
+`dist/client` and `dist/server` together; put it behind an HTTPS reverse proxy.
+Deploy them as one release and restart the server after changing the export, so
+cached HTML and assets always belong to the same build. `/app/ttc` (and the
+legacy `/ttc`) must reach the server, not a static fallback. Serve
+`/app/sw.js` with revalidation (`Cache-Control: no-cache`) and JavaScript
+content type. `web:build` generates the worker after Expo export;
 plain `expo export` alone does not prepare offline support. The public address is `https://gzaap.whekin.dev`;
 see [PWA deployment](docs/pwa-deployment.md) for the Coolify configuration.
 

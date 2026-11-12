@@ -1,45 +1,50 @@
 # Privacy Policy
 
-Last updated: April 14, 2026
+Last updated: November 12, 2026
 
-Gzaap ("the App") is a transit app for TTC buses, metro and cable cars in Tbilisi, starting with routes 380 and 316 between Kojori and Tbilisi.
+Gzaap (“the App”) shows departures, timetables and maps for TTC buses, metro and cable cars in Tbilisi. It is available as an Android and iPhone app and as a web app at gzaap.whekin.dev. This policy covers all of them.
 
-## 1. Information We Collect
+## 1. Information we collect
 
-The App does not collect personal information on our servers. It communicates directly with the TTC public API.
+The App has no accounts and does not collect personal information. Your saved trips, stops and settings are stored on your device.
 
-## 2. Location Data
+## 2. Location data
 
-If you grant location permission, the App uses your device location only on-device to:
+If you allow location access, the App uses your location on your device only, to:
 
 - show your position on the map
-- detect whether you are traveling toward Kojori or Tbilisi
+- suggest the nearest stop or saved trip
 
-Location data is not uploaded to our servers.
+Your location is not sent to our servers.
 
-## 3. Local Storage
+## 3. Local storage
 
-The App stores timetable data, route data, stop names, and user preferences locally on your device so the App can work offline. This local data does not identify you personally.
+The App stores timetables, route and stop data, and your preferences on your device (in the web app, in your browser’s storage) so it can work offline. This data does not identify you. Clearing the App’s data or your browser’s site data removes it.
 
-## 4. Third-Party Services
+## 4. The web app’s connection to TTC
 
-- **TTC public API**: used for bus schedules, stop data, and live vehicle data
-- **Google Maps SDK**: used for map rendering and map tiles
+The TTC public API does not accept requests made directly from web browsers, so the web app requests timetables, stops and live arrivals through our server at gzaap.whekin.dev, which forwards them to TTC. These requests contain the routes and stops being looked up, not your trips or location. We do not use them to identify you. Like most websites, the server may briefly keep standard technical logs (such as IP address and requested address) for security and troubleshooting. The phone apps contact the TTC API directly.
 
-These services may process their own network and device data according to their policies.
+## 5. Third-party services
 
-## 5. Analytics and Advertising
+- **TTC public API**: bus schedules, stop data and live vehicle positions.
+- **OpenFreeMap**: street map tiles (OpenStreetMap data), which the App draws itself with MapLibre.
+- **GitHub**: hosts the Android app downloads and the issue tracker linked from this site.
 
-The App does not use analytics, advertising, tracking, or crash-reporting tools.
+These services may process network and device data under their own policies.
 
-## 6. Children's Privacy
+## 6. Analytics and advertising
+
+The App and this website do not use analytics, advertising, tracking or crash-reporting tools, and do not set cookies.
+
+## 7. Children’s privacy
 
 The App is not intended to collect personal data from children.
 
-## 7. Changes
+## 8. Changes
 
-We may update this policy from time to time. The latest version will always be reflected here.
+We may update this policy from time to time. The latest version is always on this page.
 
-## 8. Contact
+## 9. Contact
 
-Questions: https://github.com/whekin/kojori-bus-time-app
+Questions: https://github.com/whekin/kojori-bus-time-app/issues

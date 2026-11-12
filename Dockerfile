@@ -18,5 +18,5 @@ COPY --from=build --chown=bun:bun /app/scripts/serve-web.ts ./scripts/serve-web.
 USER bun
 EXPOSE 8081
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-  CMD bun -e "fetch('http://127.0.0.1:8081/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+  CMD bun -e "fetch('http://127.0.0.1:8081/app/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 CMD ["bun", "scripts/serve-web.ts"]

@@ -4,6 +4,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Spacing } from '@/constants/theme';
 import { useAppColors } from '@/hooks/use-app-colors';
 import { useI18n } from '@/hooks/use-i18n';
+import { webPath } from '@/utils/web-base';
 
 const DISMISSED_KEY = 'pwa-install-tip-dismissed';
 
@@ -37,7 +38,7 @@ export function PwaSupport() {
   useEffect(() => {
     if (__DEV__ || !('serviceWorker' in navigator)) return;
     let registration: ServiceWorkerRegistration | undefined;
-    void navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' })
+    void navigator.serviceWorker.register(webPath('/sw.js'), { scope: webPath('/'), updateViaCache: 'none' })
       .then(value => { registration = value; })
       .catch(error => console.warn('Offline app setup failed', error));
     const check = () => {

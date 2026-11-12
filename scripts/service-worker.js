@@ -1,8 +1,13 @@
 /* Build placeholders are replaced by build-pwa.ts. Never cache API responses. */
-/* global __PRECACHE_ASSETS__ */
-const CACHE = 'kojoring-shell-__BUILD_ID__';
+/* global __PRECACHE_ASSETS__, __BASE__ */
+const CACHE = 'gzaap-app-__BUILD_ID__';
+const BASE = __BASE__;
 const ASSETS = __PRECACHE_ASSETS__;
-const PAGES = ['/', '/explore', '/timetable', '/settings'];
+// Document keys are normalized without a trailing slash: `/app/` → `/app`.
+const PAGES = ['', '/explore', '/timetable', '/settings'].map(page => BASE + page || '/');
+// Caches from this worker's earlier builds, and from the old root-scoped
+// worker that served the app at `/` before it moved under BASE.
+const OWNED_CACHES = ['gzaap-app-', 'kojoring-shell-'];
 
 self.addEventListener('install', event => {
   event.waitUntil((async () => {
@@ -25,7 +30,7 @@ self.addEventListener('activate', event => {
   const activation = (async () => {
     let replacedBuild = false;
     for (const name of await caches.keys()) {
-      if (name.startsWith('kojoring-shell-') && name !== CACHE) {
+      if (OWNED_CACHES.some(prefix => name.startsWith(prefix)) && name !== CACHE) {
         await caches.delete(name);
         replacedBuild = true;
       }
