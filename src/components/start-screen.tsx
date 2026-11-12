@@ -18,7 +18,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { SettingsSwitch } from '@/components/settings-switch';
 import { TtcStatusChip } from '@/components/ttc-status-banner';
-import { alpha, Fonts, Spacing, type AppColors } from '@/constants/theme';
+import { alpha, Fonts, MaxContentWidth, Spacing, type AppColors } from '@/constants/theme';
 import { useAppColors } from '@/hooks/use-app-colors';
 import { useI18n } from '@/hooks/use-i18n';
 import { useLocation } from '@/hooks/use-location';
@@ -529,7 +529,8 @@ export function StartScreen({ onDone }: { onDone: () => void }) {
 function createStyles(C: AppColors) {
   return StyleSheet.create({
     root: { flex: 1, backgroundColor: C.bg },
-    scroll: { paddingHorizontal: 20, gap: 14 },
+    // Phone-shaped column on wide screens instead of cards stretched edge to edge.
+    scroll: { paddingHorizontal: 20, gap: 14, width: '100%', maxWidth: MaxContentWidth, alignSelf: 'center' },
     topBar: {
       minHeight: 54,
       flexDirection: 'row',

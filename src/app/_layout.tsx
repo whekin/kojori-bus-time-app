@@ -3,12 +3,14 @@ import { EtaPreviewDemo } from '@/components/eta-preview-demo';
 import { PassedEarlyPreview } from '@/components/passed-early-preview';
 import { DefaultTheme, ThemeProvider, type Theme } from '@react-navigation/native';
 import { focusManager, QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { useGlobalSearchParams } from 'expo-router';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import { useFonts } from 'expo-font';
+import { useGlobalSearchParams, usePathname } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import * as SystemUI from 'expo-system-ui';
 import React, { useEffect, useRef, useState } from 'react';
-import { AppState, BackHandler, StyleSheet, View } from 'react-native';
+import { AppState, BackHandler, Platform, StyleSheet, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { AnimatedSplashOverlay, AppReveal } from '@/components/animated-icon';
@@ -40,7 +42,13 @@ const SMART_TRIP_GRACE_MS = 1800;
 function AppReady() {
   const { isLoaded: settingsLoaded, settings } = useSettings();
   const { isLoaded: tripsLoaded, state, select } = useFavorites();
-  const isLoaded = settingsLoaded && tripsLoaded;
+  // Native bundles the icon font; the web downloads it, and drawing before it
+  // lands shows empty boxes where every icon goes.
+  const [iconsLoaded, iconsError] = useFonts(Platform.OS === 'web' ? MaterialCommunityIcons.font : {});
+  const isLoaded = settingsLoaded && tripsLoaded && (iconsLoaded || Boolean(iconsError));
+  const pathname = usePathname();
+  // A shared or bookmarked web link to a tab goes straight there.
+  const [deepLinked] = useState(() => Platform.OS === 'web' && pathname !== '/');
   const [dismissedStart, setDismissedStart] = useState(false);
   const [forcedStartOpen, setForcedStartOpen] = useState(false);
   const [editor, setEditor] = useState<{ key: number; options: TripEditorOptions } | null>(null);
@@ -104,7 +112,8 @@ function AppReady() {
     (!dismissedStart &&
       state.favorites.length !== 1 &&
       (settings.launchBehavior !== 'remember' || state.favorites.length === 0) &&
-      !launchedFromWidget);
+      !launchedFromWidget &&
+      !(deepLinked && state.favorites.length > 0));
 
   useEffect(() => {
     if (!isLoaded || !showStart || !forcedStartOpen || waitingForSmart || editor) return;

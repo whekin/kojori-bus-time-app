@@ -46,7 +46,7 @@ function pass(message) {
   console.log(`✔ ${message}`);
 }
 
-const requiredEnv = ['GOOGLE_MAPS_API_KEY_ANDROID'];
+const requiredEnv = [];
 const requiredFiles = [
   'app.json',
   'eas.json',
@@ -131,10 +131,10 @@ try {
     hasErrors = true;
   }
 
-  if (manifest.includes('com.google.android.geo.API_KEY') && manifest.includes('android.permission.INTERNET')) {
-    pass('Android manifest includes Google Maps metadata and internet permission');
+  if (manifest.includes('android.permission.INTERNET')) {
+    pass('Android manifest includes internet permission');
   } else {
-    fail('Android manifest is missing required Google Maps metadata or internet permission');
+    fail('Android manifest is missing internet permission');
     hasErrors = true;
   }
 } catch (error) {

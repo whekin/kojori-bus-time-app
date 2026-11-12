@@ -2,7 +2,6 @@
 
 ## Before build
 
-- [ ] Set `GOOGLE_MAPS_API_KEY_ANDROID`
 - [ ] Verify `app.json` package name is correct
 - [ ] Confirm privacy policy and terms text are current
 - [ ] Confirm privacy policy and terms URLs are public

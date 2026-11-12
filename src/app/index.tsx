@@ -890,8 +890,7 @@ function NoTrips({ bottomInset }: { bottomInset: number }) {
 }
 
 export default function HomeScreen({
-  // Web renders tabs through the router without the native tab host's prop.
-  isActive = Platform.OS === "web",
+  isActive = false,
 }: {
   isActive?: boolean;
 }) {

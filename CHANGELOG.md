@@ -2,7 +2,19 @@
 
 ## [UNRELEASED]
 
+### Improved
+- Maps are drawn with MapLibre on Android, iPhone and the web, using OpenStreetMap tiles styled in the app's own paper tones (with a matching dark mode) and labelled in your app language. Stop and bus markers are real views now, so they no longer clip, flicker or blink when you zoom.
+- The web app gets the same Map tab as the phones: a full-screen map with live buses, the stop tray, locate-me and route chips, instead of a small fixed map with zoom buttons.
+- The boarding-stop map on Departures and Timetable now works on the web too, and frames the stops exactly on every device.
+- Web tabs switch instantly instead of flashing a blank page while each screen loads, and the browser back button walks back through tabs. A link straight to the Map, Timetable or Settings tab opens that tab instead of the trip chooser.
+- The web install tip can be dismissed, and offers a one-tap Install button in browsers that support it. The start screen keeps a phone-width column on wide screens.
+
+### Fixed
+- Icons on the web no longer show as empty boxes for a moment while their font loads.
+
 ### Infra
+- Native builds need a new binary (`runtimeVersion` kojori-native-9): `react-native-maps` is replaced by `@maplibre/maplibre-react-native`, and no Google Maps API key is needed anywhere any more.
+- Shared map layer in `src/map/` (MapLibre Native on the phones, `maplibre-gl` on the web) with exact Web Mercator framing; `web` and `web:build` copy the maplibre tile worker into `public/maplibre/`.
 - Add a production Docker image and Coolify hosting configuration for the PWA at `gzaap.whekin.dev`.
 - Backend beta builds now record their source, checksum and feature flags; passed-early cards can be limited by route direction.
 

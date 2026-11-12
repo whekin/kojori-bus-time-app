@@ -1,121 +1,183 @@
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
-import { useRouter } from "expo-router";
-import {
-  Tabs,
-  TabList,
-  TabTrigger,
-  TabSlot,
-  type TabTriggerSlotProps,
-} from "expo-router/ui";
-import React from "react";
+import { usePathname, useRouter } from "expo-router";
+import React, { useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
+import ExploreScreen from "@/app/explore";
+import HomeScreen from "@/app/index";
+import SettingsScreen from "@/app/settings";
+import TimetableScreen from "@/app/timetable";
 import { alpha, MaxContentWidth } from "@/constants/theme";
 import { useAppColors } from "@/hooks/use-app-colors";
 import { useI18n } from "@/hooks/use-i18n";
 import { MapFocusProvider } from "@/hooks/use-map-focus";
 import { TabNavProvider, type TabRoute } from "@/hooks/use-tab-nav";
+import { scheduleIdleTask } from "@/utils/idle-task";
 
-export default function AppTabs(_props: {
+const ROUTES: TabRoute[] = ["index", "explore", "timetable", "settings"];
+// The map stays unmounted until first opened, so a visit that never looks at
+// it never downloads tiles; the light screens are warmed while idle.
+const PREWARM: TabRoute[] = ["timetable", "settings"];
+
+function routeForPath(pathname: string): TabRoute {
+  const segment = pathname.replace(/^\/+/, "").split("/")[0];
+  return (ROUTES as string[]).includes(segment) ? (segment as TabRoute) : "index";
+}
+
+const HREFS = {
+  index: "/",
+  explore: "/explore",
+  timetable: "/timetable",
+  settings: "/settings",
+} as const satisfies Record<TabRoute, string>;
+
+/**
+ * Same shape as the native hosts: every screen is imported here and kept
+ * mounted once visited, so switching tabs is a visibility flip rather than a
+ * route load. The URL follows the active tab, and browser back walks tabs.
+ */
+export default function AppTabs({
+  deferInactiveTabs = false,
+}: {
   backEnabled?: boolean;
   deferInactiveTabs?: boolean;
   onRequestDirectionPicker?: () => void;
 }) {
   const router = useRouter();
+  const pathname = usePathname();
   const { t } = useI18n();
   const colors = useAppColors();
+  const activeRoute = routeForPath(pathname);
+  const [mounted, setMounted] = useState<ReadonlySet<TabRoute>>(() => new Set([activeRoute]));
+
+  if (!mounted.has(activeRoute)) setMounted(new Set([...mounted, activeRoute]));
+
+  useEffect(() => {
+    if (deferInactiveTabs) return;
+    const tasks = PREWARM.map((route, index) => {
+      let task: ReturnType<typeof scheduleIdleTask> | undefined;
+      const timer = setTimeout(() => {
+        task = scheduleIdleTask(() => setMounted(previous =>
+          previous.has(route) ? previous : new Set([...previous, route])));
+      }, 600 + index * 600);
+      return () => {
+        clearTimeout(timer);
+        task?.cancel();
+      };
+    });
+    return () => tasks.forEach(cancel => cancel());
+  }, [deferInactiveTabs]);
+
+  function navigate(route: TabRoute) {
+    if (route === activeRoute) return;
+    router.push(HREFS[route]);
+  }
+
   const tabs = [
     { route: "index", title: t("tabsDepartures"), icon: "bus-clock" },
-    { route: "explore", title: t("tabsMap"), icon: "map-outline" },
-    { route: "timetable", title: t("tabsTimetable"), icon: "calendar-clock" },
-    { route: "settings", title: t("tabsSettings"), icon: "cog-outline" },
+    { route: "explore", title: t("tabsMap"), icon: "map-marker-radius" },
+    { route: "timetable", title: t("tabsTimetable"), icon: "table-clock" },
+    { route: "settings", title: t("tabsSettings"), icon: "cog" },
   ] as const;
-  function navigate(route: TabRoute) {
-    router.push(route === "index" ? "/" : `/${route}`);
+
+  function screenFor(route: TabRoute) {
+    const isActive = route === activeRoute;
+    switch (route) {
+      case "index":
+        return <HomeScreen isActive={isActive} />;
+      case "explore":
+        return <ExploreScreen isActive={isActive} />;
+      case "timetable":
+        return <TimetableScreen isActive={isActive} />;
+      case "settings":
+        return <SettingsScreen isActive={isActive} />;
+    }
   }
+
   return (
     <MapFocusProvider>
       <TabNavProvider value={navigate}>
-        <Tabs>
-          <TabSlot style={styles.slot} />
-          <TabList asChild>
+        <View style={[styles.root, { backgroundColor: colors.bg }]}>
+          {ROUTES.filter(route => mounted.has(route)).map(route => (
             <View
-              style={StyleSheet.flatten([
-                styles.wrap,
-                styles.bar,
-                { backgroundColor: colors.surface, borderColor: colors.border },
-              ])}
-            >
-              {tabs.map((tab) => (
-                <TabTrigger
-                  key={tab.route}
-                  name={tab.route}
-                  href={tab.route === "index" ? "/" : `/${tab.route}`}
-                  asChild
-                >
-                  <TabButton icon={tab.icon}>{tab.title}</TabButton>
-                </TabTrigger>
-              ))}
+              key={route}
+              style={[styles.page, route !== activeRoute && styles.hidden]}
+              aria-hidden={route !== activeRoute}>
+              {screenFor(route)}
             </View>
-          </TabList>
-        </Tabs>
+          ))}
+          <View
+            accessibilityRole="tablist"
+            style={[styles.bar, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            {tabs.map(tab => (
+              <TabButton
+                key={tab.route}
+                icon={tab.icon}
+                title={tab.title}
+                focused={tab.route === activeRoute}
+                onPress={() => navigate(tab.route)}
+              />
+            ))}
+          </View>
+        </View>
       </TabNavProvider>
     </MapFocusProvider>
   );
 }
 
 function TabButton({
-  children,
   icon,
-  isFocused,
-  ...props
-}: Omit<TabTriggerSlotProps, "ref"> & {
+  title,
+  focused,
+  onPress,
+}: {
   icon: React.ComponentProps<typeof MaterialCommunityIcons>["name"];
-  ref?: React.Ref<React.ComponentRef<typeof Pressable>>;
+  title: string;
+  focused: boolean;
+  onPress: () => void;
 }) {
   const colors = useAppColors();
   return (
     <Pressable
-      {...props}
       accessibilityRole="tab"
-      accessibilityState={{ selected: isFocused }}
-      style={StyleSheet.flatten([
+      accessibilityState={{ selected: focused }}
+      onPress={onPress}
+      style={({ hovered }) => [
         styles.button,
         {
-          backgroundColor: isFocused
+          backgroundColor: focused
             ? alpha(colors.primary, "18")
-            : "transparent",
+            : hovered
+              ? alpha(colors.text, "0A")
+              : "transparent",
         },
-      ])}
+      ]}
     >
       <MaterialCommunityIcons
         name={icon}
         size={22}
-        color={isFocused ? colors.primary : colors.textDim}
+        color={focused ? colors.primary : colors.textDim}
       />
       <Text
-        style={{
-          color: isFocused ? colors.text : colors.textDim,
-          fontSize: 11,
-          fontWeight: "700",
-        }}
+        style={[styles.label, { color: focused ? colors.text : colors.textDim }]}
         numberOfLines={1}
       >
-        {children}
+        {title}
       </Text>
     </Pressable>
   );
 }
+
 const styles = StyleSheet.create({
-  slot: { flex: 1 },
-  wrap: {
+  root: { flex: 1 },
+  page: { ...StyleSheet.absoluteFill },
+  hidden: { display: "none" },
+  bar: {
     position: "absolute",
     bottom: 12,
     width: "96%",
     maxWidth: MaxContentWidth,
     alignSelf: "center",
-  },
-  bar: {
     flexDirection: "row",
     padding: 6,
     gap: 4,
@@ -130,4 +192,5 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     gap: 4,
   },
+  label: { fontSize: 11, fontWeight: "700" },
 });

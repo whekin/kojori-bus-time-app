@@ -15,10 +15,9 @@ This folder collects the files needed to prepare, build, and submit the Android 
 
 ## Build flow
 
-1. Configure environment variables, especially `GOOGLE_MAPS_API_KEY_ANDROID`.
-2. Run `bun run release:android:doctor`.
-3. Build the production AAB with `bun run release:android:build`.
-4. Submit with `bun run release:android:submit`.
+1. Run `bun run release:android:doctor`.
+2. Build the production AAB with `bun run release:android:build`.
+3. Submit with `bun run release:android:submit`.
 
 ## Notes
 

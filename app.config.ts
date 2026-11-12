@@ -16,8 +16,6 @@ export default ({ config }: ConfigContext): ExpoConfig => {
   const isDev = process.env.NODE_ENV !== 'production';
   const v = isDev ? dateVersion() : null;
 
-  const androidGoogleMapsApiKey = process.env.GOOGLE_MAPS_API_KEY_ANDROID;
-  const iosGoogleMapsApiKey = process.env.GOOGLE_MAPS_API_KEY_IOS;
   const updateChannel = process.env.EXPO_UPDATE_CHANNEL;
 
   const legalBaseUrl = 'https://github.com/whekin/kojori-bus-time-app/blob/main/release/google-play';
@@ -51,13 +49,9 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       'expo-localization',
       './plugins/with-ios-widget',
       './plugins/with-ios-pod-deployment-target',
-      [
-        'react-native-maps',
-        {
-          androidGoogleMapsApiKey,
-          iosGoogleMapsApiKey,
-        },
-      ],
+      // MapLibre Native draws every map; tiles come from OpenFreeMap, so no
+      // provider key is needed on any platform.
+      '@maplibre/maplibre-react-native',
     ],
     extra: {
       ...config.extra,
@@ -76,10 +70,6 @@ export default ({ config }: ConfigContext): ExpoConfig => {
         privacyPolicyUrl: `${legalBaseUrl}/privacy-policy.md`,
         supportUrl: 'https://github.com/whekin/kojori-bus-time-app/issues',
         termsOfServiceUrl: `${legalBaseUrl}/terms-of-service.md`,
-      },
-      maps: {
-        androidConfigured: Boolean(androidGoogleMapsApiKey),
-        iosGoogleMapsConfigured: Boolean(iosGoogleMapsApiKey),
       },
     },
   };

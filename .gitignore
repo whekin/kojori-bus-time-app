@@ -58,3 +58,6 @@ modules/*/android/.gradle/
 .sisyphus/
 .omo/
 .opencode/
+
+# Copied from node_modules by scripts/copy-maplibre-worker.ts
+/public/maplibre/

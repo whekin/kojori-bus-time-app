@@ -3,8 +3,7 @@
 ## 1. Prepare the app
 
 1. Install dependencies with `bun install`.
-2. Set `GOOGLE_MAPS_API_KEY_ANDROID` in your environment.
-3. Confirm `app.json` uses `com.whekin.kojoribus`.
+2. Confirm `app.json` uses `com.whekin.kojoribus`.
 
 ## 2. Validate the release environment
 

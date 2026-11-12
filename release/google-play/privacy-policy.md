@@ -24,7 +24,7 @@ The App stores timetable data, route data, stop names, and user preferences loca
 ## 4. Third-Party Services
 
 - **TTC public API**: used for bus schedules, stop data, and live vehicle data
-- **Google Maps SDK**: used for map rendering and map tiles
+- **OpenFreeMap**: serves the street map tiles (OpenStreetMap data); the App draws them itself with MapLibre
 
 These services may process their own network and device data according to their policies.
 

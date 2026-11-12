@@ -19,8 +19,9 @@ application and database do not need changes.
 
 The image builds the Expo client and server together, generates the versioned
 service worker, and serves both from Bun as a non-root user. Local environment
-files and native build artifacts are excluded from the build context. Native
-Google Maps keys are not needed by the web map. Experimental backend feature
+files and native build artifacts are excluded from the build context. No map
+provider key is needed: every platform draws OpenFreeMap tiles with MapLibre.
+Experimental backend feature
 flags stay at their defaults.
 
 The optional `TTC_API_KEY` runtime variable overrides the existing TTC key in

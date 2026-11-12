@@ -229,13 +229,13 @@ export function StopSelector({
     />
   );
 
-  // Without stop geometry (or on web) there is no map to render, so fall back
-  // to a plain row that still names the stop and reaches the full map.
+  // Without stop geometry there is no map to render, so fall back to a plain
+  // row that still names the stop and reaches the full map.
   const hasGeometry = stops.some(
     stop => typeof stop.lat === 'number' && typeof stop.lon === 'number',
   );
 
-  if (!hasGeometry || Platform.OS === 'web') {
+  if (!hasGeometry) {
     return (
       <View style={styles.fallbackStack}>
       {showDirectionSwitch ? <TripSwitch accentColor={accentColor} compact style={styles.fallbackSwitch} /> : null}

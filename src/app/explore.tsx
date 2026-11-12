@@ -3,7 +3,6 @@ import { useQueries, useQueryClient } from '@tanstack/react-query';
 import * as Location from 'expo-location';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, BackHandler, Easing, Pressable, StyleSheet, Text, useWindowDimensions, View, type StyleProp, type ViewStyle } from 'react-native';
-import MapView, { Callout, Marker, Polyline, type MapMarker, type MapPressEvent, type Region } from 'react-native-maps';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { MapEmptyState } from '@/components/map-empty-state';
@@ -23,7 +22,6 @@ import {
 import { TripSwitch } from '@/components/stop-selector';
 import { TtcStatusChip } from '@/components/ttc-status-banner';
 import { getCuratedStopIds } from '@/constants/curated-stops';
-import { GOOGLE_DARK_MAP_STYLE, GOOGLE_LIGHT_MAP_STYLE } from '@/constants/map-style';
 import { alpha, BottomTabInset } from '@/constants/theme';
 import { useAppColors, useResolvedAppThemeMode } from '@/hooks/use-app-colors';
 import { useI18n } from '@/hooks/use-i18n';
@@ -32,6 +30,25 @@ import { useReducedMotion } from '@/hooks/use-reduced-motion';
 import { getDemoVehiclePositions } from '@/hooks/use-vehicle-positions';
 import { useSettings } from '@/hooks/use-settings';
 import { useTabNav } from '@/hooks/use-tab-nav';
+import {
+  boundsOf,
+  cameraForBounds,
+  GeoLineLayer,
+  GeoMap,
+  GeoMarker,
+  mapStyleFor,
+  projectToScreen,
+  UserLocationMarker,
+  useWatchedPosition,
+  widthByZoom,
+  type CameraPosition,
+  type GeoLine,
+  type GeoMapRef,
+  type LngLat,
+  type LngLatBounds,
+  type MapViewState,
+  type Size,
+} from '@/map';
 import {
   findStop,
   ROUTES,
@@ -55,12 +72,9 @@ import {
   type PolylineMetrics,
 } from '@/utils/route-progress';
 
-const DEFAULT_REGION: Region = {
-  latitude: 41.639,
-  longitude: 44.76,
-  latitudeDelta: 0.12,
-  longitudeDelta: 0.1,
-};
+// The Kojori road from central Tbilisi down to Kojori, framed on first open.
+const DEFAULT_FRAME: LngLatBounds = [44.71, 41.579, 44.81, 41.699];
+const FRAME_PADDING = { top: 100, right: 60, bottom: 160, left: 60 };
 
 type MapBounds = {
   latMin: number;
@@ -143,16 +157,20 @@ function boundsForPoints(points: PolylinePoint[], kojori: boolean): MapBounds {
   };
 }
 
-function initialRegionFor(points: PolylinePoint[], kojori: boolean): Region {
-  if (kojori || points.length < 2) return DEFAULT_REGION;
-  const bounds = boundsForPoints(points, false);
-  const margin = ROUTE_BOUNDS_MARGIN_DEGREES;
-  return {
-    latitude: (bounds.latMin + bounds.latMax) / 2,
-    longitude: (bounds.lonMin + bounds.lonMax) / 2,
-    latitudeDelta: Math.max(0.02, (bounds.latMax - bounds.latMin - 2 * margin) * 1.3),
-    longitudeDelta: Math.max(0.02, (bounds.lonMax - bounds.lonMin - 2 * margin) * 1.3),
-  };
+function toLngLat(point: { latitude: number; longitude: number }): LngLat {
+  return [point.longitude, point.latitude];
+}
+
+function initialCameraFor(points: PolylinePoint[], kojori: boolean, size: Size): CameraPosition {
+  const routeBounds = kojori || points.length < 2 ? null : boundsOf(points.map(toLngLat));
+  return cameraForBounds(routeBounds ?? DEFAULT_FRAME, size, FRAME_PADDING, {
+    minZoom: MAP_MIN_ZOOM,
+    maxZoom: FOCUS_ZOOM,
+  });
+}
+
+function boundsForCoordinates(points: { latitude: number; longitude: number }[]) {
+  return boundsOf(points.map(toLngLat));
 }
 
 function StopPostGlyph({ size, color }: { size: number; color: string }) {
@@ -216,12 +234,14 @@ function StopPostGlyph({ size, color }: { size: number; color: string }) {
 }
 
 const VEHICLE_PIN_CANVAS_SIZE = 66;
-const VEHICLE_PIN_ANCHOR = { x: 0.5, y: 0.5 };
-const STOP_MARKER_ANCHOR = { x: 0.5, y: 0.5 };
-const MAP_MIN_ZOOM_LEVEL = 11;
-const SHOW_ORDINARY_STOPS_LAT_DELTA = 0.14;
-const FULL_STOP_MARKERS_LAT_DELTA = 0.055;
-const PROMOTED_STOP_DECLUTTER_MIN_LAT_DELTA = 0.085;
+// MapLibre zoom (512px world). Below the first, only promoted stops show;
+// below the second, ordinary stops draw as plain dots.
+const MAP_MIN_ZOOM = 10;
+const SHOW_ORDINARY_STOPS_ZOOM = 11.6;
+const FULL_STOP_MARKERS_ZOOM = 12.9;
+const PROMOTED_STOP_DECLUTTER_MAX_ZOOM = 12.3;
+const FOCUS_ZOOM = 14.5;
+const VEHICLE_FOCUS_ZOOM = 13;
 const PROMOTED_STOP_DECLUTTER_PX = {
   overview: 46,
   mid: 34,
@@ -230,18 +250,16 @@ const KOJORI_CENTER_STOP_ID = '1:3078';
 const ROUTE_LINE_SIMPLIFY_TOLERANCE_METERS = 12;
 // Route lines thicken as you zoom in, and each sits on a contrasting casing
 // so the accent stays readable over both the cream and the near-black basemap.
-const ROUTE_LINE_WIDTH_BY_TIER: Record<StopMarkerZoomTier, number> = {
-  overview: 3.5,
-  mid: 4.5,
-  close: 6,
-};
-const ROUTE_CASING_EXTRA_WIDTH = 3;
+const ROUTE_LINE_WIDTH = widthByZoom([[11, 3.5], [12.9, 4.5], [14.5, 6], [17, 8]]);
+const ROUTE_CASING_WIDTH = widthByZoom([[11, 6.5], [12.9, 7.5], [14.5, 9], [17, 11]]);
 const ROUTE_CASING_COLOR = {
   dark: '#000000A6',
   light: '#FFFFFFD9',
 };
 const SHARED_ROUTE_STRIPE_METERS = 260;
-const LIVE_VEHICLE_TICK_MS = 800;
+// Each tick moves the pin a step along the road; short ticks keep the steps
+// to a pixel or two at street zoom.
+const LIVE_VEHICLE_TICK_MS = 250;
 const LIVE_VEHICLE_ACTIVATION_DELAY_MS = 750;
 // How far ahead of the last GPS fix the marker may dead-reckon before it
 // eases to a stop, and how strongly it accelerates when it falls behind.
@@ -250,13 +268,9 @@ const LIVE_VEHICLE_CATCH_UP_METERS = 150;
 const LIVE_VEHICLE_HARD_SNAP_METERS = 400;
 const LIVE_VEHICLE_START_HOLD_METERS = 350;
 const LIVE_VEHICLE_OFF_ROUTE_LIMIT_METERS = 280;
-// Translucency is baked into the fill colors (never a view-level `opacity`):
-// Android renders an alpha-composited layer solid for a frame when the marker
-// icon is recaptured, which reads as flicker.
 const VEHICLE_PIN_BACKGROUND_ALPHA_HEX = 'D1'; // ~0.82
-// The direction arrow rotates in 15° steps. Rotation lives in the icon (the
-// Fabric marker manager has no runtime rotation prop handler), so each step
-// costs one marker icon recapture — quantizing keeps those rare.
+// The direction arrow turns in 15° steps so a bus wobbling along a straight
+// road does not twitch its arrow on every tick.
 const VEHICLE_ARROW_SECTOR_DEGREES = 15;
 const VEHICLE_ARROW_LOOK_AHEAD_METERS = 40;
 const TBILISI_TRAFFIC_ANCHOR_STOP_ID = '1:845';
@@ -266,32 +280,22 @@ const KOJORI_SPEED_KMH = 45;
 const LOCATE_BUTTON_TRAY_LIFT = 166;
 const MAP_OVERLAY_ENTRANCE_MS = 260;
 const MAP_OVERLAY_EXIT_MS = 170;
-// Stop markers are bitmap snapshots on Android, so they cannot cross-fade
-// through a view transform without a per-frame icon recapture. The native
-// marker `opacity` prop is a plain alpha the map applies to the existing
-// bitmap, so a handful of stepped commits buys the fade for almost nothing.
-const MARKER_REVEAL_STEPS = [0.15, 0.5, 0.8, 1];
-const MARKER_REVEAL_STEP_MS = 55;
-// Same trick for the focused stop's halo: one extra marker whose alpha
-// breathes, driven by a slow timer rather than by redrawing the icon.
+const MARKER_REVEAL_MS = 180;
 const FOCUSED_HALO_CANVAS_SIZE = 96;
 const FOCUSED_HALO_RING_SIZE = 74;
-// The focused pin hangs above its coordinate: its 50dp box is anchored at the
-// bottom, so the 42dp core's centre lands half the box up. The halo centres
-// its ring on that point rather than on the coordinate itself. Verified on
-// device — a least-squares fit of the rendered ring puts its centre within a
-// pixel of the pin core's.
-const FOCUSED_HALO_CENTER_LIFT = 25;
-const FOCUSED_HALO_STEP_MS = 80;
+// The focused pin stands on its coordinate: the 50dp pin box sits above the
+// point, and the halo rings the pin core rather than the point itself.
+const FOCUSED_PIN_LIFT = 25;
 const FOCUSED_HALO_CYCLE_MS = 2200;
 const FOCUSED_HALO_MIN_OPACITY = 0.18;
 const FOCUSED_HALO_MAX_OPACITY = 0.62;
-// `onRegionChange` fires continuously through a gesture. Sampled at this
-// interval, and committed only when the marker tier actually flips, so a
-// pinch re-tiers live instead of waiting for the fingers to lift.
-const REGION_SAMPLE_THROTTLE_MS = 150;
-const REGION_CENTER_EPSILON = 0.00035;
-const REGION_DELTA_EPSILON = 0.0015;
+// Camera changes stream through a gesture. Sampled at this interval, and
+// committed only when the marker tier flips, so a pinch re-tiers live.
+const CAMERA_SAMPLE_THROTTLE_MS = 150;
+const CAMERA_CENTER_EPSILON = 0.00035;
+const CAMERA_ZOOM_EPSILON = 0.05;
+// Panning further than this outside the trip's area springs back.
+const CAMERA_CLAMP_SLACK_DEGREES = 0.002;
 
 type StopMarkerZoomTier = 'overview' | 'mid' | 'close';
 type StopMarkerData = {
@@ -332,7 +336,6 @@ function StopMapMarker({
   markerColor,
   revealOpacity,
   styles,
-  resolvedThemeMode,
   colors,
   onPress,
 }: {
@@ -340,42 +343,24 @@ function StopMapMarker({
   isPromoted: boolean;
   isSimpleOrdinaryStop: boolean;
   markerColor: string;
-  revealOpacity: number;
+  revealOpacity: Animated.Value;
   styles: ReturnType<typeof createStyles>;
-  resolvedThemeMode: ReturnType<typeof useResolvedAppThemeMode>;
   colors: ReturnType<typeof useAppColors>;
   onPress: () => void;
 }) {
-  const [trackMarkerViewChanges, setTrackMarkerViewChanges] = useState(true);
   const markerSize = isSimpleOrdinaryStop ? 10 : 20;
   // Invisible touch slop around the dot — small dots were hard to tap.
   const hitSize = 34;
   const promotedHitSize = 44;
   const promotedMarkerWidth = 28;
   const promotedMarkerHeight = 34;
-  const markerVisualStateKey = [
-    isPromoted ? 'promoted' : 'ordinary',
-    isSimpleOrdinaryStop ? 'simple' : 'full',
-    markerColor,
-    resolvedThemeMode,
-  ].join(':');
-
-  useEffect(() => {
-    setTrackMarkerViewChanges(true);
-    const timeoutId = setTimeout(() => setTrackMarkerViewChanges(false), 180);
-    return () => clearTimeout(timeoutId);
-  }, [markerVisualStateKey]);
+  const coordinate: LngLat = [stop.lon!, stop.lat!];
+  const label = stop.label;
 
   if (isPromoted) {
     return (
-      <Marker
-        coordinate={{ latitude: stop.lat!, longitude: stop.lon! }}
-        anchor={STOP_MARKER_ANCHOR}
-        tracksViewChanges={trackMarkerViewChanges}
-        opacity={revealOpacity}
-        onPress={onPress}
-        zIndex={6}>
-        <View
+      <GeoMarker coordinate={coordinate} onPress={onPress} accessibilityLabel={label} zIndex={6}>
+        <Animated.View
           collapsable={false}
           style={[
             styles.promotedStopMarkerOuter,
@@ -383,6 +368,7 @@ function StopMapMarker({
               width: promotedHitSize,
               height: promotedHitSize,
               borderRadius: promotedHitSize / 2,
+              opacity: revealOpacity,
             },
           ]}>
           <View
@@ -398,23 +384,14 @@ function StopMapMarker({
             ]}>
             <StopPostGlyph size={20} color={markerColor} />
           </View>
-        </View>
-      </Marker>
+        </Animated.View>
+      </GeoMarker>
     );
   }
 
   return (
-    <Marker
-      coordinate={{ latitude: stop.lat!, longitude: stop.lon! }}
-      anchor={STOP_MARKER_ANCHOR}
-      tracksViewChanges={trackMarkerViewChanges}
-      // Baked into the native alpha rather than the view: a view-level
-      // opacity is captured into the icon, so it cannot be stepped without
-      // redrawing the bitmap.
-      opacity={revealOpacity * (isSimpleOrdinaryStop ? 0.78 : 0.82)}
-      onPress={onPress}
-      zIndex={4}>
-      <View
+    <GeoMarker coordinate={coordinate} onPress={onPress} accessibilityLabel={label} zIndex={4}>
+      <Animated.View
         collapsable={false}
         style={[
           styles.stopMarkerOuter,
@@ -423,6 +400,7 @@ function StopMapMarker({
             height: hitSize,
             borderRadius: hitSize / 2,
             backgroundColor: 'transparent',
+            opacity: Animated.multiply(revealOpacity, isSimpleOrdinaryStop ? 0.78 : 0.82),
           },
         ]}>
         <View
@@ -441,21 +419,21 @@ function StopMapMarker({
             <StopPostGlyph size={13} color={markerColor} />
           )}
         </View>
-      </View>
-    </Marker>
+      </Animated.View>
+    </GeoMarker>
   );
 }
 
 function declutterPromotedStopMarkers(
   markers: StopMarkerData[],
-  region: Region,
+  camera: CameraPosition,
   zoomTier: StopMarkerZoomTier,
   mapWidth: number,
   mapHeight: number,
 ): DeclutteredStopMarkers {
   if (
     zoomTier === 'close' ||
-    region.latitudeDelta < PROMOTED_STOP_DECLUTTER_MIN_LAT_DELTA ||
+    camera.zoom > PROMOTED_STOP_DECLUTTER_MAX_ZOOM ||
     mapWidth <= 0 ||
     mapHeight <= 0
   ) {
@@ -477,8 +455,11 @@ function declutterPromotedStopMarkers(
       return;
     }
 
-    const x = ((marker.stop.lon! - region.longitude) / region.longitudeDelta + 0.5) * mapWidth;
-    const y = ((region.latitude - marker.stop.lat!) / region.latitudeDelta + 0.5) * mapHeight;
+    const { x, y } = projectToScreen(
+      [marker.stop.lon!, marker.stop.lat!],
+      camera,
+      { width: mapWidth, height: mapHeight },
+    );
     const overlaps = acceptedPromoted.some(point => {
       const dx = point.x - x;
       const dy = point.y - y;
@@ -499,25 +480,21 @@ function declutterPromotedStopMarkers(
   };
 }
 
-function getStopMarkerZoomTier(latitudeDelta: number): StopMarkerZoomTier {
-  return latitudeDelta >= SHOW_ORDINARY_STOPS_LAT_DELTA
+function getStopMarkerZoomTier(zoom: number): StopMarkerZoomTier {
+  return zoom < SHOW_ORDINARY_STOPS_ZOOM
     ? 'overview'
-    : latitudeDelta >= FULL_STOP_MARKERS_LAT_DELTA
+    : zoom < FULL_STOP_MARKERS_ZOOM
       ? 'mid'
       : 'close';
 }
 
-function shouldUpdateMapRegion(previous: Region, next: Region) {
-  const previousShowsMarkers = previous.latitudeDelta < 0.5;
-  const nextShowsMarkers = next.latitudeDelta < 0.5;
-  if (previousShowsMarkers !== nextShowsMarkers) return true;
-  if (getStopMarkerZoomTier(previous.latitudeDelta) !== getStopMarkerZoomTier(next.latitudeDelta)) return true;
+function shouldUpdateCamera(previous: CameraPosition, next: CameraPosition) {
+  if (getStopMarkerZoomTier(previous.zoom) !== getStopMarkerZoomTier(next.zoom)) return true;
 
   return (
-    Math.abs(previous.latitude - next.latitude) > REGION_CENTER_EPSILON ||
-    Math.abs(previous.longitude - next.longitude) > REGION_CENTER_EPSILON ||
-    Math.abs(previous.latitudeDelta - next.latitudeDelta) > REGION_DELTA_EPSILON ||
-    Math.abs(previous.longitudeDelta - next.longitudeDelta) > REGION_DELTA_EPSILON
+    Math.abs(previous.center[0] - next.center[0]) > CAMERA_CENTER_EPSILON ||
+    Math.abs(previous.center[1] - next.center[1]) > CAMERA_CENTER_EPSILON ||
+    Math.abs(previous.zoom - next.zoom) > CAMERA_ZOOM_EPSILON
   );
 }
 
@@ -660,6 +637,8 @@ function AnimatedVehicleMarker({
   accent,
   title,
   subtitle,
+  calloutOpen,
+  onPress,
   styles,
 }: {
   sample: VehicleSample;
@@ -669,30 +648,24 @@ function AnimatedVehicleMarker({
   accent: string;
   title: string;
   subtitle: string;
+  calloutOpen: boolean;
+  onPress: () => void;
   styles: ReturnType<typeof createStyles>;
 }) {
-  const contentMarkerRef = useRef<MapMarker | null>(null);
-  // The marker is uncontrolled after mount: the coordinate prop never
-  // changes, and all motion goes through the native marker API on a fixed
-  // tick. The tick advances a progress-in-meters value along the route and
-  // only ever modulates speed — the marker never animates backwards when a
-  // stale GPS fix projects behind the dead-reckoned position, and chained
-  // short segments follow the road instead of cutting corners.
+  // The tick advances a progress-in-meters value along the route and only
+  // ever modulates speed — the pin never runs backwards when a stale GPS fix
+  // projects behind the dead-reckoned position, and chained short segments
+  // follow the road instead of cutting corners.
   const sampleRef = useRef(sample);
   const trackRef = useRef(track);
   const displayedMetersRef = useRef<number | null>(null);
-  const displayedCoordinateRef = useRef(sample.rawCoordinate);
-  const [initialCoordinate] = useState(() => {
+  const [coordinate, setCoordinate] = useState(() => {
     if (!sample.onRoute || !track) return sample.rawCoordinate;
     return interpolatePolylineAtDistance(track.metrics, sample.routeMeters)?.point ?? sample.rawCoordinate;
   });
-  // Direction is a rotated arrow point baked into the marker icon. The Fabric
-  // marker manager has no runtime rotation prop handler, so the arrow rotates
-  // via the view transform and the icon is explicitly recaptured — but only
-  // when the quantized sector actually changes (i.e. the bus turns).
+  const coordinateRef = useRef(coordinate);
   const [arrowSector, setArrowSector] = useState(() => vehicleArrowSectorAt(sample, track));
-  const arrowSectorRef = useRef(arrowSector);
-  const [canAnimateNativeMarker, setCanAnimateNativeMarker] = useState(false);
+  const [canAnimate, setCanAnimate] = useState(false);
   const pinWidth = VEHICLE_PIN_CANVAS_SIZE;
   const pinHeight = VEHICLE_PIN_CANVAS_SIZE;
   const busIconSize = 16;
@@ -701,15 +674,12 @@ function AnimatedVehicleMarker({
   const modeIcon = transitModeIcon(sample.mode);
 
   useEffect(() => {
-    setCanAnimateNativeMarker(false);
+    setCanAnimate(false);
     if (!isActive) return;
 
-    // Let the tab transition and any initial camera fit finish before native
-    // marker animations start competing for Android render-thread time.
-    const readyTimeoutId = setTimeout(
-      () => setCanAnimateNativeMarker(true),
-      LIVE_VEHICLE_ACTIVATION_DELAY_MS,
-    );
+    // Let the tab transition and any initial camera fit finish before the
+    // pins start moving.
+    const readyTimeoutId = setTimeout(() => setCanAnimate(true), LIVE_VEHICLE_ACTIVATION_DELAY_MS);
     return () => clearTimeout(readyTimeoutId);
   }, [isActive]);
 
@@ -719,23 +689,12 @@ function AnimatedVehicleMarker({
   }, [sample, track]);
 
   useEffect(() => {
-    if (!isActive || !canAnimateNativeMarker) return;
+    if (!isActive || !canAnimate) return;
 
-    // Motion goes only through the native marker animation API — no React
-    // commits on the movement path.
-    const moveTo = (
-      coordinate: { latitude: number; longitude: number },
-      durationMs: number,
-    ) => {
-      displayedCoordinateRef.current = coordinate;
-      if (durationMs <= 0) {
-        contentMarkerRef.current?.setCoordinates(coordinate);
-        return;
-      }
-      contentMarkerRef.current?.animateMarkerToCoordinate(coordinate, durationMs);
+    const moveTo = (next: { latitude: number; longitude: number }) => {
+      coordinateRef.current = next;
+      setCoordinate(next);
     };
-    // Commits a new arrow orientation only when the quantized sector changes;
-    // the render effect below then recaptures the marker icon once.
     const updateArrowSector = (meters: number | null) => {
       const currentSample = sampleRef.current;
       const currentTrack = trackRef.current;
@@ -744,10 +703,7 @@ function AnimatedVehicleMarker({
             headingAlongPolyline(currentTrack.metrics, meters, VEHICLE_ARROW_LOOK_AHEAD_METERS),
           )
         : quantizeArrowSector(currentSample.heading);
-      if (sector != null && sector !== arrowSectorRef.current) {
-        arrowSectorRef.current = sector;
-        setArrowSector(sector);
-      }
+      if (sector != null) setArrowSector(sector);
     };
 
     const tick = () => {
@@ -757,8 +713,8 @@ function AnimatedVehicleMarker({
       if (!currentSample.onRoute || !currentTrack) {
         displayedMetersRef.current = null;
         updateArrowSector(null);
-        if (distanceMeters(displayedCoordinateRef.current, currentSample.rawCoordinate) > 1) {
-          moveTo(currentSample.rawCoordinate, reduceMotion ? 0 : LIVE_VEHICLE_TICK_MS);
+        if (distanceMeters(coordinateRef.current, currentSample.rawCoordinate) > 1) {
+          moveTo(currentSample.rawCoordinate);
         }
         return;
       }
@@ -774,7 +730,7 @@ function AnimatedVehicleMarker({
         if (displayed !== gpsMeters) {
           displayedMetersRef.current = gpsMeters;
           const point = interpolatePolylineAtDistance(currentTrack.metrics, gpsMeters)?.point ?? currentSample.rawCoordinate;
-          moveTo(point, 0);
+          moveTo(point);
           updateArrowSector(gpsMeters);
         }
         return;
@@ -794,7 +750,7 @@ function AnimatedVehicleMarker({
 
       const cruiseSpeed = vehicleCruiseSpeedMetersPerSecond(
         displayed,
-        displayedCoordinateRef.current,
+        coordinateRef.current,
         currentTrack,
       );
       const nextMeters = Math.min(
@@ -807,181 +763,178 @@ function AnimatedVehicleMarker({
       if (!point) return;
 
       displayedMetersRef.current = nextMeters;
-      moveTo(point, LIVE_VEHICLE_TICK_MS);
+      moveTo(point);
       updateArrowSector(nextMeters);
     };
 
     tick();
     const intervalId = setInterval(tick, LIVE_VEHICLE_TICK_MS);
     return () => clearInterval(intervalId);
-  }, [canAnimateNativeMarker, isActive, reduceMotion]);
+  }, [canAnimate, isActive, reduceMotion]);
 
-  useEffect(() => {
-    // tracksViewChanges stays false, so a committed arrow rotation only lands
-    // in the marker icon after an explicit recapture.
-    if (!canAnimateNativeMarker) return;
-    contentMarkerRef.current?.redraw();
-  }, [arrowSector, canAnimateNativeMarker]);
+  const lngLat = toLngLat(coordinate);
 
   return (
-    <Marker
-      ref={contentMarkerRef}
-      coordinate={initialCoordinate}
-      anchor={VEHICLE_PIN_ANCHOR}
-      tracksViewChanges={false}
-      zIndex={22}>
-      <View
-        collapsable={false}
-        style={[styles.vehiclePin, { width: pinWidth, height: pinHeight }]}>
-        {/* Translucency comes from alpha baked into each fill color; a
-            view-level opacity here composites solid for a frame on Android
-            whenever the marker icon is recaptured. The circles are
-            rotation-invariant, so rotating this layer only moves the
-            arrow point. */}
+    <>
+      <GeoMarker coordinate={lngLat} zIndex={22} onPress={onPress} accessibilityLabel={`${title}. ${subtitle}`}>
         <View
           collapsable={false}
-          style={[
-            styles.vehiclePinShape,
-            arrowSector != null && {
-              transform: [{ rotate: `${arrowSector * VEHICLE_ARROW_SECTOR_DEGREES}deg` }],
-            },
-          ]}>
-          {arrowSector != null && (
-            <>
-              <View style={styles.vehiclePinArrowOuter} />
-              <View style={[styles.vehiclePinArrowInner, { borderBottomColor: accent }]} />
-            </>
-          )}
-          <View style={styles.vehiclePinOuterCircle} />
+          style={[styles.vehiclePin, { width: pinWidth, height: pinHeight }]}>
+          {/* The circles are rotation-invariant, so rotating this layer only
+              moves the arrow point. */}
           <View
+            collapsable={false}
             style={[
-              styles.vehiclePinInnerCircle,
-              { backgroundColor: alpha(accent, VEHICLE_PIN_BACKGROUND_ALPHA_HEX) },
-            ]}
-          />
-        </View>
-        <View collapsable={false} style={styles.vehiclePinContent}>
-          <View collapsable={false} style={styles.vehiclePinBusIconSlot}>
-            <MaterialCommunityIcons
-              name={modeIcon}
-              size={busIconSize}
-              color="#FFFFFF"
-              style={styles.vehiclePinBusIcon}
+              styles.vehiclePinShape,
+              arrowSector != null && {
+                transform: [{ rotate: `${arrowSector * VEHICLE_ARROW_SECTOR_DEGREES}deg` }],
+              },
+            ]}>
+            {arrowSector != null && (
+              <>
+                <View style={styles.vehiclePinArrowOuter} />
+                <View style={[styles.vehiclePinArrowInner, { borderBottomColor: accent }]} />
+              </>
+            )}
+            <View style={styles.vehiclePinOuterCircle} />
+            <View
+              style={[
+                styles.vehiclePinInnerCircle,
+                { backgroundColor: alpha(accent, VEHICLE_PIN_BACKGROUND_ALPHA_HEX) },
+              ]}
             />
           </View>
-          <View style={styles.vehicleRouteDigits}>
-            {routeDigits.map((digit, index) => (
-              <Text
-                key={`${sample.routeKey}-${index}`}
-                allowFontScaling={false}
-                style={[
-                  styles.vehicleRouteLabel,
-                  {
-                    fontSize: routeFontSize,
-                    lineHeight: routeFontSize + 2,
-                  },
-                ]}>
-                {digit}
+          <View collapsable={false} style={styles.vehiclePinContent}>
+            <View collapsable={false} style={styles.vehiclePinBusIconSlot}>
+              <MaterialCommunityIcons
+                name={modeIcon}
+                size={busIconSize}
+                color="#FFFFFF"
+                style={styles.vehiclePinBusIcon}
+              />
+            </View>
+            <View style={styles.vehicleRouteDigits}>
+              {routeDigits.map((digit, index) => (
+                <Text
+                  key={`${sample.routeKey}-${index}`}
+                  allowFontScaling={false}
+                  style={[
+                    styles.vehicleRouteLabel,
+                    {
+                      fontSize: routeFontSize,
+                      lineHeight: routeFontSize + 2,
+                    },
+                  ]}>
+                  {digit}
+                </Text>
+              ))}
+            </View>
+          </View>
+        </View>
+      </GeoMarker>
+      {calloutOpen ? (
+        <GeoMarker coordinate={lngLat} anchor="bottom" offset={[0, -VEHICLE_PIN_CANVAS_SIZE / 2]} zIndex={35}>
+          <View style={styles.vehicleCallout}>
+            <View style={[styles.vehicleCalloutIcon, { backgroundColor: accent }]}>
+              <MaterialCommunityIcons name={modeIcon} size={22} color="#FFFFFF" />
+            </View>
+            <View style={styles.vehicleCalloutCopy}>
+              <Text style={styles.vehicleCalloutTitle} numberOfLines={1}>
+                {title}
               </Text>
-            ))}
+              <Text style={styles.vehicleCalloutSubtitle} numberOfLines={1}>
+                {subtitle}
+              </Text>
+            </View>
           </View>
-        </View>
-      </View>
-      <Callout tooltip>
-        <View style={styles.vehicleCallout}>
-          <View style={[styles.vehicleCalloutIcon, { backgroundColor: accent }]}>
-            <MaterialCommunityIcons name={modeIcon} size={22} color="#FFFFFF" />
-          </View>
-          <View style={styles.vehicleCalloutCopy}>
-            <Text style={styles.vehicleCalloutTitle} numberOfLines={1}>
-              {title}
-            </Text>
-            <Text style={styles.vehicleCalloutSubtitle} numberOfLines={1}>
-              {subtitle}
-            </Text>
-          </View>
-        </View>
-      </Callout>
-    </Marker>
+        </GeoMarker>
+      ) : null}
+    </>
   );
 }
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
-// Ramps a shared alpha from near-invisible to full whenever `revealKey`
-// changes. One value drives every stop marker, so a zoom tier crossing costs
-// a fixed three commits instead of one per marker.
-function useSteppedReveal(revealKey: string, enabled: boolean) {
-  const lastStepIndex = MARKER_REVEAL_STEPS.length - 1;
-  const [stepIndex, setStepIndex] = useState(lastStepIndex);
+// Fades the stop layer in whenever `revealKey` changes — crossing a zoom tier
+// or switching trips swaps a lot of markers at once. One value drives them all.
+function useMarkerReveal(revealKey: string, enabled: boolean) {
+  const opacity = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
     if (!enabled) {
-      setStepIndex(lastStepIndex);
+      opacity.setValue(1);
       return;
     }
+    opacity.setValue(0.15);
+    const animation = Animated.timing(opacity, {
+      toValue: 1,
+      duration: MARKER_REVEAL_MS,
+      easing: Easing.out(Easing.quad),
+      useNativeDriver: true,
+    });
+    animation.start();
+    return () => animation.stop();
+  }, [enabled, opacity, revealKey]);
 
-    setStepIndex(0);
-    let current = 0;
-    const intervalId = setInterval(() => {
-      current += 1;
-      setStepIndex(current);
-      if (current >= lastStepIndex) clearInterval(intervalId);
-    }, MARKER_REVEAL_STEP_MS);
-
-    return () => clearInterval(intervalId);
-  }, [enabled, lastStepIndex, revealKey]);
-
-  return MARKER_REVEAL_STEPS[Math.min(stepIndex, lastStepIndex)];
+  return opacity;
 }
 
-// A second marker under the focused pin whose native alpha breathes. Its icon
-// is captured once; only the alpha is stepped, so nothing is redrawn.
-function FocusedStopHalo({
+// The focused stop: a pin standing on its coordinate inside a breathing ring.
+function FocusedStopMarker({
   coordinate,
   accent,
+  panel,
   reduceMotion,
   styles,
 }: {
-  coordinate: { latitude: number; longitude: number };
+  coordinate: LngLat;
   accent: string;
+  panel: string;
   reduceMotion: boolean;
   styles: ReturnType<typeof createStyles>;
 }) {
-  const [opacity, setOpacity] = useState(FOCUSED_HALO_MAX_OPACITY);
+  const haloOpacity = useRef(new Animated.Value(FOCUSED_HALO_MAX_OPACITY)).current;
 
   useEffect(() => {
     if (reduceMotion) {
-      setOpacity(FOCUSED_HALO_MAX_OPACITY);
+      haloOpacity.setValue(FOCUSED_HALO_MAX_OPACITY);
       return;
     }
-
-    const startedAt = Date.now();
-    const intervalId = setInterval(() => {
-      const phase = ((Date.now() - startedAt) % FOCUSED_HALO_CYCLE_MS) / FOCUSED_HALO_CYCLE_MS;
-      const swell = (1 - Math.cos(phase * 2 * Math.PI)) / 2;
-      setOpacity(
-        FOCUSED_HALO_MIN_OPACITY + swell * (FOCUSED_HALO_MAX_OPACITY - FOCUSED_HALO_MIN_OPACITY),
-      );
-    }, FOCUSED_HALO_STEP_MS);
-
-    return () => clearInterval(intervalId);
-  }, [reduceMotion]);
+    const half = FOCUSED_HALO_CYCLE_MS / 2;
+    const breathe = Animated.loop(
+      Animated.sequence([
+        Animated.timing(haloOpacity, {
+          toValue: FOCUSED_HALO_MIN_OPACITY,
+          duration: half,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+        Animated.timing(haloOpacity, {
+          toValue: FOCUSED_HALO_MAX_OPACITY,
+          duration: half,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+    breathe.start();
+    return () => breathe.stop();
+  }, [haloOpacity, reduceMotion]);
 
   return (
-    <Marker
-      coordinate={coordinate}
-      anchor={{
-        x: 0.5,
-        y: (FOCUSED_HALO_CANVAS_SIZE / 2 + FOCUSED_HALO_CENTER_LIFT) / FOCUSED_HALO_CANVAS_SIZE,
-      }}
-      tracksViewChanges={false}
-      opacity={opacity}
-      zIndex={29}>
-      <View collapsable={false} style={styles.focusedStopHaloCanvas}>
-        <View style={[styles.focusedStopHaloRing, { borderColor: accent, backgroundColor: alpha(accent, '1F') }]} />
+    <GeoMarker coordinate={coordinate} offset={[0, -FOCUSED_PIN_LIFT]} zIndex={30}>
+      <View collapsable={false} style={styles.focusedStopHaloCanvas} pointerEvents="none">
+        <Animated.View
+          style={[
+            styles.focusedStopHaloRing,
+            { borderColor: accent, backgroundColor: alpha(accent, '1F'), opacity: haloOpacity },
+          ]}
+        />
+        <View style={[styles.focusedStopMarkerCore, { backgroundColor: panel, borderColor: accent }]}>
+          <StopPostGlyph size={26} color={accent} />
+        </View>
       </View>
-    </Marker>
+    </GeoMarker>
   );
 }
 
@@ -1066,12 +1019,12 @@ export default function ExploreScreen({
   }));
   const colors = isActive ? liveColors : inactiveThemeSnapshot.colors;
   const resolvedThemeMode = isActive ? liveResolvedThemeMode : inactiveThemeSnapshot.resolvedThemeMode;
-  const { t, ttcLocale, localizedStopName } = useI18n();
+  const { t, ttcLocale, localizedStopName, resolvedLanguage } = useI18n();
   const reduceMotion = useReducedMotion();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const insets = useSafeAreaInsets();
-  const mapRef = useRef<MapView>(null);
+  const mapRef = useRef<GeoMapRef>(null);
   const queryClient = useQueryClient();
   const {
     state: favoritesState,
@@ -1086,9 +1039,10 @@ export default function ExploreScreen({
   const { focusedStop, clearStopFocus, requestStopFocus, requestStopSheetReturn } = useMapFocus();
   const navigateToTab = useTabNav();
   const lastFitKeyRef = useRef<string | null>(null);
-  const lastRegionSampleAtRef = useRef(0);
+  const lastCameraSampleAtRef = useRef(0);
 
   const [mapReady, setMapReady] = useState(false);
+  const [openVehicleKey, setOpenVehicleKey] = useState<string | null>(null);
   const [mapTimedOut, setMapTimedOut] = useState(false);
   const [hasUserLocation, setHasUserLocation] = useState(false);
   const [isLocating, setIsLocating] = useState(false);
@@ -1142,9 +1096,13 @@ export default function ExploreScreen({
     () => boundsForPoints(allRoutePoints, isKojoriTrip),
     [allRoutePoints, isKojoriTrip],
   );
-  const [currentRegion, setCurrentRegion] = useState<Region>(() =>
-    initialRegionFor(allRoutePoints, isKojoriTrip),
+  // Fixed at mount: later camera moves go through the map ref. The map fills
+  // the window, so the window frames the first camera exactly.
+  const [initialCamera] = useState(() =>
+    initialCameraFor(allRoutePoints, isKojoriTrip, { width: windowWidth, height: windowHeight }),
   );
+  const [currentCamera, setCurrentCamera] = useState<CameraPosition>(initialCamera);
+  const userPosition = useWatchedPosition(isActive && hasUserLocation);
 
   useEffect(() => {
     if (!isActive && !suspendNativeMap) return;
@@ -1275,7 +1233,7 @@ export default function ExploreScreen({
     return stops;
   }, [activeStopId, trip]);
   // ETA walks the route in 500m chunks per vehicle. Kept out of the render
-  // body so panning and zooming (which commit `currentRegion`) never redo it.
+  // body so panning and zooming (which commit `currentCamera`) never redo it.
   const vehicleMarkers = useMemo(() => {
     const routes = new Map(mapRoutes.map(route => [route.key, route]));
 
@@ -1413,8 +1371,27 @@ export default function ExploreScreen({
         .filter(segment => segment.coords.length >= 2),
     };
   }, [routePoints]);
-  // Earlier routes in the trip draw on top, as 380 always sat over 316.
-  const routeDrawOrder = mapRoutes.map((route, index) => ({ route, index })).reverse();
+  const routeCasingColor = ROUTE_CASING_COLOR[resolvedThemeMode === 'dark' ? 'dark' : 'light'];
+  // Within a line layer later features draw on top; earlier routes in the
+  // trip go last, as 380 always sat over 316.
+  const routeLines = useMemo(() => {
+    const drawOrder = mapRoutes.map((route, index) => ({ route, index })).reverse();
+    const lineFor = (points: PolylinePoint[], color: string): GeoLine[] =>
+      points.length >= 2 ? [{ coordinates: points.map(toLngLat), color }] : [];
+
+    return {
+      casing: drawOrder.flatMap(({ index }) => lineFor(splitPolylines.casing[index] ?? [], routeCasingColor)),
+      exclusive: drawOrder.flatMap(({ route, index }) =>
+        lineFor(splitPolylines.exclusive[index] ?? [], routeColor(route.boarding.route.id, colors, trip)),
+      ),
+      // Round caps, not butt: consecutive stripes share an endpoint, and at a
+      // bend two butt-capped strokes leave the outside of the turn uncovered.
+      zebra: splitPolylines.sharedZebra.flatMap(segment => {
+        const route = mapRoutes[segment.colorIndex];
+        return route ? lineFor(segment.coords, routeColor(route.boarding.route.id, colors, trip)) : [];
+      }),
+    };
+  }, [colors, mapRoutes, routeCasingColor, splitPolylines, trip]);
 
   const groupedCounts = useMemo(() => {
     const counts = new Map<string, number>();
@@ -1422,19 +1399,11 @@ export default function ExploreScreen({
     return counts;
   }, [positions]);
 
-  const showMarkers = useMemo(() => {
-    return currentRegion.latitudeDelta < 0.5;
-  }, [currentRegion.latitudeDelta]);
-  const stopMarkerZoomTier = getStopMarkerZoomTier(currentRegion.latitudeDelta);
-  // One shared alpha ramp for the whole stop layer: crossing a zoom tier or
-  // switching trips swaps a lot of markers at once, and fading them in
-  // together costs three commits instead of one per marker.
-  const stopMarkerRevealOpacity = useSteppedReveal(
+  const stopMarkerZoomTier = getStopMarkerZoomTier(currentCamera.zoom);
+  const stopMarkerRevealOpacity = useMarkerReveal(
     `${tripId}:${stopMarkerZoomTier}`,
     isActive && !reduceMotion,
   );
-  const routeLineWidth = ROUTE_LINE_WIDTH_BY_TIER[stopMarkerZoomTier];
-  const routeCasingColor = ROUTE_CASING_COLOR[resolvedThemeMode === 'dark' ? 'dark' : 'light'];
   const showOrdinaryStopMarkers = stopMarkerZoomTier !== 'overview';
 
   const stopMarkers = useMemo(() => {
@@ -1474,12 +1443,12 @@ export default function ExploreScreen({
   const visibleStopMarkers = useMemo(() => {
     return declutterPromotedStopMarkers(
       stopMarkers,
-      currentRegion,
+      currentCamera,
       stopMarkerZoomTier,
       windowWidth,
       windowHeight,
     );
-  }, [currentRegion, stopMarkerZoomTier, stopMarkers, windowHeight, windowWidth]);
+  }, [currentCamera, stopMarkerZoomTier, stopMarkers, windowHeight, windowWidth]);
   const fullStopMarkers = visibleStopMarkers.visible;
   const compactStopMarkers = visibleStopMarkers.compact;
 
@@ -1488,20 +1457,13 @@ export default function ExploreScreen({
     if (routePositions.length === 0) return;
 
     if (routePositions.length === 1) {
-      mapRef.current?.animateToRegion({
-        latitude: routePositions[0].lat,
-        longitude: routePositions[0].lon,
-        latitudeDelta: 0.05,
-        longitudeDelta: 0.04,
-      }, 500);
-    } else {
-      mapRef.current?.fitToCoordinates(
-        routePositions.map(p => ({ latitude: p.lat, longitude: p.lon })),
-        {
-          edgePadding: { top: 100, right: 60, bottom: 160, left: 60 },
-          animated: true,
-        },
+      mapRef.current?.easeTo(
+        { center: [routePositions[0].lon, routePositions[0].lat], zoom: VEHICLE_FOCUS_ZOOM },
+        500,
       );
+    } else {
+      const bounds = boundsOf(routePositions.map(p => [p.lon, p.lat] as LngLat));
+      if (bounds) mapRef.current?.fitBounds(bounds, { padding: FRAME_PADDING, maxZoom: FOCUS_ZOOM });
     }
   }
 
@@ -1518,22 +1480,15 @@ export default function ExploreScreen({
     const coordinates = positions.length > 0
       ? positions.map(position => ({ latitude: position.lat, longitude: position.lon }))
       : splitPolylines.casing.flat();
-    if (coordinates.length === 0) return;
+    const bounds = boundsForCoordinates(coordinates);
+    if (!bounds) return;
 
     // The key is claimed when the fit actually runs: positions or geometry
     // landing inside the delay re-run this effect, and claiming it up front
     // let that cleanup cancel the only fit.
     const timeoutId = setTimeout(() => {
       lastFitKeyRef.current = fitKey;
-      mapRef.current?.fitToCoordinates(coordinates, {
-        edgePadding: {
-          top: 100,
-          right: 60,
-          bottom: 160,
-          left: 60,
-        },
-        animated: true,
-      });
+      mapRef.current?.fitBounds(bounds, { padding: FRAME_PADDING, maxZoom: FOCUS_ZOOM });
     }, 250);
 
     return () => clearTimeout(timeoutId);
@@ -1544,24 +1499,13 @@ export default function ExploreScreen({
 
     const timeoutId = setTimeout(() => {
       if (typeof focusedStop.lat === 'number' && typeof focusedStop.lon === 'number') {
-        mapRef.current?.animateToRegion(
-          {
-            latitude: focusedStop.lat,
-            longitude: focusedStop.lon,
-            latitudeDelta: 0.018,
-            longitudeDelta: 0.018,
-          },
-          450,
-        );
+        mapRef.current?.easeTo({ center: [focusedStop.lon, focusedStop.lat], zoom: FOCUS_ZOOM }, 450);
         return;
       }
 
-      const fallbackCoordinates = splitPolylines.casing.flat();
-      if (fallbackCoordinates.length >= 2) {
-        mapRef.current?.fitToCoordinates(fallbackCoordinates, {
-          edgePadding: { top: 100, right: 60, bottom: 160, left: 60 },
-          animated: true,
-        });
+      const fallbackBounds = boundsForCoordinates(splitPolylines.casing.flat());
+      if (fallbackBounds) {
+        mapRef.current?.fitBounds(fallbackBounds, { padding: FRAME_PADDING, maxZoom: FOCUS_ZOOM });
       }
     }, 180);
 
@@ -1612,13 +1556,8 @@ export default function ExploreScreen({
       });
 
       setHasUserLocation(true);
-      mapRef.current?.animateToRegion(
-        {
-          latitude: current.coords.latitude,
-          longitude: current.coords.longitude,
-          latitudeDelta: 0.018,
-          longitudeDelta: 0.018,
-        },
+      mapRef.current?.easeTo(
+        { center: [current.coords.longitude, current.coords.latitude], zoom: FOCUS_ZOOM },
         450,
       );
     } catch {
@@ -1628,51 +1567,47 @@ export default function ExploreScreen({
     }
   }
 
-  function handleRegionChange(region: Region) {
-    const clampedRegion = {
-      latitude: Math.max(mapBounds.latMin, Math.min(mapBounds.latMax, region.latitude)),
-      longitude: Math.max(mapBounds.lonMin, Math.min(mapBounds.lonMax, region.longitude)),
-      latitudeDelta: region.latitudeDelta,
-      longitudeDelta: region.longitudeDelta,
+  // The centre is held inside the trip's area; the zoom is free. MapLibre's
+  // own maxBounds would also cap zooming out, so the clamp stays ours.
+  function handleCameraIdle(state: MapViewState) {
+    const [longitude, latitude] = state.center;
+    const clamped: CameraPosition = {
+      center: [
+        Math.max(mapBounds.lonMin, Math.min(mapBounds.lonMax, longitude)),
+        Math.max(mapBounds.latMin, Math.min(mapBounds.latMax, latitude)),
+      ],
+      zoom: state.zoom,
     };
 
     // Bounce back only when meaningfully outside the bounds — re-animating on
     // sub-epsilon clamp deltas made the edge feel springy on every gesture.
     const clampDelta = Math.max(
-      Math.abs(clampedRegion.latitude - region.latitude),
-      Math.abs(clampedRegion.longitude - region.longitude),
+      Math.abs(clamped.center[0] - longitude),
+      Math.abs(clamped.center[1] - latitude),
     );
-    if (clampDelta > 0.002) {
-      mapRef.current?.animateToRegion(clampedRegion, 300);
+    if (clampDelta > CAMERA_CLAMP_SLACK_DEGREES) {
+      mapRef.current?.easeTo({ center: clamped.center }, 300);
     }
 
-    setCurrentRegion(previousRegion => (
-      shouldUpdateMapRegion(previousRegion, clampedRegion)
-        ? clampedRegion
-        : previousRegion
-    ));
+    setCurrentCamera(previous => (shouldUpdateCamera(previous, clamped) ? clamped : previous));
   }
 
-  // Mid-gesture sampling. `onRegionChangeComplete` still owns the clamping and
-  // the authoritative region; this only re-tiers the marker layer while the
-  // fingers are still down, and bails unless the tier actually flipped.
-  function handleRegionChangeSample(region: Region) {
+  // Mid-gesture sampling: re-tiers the marker layer while the fingers are
+  // still down, and bails unless the tier actually flipped.
+  function handleCameraChanging(state: MapViewState) {
     const now = Date.now();
-    if (now - lastRegionSampleAtRef.current < REGION_SAMPLE_THROTTLE_MS) return;
-    lastRegionSampleAtRef.current = now;
+    if (now - lastCameraSampleAtRef.current < CAMERA_SAMPLE_THROTTLE_MS) return;
+    lastCameraSampleAtRef.current = now;
 
-    setCurrentRegion(previousRegion => {
-      const tierChanged =
-        getStopMarkerZoomTier(previousRegion.latitudeDelta) !== getStopMarkerZoomTier(region.latitudeDelta);
-      const markerVisibilityChanged =
-        previousRegion.latitudeDelta < 0.5 !== region.latitudeDelta < 0.5;
-
-      return tierChanged || markerVisibilityChanged ? region : previousRegion;
-    });
+    setCurrentCamera(previous =>
+      getStopMarkerZoomTier(previous.zoom) !== getStopMarkerZoomTier(state.zoom)
+        ? { center: state.center, zoom: state.zoom }
+        : previous,
+    );
   }
 
-  function handleMapPress(event: MapPressEvent) {
-    if (event.nativeEvent.action === 'marker-press') return;
+  function handleMapPress() {
+    setOpenVehicleKey(null);
     clearStopFocus();
   }
 
@@ -1728,82 +1663,28 @@ export default function ExploreScreen({
 
   return (
     <View style={styles.screen}>
-      <MapView
+      <GeoMap
         ref={mapRef}
         style={StyleSheet.absoluteFill}
-        initialRegion={currentRegion}
-        userInterfaceStyle={resolvedThemeMode}
-        // Both themes pass a non-empty style so switching always restyles the
-        // map at runtime without remounting the MapView (which would reload
-        // tiles and reset the camera).
-        customMapStyle={resolvedThemeMode === 'dark' ? GOOGLE_DARK_MAP_STYLE : GOOGLE_LIGHT_MAP_STYLE}
-        showsUserLocation={isActive && hasUserLocation}
-        showsMyLocationButton={false}
-        showsPointsOfInterests={false}
-        showsCompass={false}
-        showsScale={false}
-        showsBuildings={false}
-        showsIndoors={false}
-        showsTraffic={false}
-        minZoomLevel={MAP_MIN_ZOOM_LEVEL}
-        onMapReady={() => {
+        testID="explore-map"
+        mapStyle={mapStyleFor(resolvedThemeMode, resolvedLanguage)}
+        initialCamera={initialCamera}
+        minZoom={MAP_MIN_ZOOM}
+        attributionBottomInset={insets.bottom + BottomTabInset}
+        onReady={() => {
           setMapReady(true);
           setMapTimedOut(false);
         }}
-        onRegionChange={handleRegionChangeSample}
-        onRegionChangeComplete={handleRegionChange}
+        onCameraChanging={handleCameraChanging}
+        onCameraIdle={handleCameraIdle}
         onPress={handleMapPress}>
-        {routeDrawOrder.map(({ route, index }) => {
-          const casing = splitPolylines.casing[index] ?? [];
-          return casing.length >= 2 ? (
-            <Polyline
-              key={`route-${route.key}-casing`}
-              coordinates={casing}
-              strokeColor={routeCasingColor}
-              strokeWidth={routeLineWidth + ROUTE_CASING_EXTRA_WIDTH}
-              zIndex={1}
-              lineCap="round"
-              lineJoin="round"
-            />
-          ) : null;
-        })}
-        {routeDrawOrder.map(({ route, index }) => {
-          const exclusive = splitPolylines.exclusive[index] ?? [];
-          return exclusive.length >= 2 ? (
-            <Polyline
-              key={`route-${route.key}-exclusive`}
-              coordinates={exclusive}
-              strokeColor={routeColor(route.boarding.route.id, colors, trip)}
-              strokeWidth={routeLineWidth}
-              zIndex={2}
-              lineCap="round"
-              lineJoin="round"
-            />
-          ) : null;
-        })}
-        {/* Round caps, not butt: consecutive stripes share an endpoint,
-            and at a bend two butt-capped strokes leave the outside of
-            the turn uncovered — a notch the casing shows straight
-            through. The half-width the caps add overlaps into the
-            neighbouring stripe, which is exactly what closes it. */}
-        {splitPolylines.sharedZebra.map((seg, i) => {
-          const route = mapRoutes[seg.colorIndex];
-          return route ? (
-            <Polyline
-              key={`zebra-${i}`}
-              coordinates={seg.coords}
-              strokeColor={routeColor(route.boarding.route.id, colors, trip)}
-              strokeWidth={routeLineWidth}
-              zIndex={3}
-              lineCap="round"
-              lineJoin="round"
-            />
-          ) : null;
-        })}
+        <GeoLineLayer id="route-casing" lines={routeLines.casing} width={ROUTE_CASING_WIDTH} />
+        <GeoLineLayer id="route-exclusive" lines={routeLines.exclusive} width={ROUTE_LINE_WIDTH} />
+        <GeoLineLayer id="route-shared" lines={routeLines.zebra} width={ROUTE_LINE_WIDTH} />
         {/* One flat keyed list: decluttering re-buckets stops between the full
             and compact tiers on every pan/zoom, and rendering them as two
             sibling fragments remounted (blinked) every marker that crossed. */}
-        {showMarkers && [
+        {[
           ...fullStopMarkers.map(entry => ({ ...entry, compact: false })),
           ...compactStopMarkers.map(({ stop }) => ({ stop, isPromoted: false, compact: true })),
         ].map(({ stop, isPromoted, compact }) => {
@@ -1818,58 +1699,41 @@ export default function ExploreScreen({
               markerColor={mapAccent}
               revealOpacity={stopMarkerRevealOpacity}
               styles={styles}
-              resolvedThemeMode={resolvedThemeMode}
               colors={colors}
               onPress={() => requestStopFocus(stop, trip.id)}
             />
           );
         })}
-        {showMarkers && vehicleMarkers.map(({ sample, track, accent, title, subtitle }) => (
-          <AnimatedVehicleMarker
-            key={`${sample.routeKey}-${sample.vehicleId}`}
-            sample={sample}
-            track={track}
-            isActive={isActive}
-            reduceMotion={reduceMotion}
-            accent={accent}
-            title={title}
-            subtitle={subtitle}
-            styles={styles}
-          />
-        ))}
+        {vehicleMarkers.map(({ sample, track, accent, title, subtitle }) => {
+          const vehicleKey = `${sample.routeKey}-${sample.vehicleId}`;
+          return (
+            <AnimatedVehicleMarker
+              key={vehicleKey}
+              sample={sample}
+              track={track}
+              isActive={isActive}
+              reduceMotion={reduceMotion}
+              accent={accent}
+              title={title}
+              subtitle={subtitle}
+              calloutOpen={openVehicleKey === vehicleKey}
+              onPress={() => setOpenVehicleKey(previous => (previous === vehicleKey ? null : vehicleKey))}
+              styles={styles}
+            />
+          );
+        })}
+        {userPosition ? <UserLocationMarker coordinate={userPosition} /> : null}
         {focusedStop && focusedStopCoordinate ? (
-          <FocusedStopHalo
-            key={`focused-stop-halo-${focusedStop.id}-${focusedStopAccent}`}
-            coordinate={focusedStopCoordinate}
+          <FocusedStopMarker
+            key={`focused-stop-${focusedStop.id}-${focusedStop.requestedAt}`}
+            coordinate={toLngLat(focusedStopCoordinate)}
             accent={focusedStopAccent}
+            panel={colors.panel}
             reduceMotion={reduceMotion}
             styles={styles}
           />
         ) : null}
-        {focusedStop && focusedStopCoordinate ? (
-          <Marker
-            key={`focused-stop-${focusedStop.id}-${focusedStop.requestedAt}-${focusedStopAccent}`}
-            coordinate={focusedStopCoordinate}
-            anchor={{ x: 0.5, y: 1 }}
-            centerOffset={{ x: 0, y: -24 }}
-            tracksViewChanges={false}
-            zIndex={30}
-          >
-            <View collapsable={false} style={styles.focusedStopMarker}>
-              <View
-                style={[
-                  styles.focusedStopMarkerCore,
-                  {
-                    backgroundColor: colors.panel,
-                    borderColor: focusedStopAccent,
-                  },
-                ]}>
-                <StopPostGlyph size={26} color={focusedStopAccent} />
-              </View>
-            </View>
-          </Marker>
-        ) : null}
-      </MapView>
+      </GeoMap>
 
       {/* Top controls */}
       <View style={[styles.topPanel, useCompactMapControls && styles.topPanelCompact, { top: insets.top + 12 }]}>
@@ -2554,12 +2418,6 @@ function createStyles(C: ReturnType<typeof useAppColors>) {
     lineHeight: 16,
     fontWeight: '600',
   },
-  focusedStopMarker: {
-    width: 50,
-    height: 50,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   focusedStopHaloCanvas: {
     width: FOCUSED_HALO_CANVAS_SIZE,
     height: FOCUSED_HALO_CANVAS_SIZE,
@@ -2567,6 +2425,7 @@ function createStyles(C: ReturnType<typeof useAppColors>) {
     justifyContent: 'center',
   },
   focusedStopHaloRing: {
+    position: 'absolute',
     width: FOCUSED_HALO_RING_SIZE,
     height: FOCUSED_HALO_RING_SIZE,
     borderRadius: FOCUSED_HALO_RING_SIZE / 2,

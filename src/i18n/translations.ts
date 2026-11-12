@@ -5,6 +5,8 @@ export const translations = {
   en: {
     pwaInstallTitle: "Keep your trips one tap away",
     pwaInstallInstructions: "On iPhone: open in Safari, tap Share → Add to Home Screen, then Open as Web App if shown. On other devices, use your browser’s install menu.",
+    pwaInstallAction: "Install",
+    pwaInstallDismiss: "Hide install tip",
     pwaInstallNote: "Open the app online first to prepare offline use. Saved timetables work offline; live arrivals and map tiles need a connection.",
 
     etaPreviewTitle: "Gzaap · experimental ETA",
@@ -331,11 +333,13 @@ export const translations = {
     mapVehicle: 'Vehicle {id}',
     mapVehicleEta: '≈ {minutes} min to your stop',
     mapNotLoading: 'Map not loading',
-    mapConfigIssue: 'The API key may be invalid or Maps SDK for Android is not enabled.\nEnable it at console.cloud.google.com -> APIs & Services -> Library -> "Maps SDK for Android".',
+    mapConfigIssue: 'Street tiles could not load. Check your connection — routes, stops and buses still show.',
   },
   ka: {
     pwaInstallTitle: "თქვენი მგზავრობები ერთი შეხებით",
     pwaInstallInstructions: "iPhone-ზე: გახსენით Safari-ში, აირჩიეთ გაზიარება → მთავარ ეკრანზე დამატება, შემდეგ ვებაპად გახსნა, თუ გამოჩნდება. სხვა მოწყობილობებზე გამოიყენეთ ბრაუზერის დაყენების მენიუ.",
+    pwaInstallAction: "დაყენება",
+    pwaInstallDismiss: "მინიშნების დამალვა",
     pwaInstallNote: "ხაზგარეშე გამოყენებისთვის ჯერ გახსენით აპი ინტერნეტით. შენახული განრიგები მუშაობს ინტერნეტის გარეშე; რეალურ დროში მოსვლის მონაცემებსა და რუკას კავშირი სჭირდება.",
 
     etaPreviewTitle: "Gzaap · საცდელი პროგნოზი",
@@ -662,11 +666,13 @@ export const translations = {
     mapVehicle: 'ტრანსპორტი {id}',
     mapVehicleEta: '≈ {minutes} წთ თქვენს გაჩერებამდე',
     mapNotLoading: 'რუკა არ იტვირთება',
-    mapConfigIssue: 'API key შეიძლება არასწორია ან Maps SDK for Android ჩართული არ არის.\nჩართეთ console.cloud.google.com -> APIs & Services -> Library -> "Maps SDK for Android".',
+    mapConfigIssue: 'ქუჩების რუკა ვერ ჩაიტვირთა. შეამოწმეთ ინტერნეტი — მარშრუტები, გაჩერებები და ავტობუსები მაინც ჩანს.',
   },
   ru: {
     pwaInstallTitle: "Ваши поездки — в одно касание",
     pwaInstallInstructions: "На iPhone: откройте в Safari, нажмите «Поделиться» → «На экран Домой» и включите «Открывать как веб-приложение», если этот пункт есть. На других устройствах используйте меню установки браузера.",
+    pwaInstallAction: "Установить",
+    pwaInstallDismiss: "Скрыть подсказку",
     pwaInstallNote: "Сначала откройте приложение с интернетом для подготовки к работе офлайн. Сохранённые расписания доступны без сети; прогнозы прибытия и карта требуют подключения.",
 
     etaPreviewTitle: "Gzaap · тестовый прогноз",
@@ -993,7 +999,7 @@ export const translations = {
     mapVehicle: 'Транспорт {id}',
     mapVehicleEta: '≈ {minutes} мин до вашей остановки',
     mapNotLoading: 'Карта не загружается',
-    mapConfigIssue: 'API key может быть неверным или Maps SDK for Android не включен.\nВключите его в console.cloud.google.com -> APIs & Services -> Library -> "Maps SDK for Android".',
+    mapConfigIssue: 'Не удалось загрузить карту улиц. Проверьте подключение — маршруты, остановки и автобусы всё равно видны.',
   },
 } satisfies Record<ResolvedLanguage, Record<string, string>>;
 
