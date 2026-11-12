@@ -13,7 +13,7 @@ application and database do not need changes.
 - Build pack: Dockerfile, repository root, `/Dockerfile`
 - Internal port: `8081`; do not publish a host port
 - Domain: `https://gzaap.whekin.dev`
-- Health check: `GET /`, expected status `200`
+- Health check: `GET /app/`, expected status `200`
 - Enable proxy compression and HTTPS
 - Deploy manually; no automatic webhook or deployment credentials are needed
 
@@ -35,8 +35,11 @@ docker run --rm -p 8097:8081 gzaap-pwa
 ```
 
 Before deployment, run the source checks from AGENTS.md. After deployment,
-check all four app pages (`/`, `/explore`, `/timetable`, `/settings`), manifest,
-icons, `/sw.js`, and a permitted `/ttc` request over verified HTTPS. Ensure the
+check the landing page (`/`, `/ka/`, `/ru/`, `/privacy`, `/terms`), all four app pages
+(`/app/`, `/app/explore`, `/app/timetable`, `/app/settings`), the redirect from
+`/explore` to `/app/explore`, `/app/manifest.webmanifest`, icons,
+`/app/sw.js`, `/sw.js` (the worker that retires the old root worker), and a
+permitted `/app/ttc` request over verified HTTPS. Ensure the
 service worker installs successfully and an offline reload displays cached
 timetables. Unsupported proxy paths must return `400`.
 

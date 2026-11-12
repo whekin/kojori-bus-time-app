@@ -24,6 +24,9 @@
 
 ### New
 
+- gzaap.whekin.dev has a landing page in English, Georgian and Russian: what Gzaap does, screenshots, and how to get it on the web, Android and iPhone, with privacy and terms pages. The web app itself moved to gzaap.whekin.dev/app. Old links and Home Screen installs keep working and open the app.
+- Settings → About links to the website. The privacy policy and terms now cover the web app and its connection to TTC, and no longer mention Google Maps.
+
 - Install the web app on the Home Screen without sideloading. The production web build caches all app screens for offline startup and includes installation guidance in English, Georgian and Russian. Live departures still require internet; native widgets remain exclusive to the native app.
 
 - Add a separate Gzaap ETA preview behind a build flag, with arrival ranges, receipt freshness and automatic TTC fallback. The preview is off by default.

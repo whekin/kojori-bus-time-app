@@ -14,6 +14,7 @@ import { createPortal } from 'react-dom';
 import { StyleSheet, View } from 'react-native';
 
 import { cameraForBounds, NO_PADDING, type LngLatBounds, type Padding } from './projection';
+import { webPath } from '@/utils/web-base';
 import { linesToFeatureCollection, lineLayerPaint, LINE_LAYOUT } from './shared';
 import type {
   GeoLineLayerProps,
@@ -45,7 +46,7 @@ function loadMapLibre(): MapLibreModule {
   const lib = (module.default ?? module) as MapLibreModule;
   // Served from public/ by scripts/copy-maplibre-worker.ts; Metro does not
   // bundle maplibre's module worker.
-  lib.setWorkerUrl(`/maplibre/maplibre-gl-worker-${lib.getVersion()}.mjs`);
+  lib.setWorkerUrl(webPath(`/maplibre/maplibre-gl-worker-${lib.getVersion()}.mjs`));
   return lib;
 }
 

@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <script>
+    // Home Screen installs made before the app moved to /app still open here.
+    if (matchMedia('(display-mode: standalone)').matches || navigator.standalone) {
+      location.replace('/app/' + location.search + location.hash);
+    } else if (document.documentElement.lang === 'en') {
+      // First visit: follow the browser's language once. A choice made with
+      // the language switcher (saved by landing.js) always wins.
+      try {
+        if (!localStorage.getItem('gzaap-landing-lang')) {
+          const code = (navigator.languages || [navigator.language]).map(c => c.slice(0, 2))
+            .find(c => c === 'en' || c === 'ka' || c === 'ru');
+          if (code && code !== 'en') location.replace('/' + code + '/' + location.search + location.hash);
+        }
+      } catch { /* storage blocked: stay on English */ }
+    }
+  </script>
+  <title data-i18n="metaTitle">Gzaap — Tbilisi Bus Times</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="description" data-i18n-content="metaDescription" content="Live departures, offline timetables and a live map for the TTC buses, metro and cable cars you ride in Tbilisi. Free, no account, no ads.">
+  <link rel="canonical" href="https://gzaap.whekin.dev/">
+  <link rel="alternate" hreflang="en" href="https://gzaap.whekin.dev/">
+  <link rel="alternate" hreflang="ka" href="https://gzaap.whekin.dev/ka/">
+  <link rel="alternate" hreflang="ru" href="https://gzaap.whekin.dev/ru/">
+  <link rel="alternate" hreflang="x-default" href="https://gzaap.whekin.dev/">
+  <meta name="theme-color" content="#0F0B10" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#FAF7F8" media="(prefers-color-scheme: light)">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Gzaap">
+  <meta property="og:title" data-i18n-content="metaTitle" content="Gzaap — Tbilisi Bus Times">
+  <meta property="og:locale" data-i18n-content="ogLocale" content="en_US">
+  <meta property="og:description" data-i18n-content="ogDescription" content="Your saved TTC trips: next departure, live buses on the map and timetables that work offline.">
+  <meta property="og:url" content="https://gzaap.whekin.dev/">
+  <meta property="og:image" content="https://gzaap.whekin.dev/img/og.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="icon" type="image/png" href="/img/icon.png">
+  <link rel="apple-touch-icon" href="/app/icons/apple-touch-icon.png">
+  <link rel="manifest" href="/app/manifest.webmanifest">
+  <link rel="stylesheet" href="/styles.css">
+  <script type="application/ld+json">
+    {"@context":"https://schema.org","@type":"SoftwareApplication","name":"Gzaap","applicationCategory":"TravelApplication","operatingSystem":"Web, Android, iOS","url":"https://gzaap.whekin.dev/","offers":{"@type":"Offer","price":"0","priceCurrency":"GEL"}}
+  </script>
+</head>
+<body>
+  <header class="top" id="top">
+    <div class="wrap">
+      <a class="brand" href="/" data-home><img src="/img/icon.png" alt="" width="34" height="34">Gzaap</a>
+      <span class="spacer"></span>
+      <nav class="lang" aria-label="Language" data-i18n-label="langLabel">
+        <a href="/" hreflang="en" lang="en" data-lang="en" aria-current="page">EN</a>
+        <a href="/ka/" hreflang="ka" lang="ka" data-lang="ka">ქა</a>
+        <a href="/ru/" hreflang="ru" lang="ru" data-lang="ru">RU</a>
+      </nav>
+      <a class="btn small primary" href="/app/" data-i18n="navOpen">Open app</a>
+    </div>
+  </header>
+
+  <main>
+    <div class="hero">
+      <div class="wrap">
+        <div>
+          <p class="eyebrow"><span class="dot"></span><span data-i18n="eyebrow">TTC buses, metro and cable cars · Tbilisi</span></p>
+          <h1 data-i18n-html="title">Your next bus, <em>one tap away.</em></h1>
+          <p class="lead" data-i18n="lead">Save the routes you actually ride. Gzaap shows the next departure from your stop with live predictions, keeps timetables for when the signal drops, and puts the buses on a map.</p>
+          <div class="cta">
+            <a class="btn primary" href="/app/" data-i18n="ctaOpen">Open the web app</a>
+            <a class="btn" href="#get" data-i18n="ctaPhone">Get it on your phone</a>
+          </div>
+          <p class="fineprint" data-i18n="fineprint">Free · no account · no ads · no tracking</p>
+        </div>
+        <div class="phone">
+          <img src="/img/start.jpg" width="585" height="1200" alt="Gzaap start screen: a saved trip to Kojori with the next 380 bus at 16:43, in 9 minutes" data-i18n-alt="altStart">
+        </div>
+      </div>
+    </div>
+
+    <section id="features" aria-labelledby="features-title">
+      <div class="wrap">
+        <div class="section-head">
+          <h2 id="features-title" data-i18n="featuresTitle">Built around your trips, not the whole network</h2>
+          <p data-i18n="featuresLead">Most of the time you need one answer: when is my bus? Gzaap keeps that answer on the first screen.</p>
+        </div>
+        <div class="features">
+          <article class="feature">
+            <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21Z"/><circle cx="12" cy="9.5" r="2.5"/></svg></div>
+            <h3 data-i18n="f1Title">Your trips first</h3>
+            <p data-i18n="f1Body">A trip is a route, a direction and your stop. Combine routes that both work, like 380 and 316, into one list, and flip to the way back with one tap.</p>
+          </article>
+          <article class="feature">
+            <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5a10 10 0 0 1 14 0"/><path d="M8.5 16a5 5 0 0 1 7 0"/><circle cx="12" cy="19.5" r="1"/><path d="M2 9a14.5 14.5 0 0 1 20 0"/></svg></div>
+            <h3 data-i18n="f2Title">Live online, ready offline</h3>
+            <p data-i18n="f2Body">Live arrival predictions from TTC when you are connected. Saved timetables keep working on the road with no signal.</p>
+          </article>
+          <article class="feature">
+            <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2Z"/><path d="M9 4v14M15 6v14"/></svg></div>
+            <h3 data-i18n="f3Title">Buses on the map</h3>
+            <p data-i18n="f3Body">See where each bus on your route is right now, with your boarding stops marked.</p>
+          </article>
+          <article class="feature">
+            <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/></svg></div>
+            <h3 data-i18n="f4Title">Timetable for any day</h3>
+            <p data-i18n="f4Body">Today, tomorrow or any date from the calendar, with the days TTC has confirmed marked.</p>
+          </article>
+          <article class="feature">
+            <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="8" rx="2"/><rect x="3" y="13" width="18" height="8" rx="2"/></svg></div>
+            <h3><span data-i18n="f5Title">Home Screen widgets</span><span class="tag" data-i18n="tagNative">phone app</span></h3>
+            <p data-i18n="f5Body">Android and iPhone widgets show the next departure without opening the app.</p>
+          </article>
+          <article class="feature">
+            <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg></div>
+            <h3 data-i18n="f6Title">Your language</h3>
+            <p data-i18n="f6Body">English, Georgian or Russian, with light and dark themes and a choice of color palettes.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section aria-labelledby="screens-title">
+      <div class="wrap">
+        <div class="section-head">
+          <h2 id="screens-title" data-i18n="screensTitle">One trip, three views</h2>
+        </div>
+        <div class="screens">
+          <figure>
+            <img src="/img/departures.jpg" width="585" height="1200" loading="lazy" alt="Departures: the next 380 at 16:43 and a list of later 380 and 316 buses" data-i18n-alt="altDepartures">
+            <figcaption><b data-i18n="s1Title">Departures</b><span data-i18n="s1Body">The next bus from your stop, then everything after it.</span></figcaption>
+          </figure>
+          <figure>
+            <img src="/img/map.jpg" width="585" height="1200" loading="lazy" alt="Map: live 380 and 316 buses along the road from Tbilisi to Kojori" data-i18n-alt="altMap">
+            <figcaption><b data-i18n="s2Title">Map</b><span data-i18n="s2Body">Live buses along the whole route.</span></figcaption>
+          </figure>
+          <figure>
+            <img src="/img/timetable.jpg" width="585" height="1200" loading="lazy" alt="Timetable: today's departures from Elene Akhvlediani Street, confirmed by TTC" data-i18n-alt="altTimetable">
+            <figcaption><b data-i18n="s3Title">Timetable</b><span data-i18n="s3Body">Every departure of the day, filtered by route.</span></figcaption>
+          </figure>
+        </div>
+      </div>
+    </section>
+
+    <section aria-labelledby="steps-title">
+      <div class="wrap">
+        <div class="section-head">
+          <h2 id="steps-title" data-i18n="stepsTitle">A new trip in three taps</h2>
+        </div>
+        <ol class="steps">
+          <li><h3 data-i18n="st1Title">Pick a route</h3><p data-i18n="st1Body">Any TTC bus, metro line or cable car.</p></li>
+          <li><h3 data-i18n="st2Title">Choose the direction</h3><p data-i18n="st2Body">Where you are heading on that route.</p></li>
+          <li><h3 data-i18n="st3Title">Pick your stop</h3><p data-i18n="st3Body">Nearest stops come first. Gzaap then suggests other routes from that stop and offers to add the way back.</p></li>
+        </ol>
+      </div>
+    </section>
+
+    <section id="get" aria-labelledby="get-title">
+      <div class="wrap">
+        <div class="section-head">
+          <h2 id="get-title" data-i18n="getTitle">Get Gzaap</h2>
+          <p data-i18n="getLead">Your trips stay on your device. Nothing to sign up for.</p>
+        </div>
+        <div class="install">
+          <article class="platform" data-platform="web">
+            <span class="kicker" data-i18n="webKicker">Any phone or computer</span>
+            <h3 data-i18n="webTitle">Web app</h3>
+            <p data-i18n="webBody">Runs in the browser. Add it to your Home Screen and it opens like an app, offline timetables included.</p>
+            <p class="howto" data-i18n="webHowto">iPhone: open in Safari, tap Share → Add to Home Screen. Android and computers: use the browser's Install option.</p>
+            <div class="actions">
+              <a class="btn primary" href="/app/" data-i18n="webOpen">Open app</a>
+              <button class="btn" type="button" id="install" hidden data-i18n="webInstall">Install</button>
+            </div>
+          </article>
+          <article class="platform" data-platform="android">
+            <span class="kicker" data-i18n="androidKicker">Android</span>
+            <h3 data-i18n="androidTitle">Android app</h3>
+            <p data-i18n="androidBody">The full app with Home Screen widgets. Download the APK from the latest release and open it to install.</p>
+            <div class="actions">
+              <a class="btn" href="https://github.com/whekin/kojori-bus-time-app/releases/latest" rel="noopener" data-i18n="androidDownload">Download APK</a>
+            </div>
+          </article>
+          <article class="platform" data-platform="ios">
+            <span class="kicker" data-i18n="iosKicker">iPhone</span>
+            <h3 data-i18n="iosTitle">On your Home Screen</h3>
+            <p data-i18n="iosBody">Open Gzaap in Safari, tap Share, then Add to Home Screen. It starts full screen and keeps your trips offline. A native iPhone app with widgets is in testing.</p>
+            <div class="actions">
+              <a class="btn" href="/app/" data-i18n="iosOpen">Open in Safari</a>
+            </div>
+          </article>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap">
+      <nav aria-label="Footer">
+        <a href="/app/" data-i18n="footApp">Open app</a>
+        <a href="/privacy" data-i18n="footPrivacy">Privacy</a>
+        <a href="/terms" data-i18n="footTerms">Terms</a>
+        <a href="https://github.com/whekin/kojori-bus-time-app/issues" rel="noopener" data-i18n="footSupport">Report a problem</a>
+        <a href="https://github.com/whekin/kojori-bus-time-app" rel="noopener">GitHub</a>
+      </nav>
+      <p data-i18n="footNote">Transit data comes from the TTC public API and can be late or incomplete. Gzaap is an independent app, not affiliated with Tbilisi Transport Company. Map data © OpenStreetMap contributors.</p>
+    </div>
+  </footer>
+  <script src="/landing.js" defer></script>
+</body>
+</html>

@@ -114,6 +114,7 @@ const LEGAL_BASE_URL = 'https://github.com/whekin/kojori-bus-time-app/blob/main/
 const LEGAL_URLS = {
   privacyPolicy: Constants.expoConfig?.extra?.legal?.privacyPolicyUrl ?? `${LEGAL_BASE_URL}/privacy-policy.md`,
   support: Constants.expoConfig?.extra?.legal?.supportUrl ?? 'https://github.com/whekin/kojori-bus-time-app/issues',
+  website: Constants.expoConfig?.extra?.legal?.websiteUrl ?? 'https://gzaap.whekin.dev/',
   termsOfService: Constants.expoConfig?.extra?.legal?.termsOfServiceUrl ?? `${LEGAL_BASE_URL}/terms-of-service.md`,
 } as const;
 const LEGAL_DOC_MODULES = {
@@ -2033,6 +2034,15 @@ export default function SettingsScreen({ isActive = true, onSubmenuChange }: {
             onPress={() => Linking.openURL(LEGAL_URLS.support)}>
             <Text style={[styles.infoLabel, { color: colors.text }]}>{t('settingsSupport')}</Text>
             <Text style={[styles.infoValue, { color: colors.textFaint }]}>GitHub ↗</Text>
+          </Pressable>
+          <View style={styles.itemDivider} />
+          <Pressable
+            accessibilityRole="link"
+            accessibilityLabel={t('settingsWebsite')}
+            style={styles.infoRow}
+            onPress={() => Linking.openURL(resolvedLanguage === 'en' ? LEGAL_URLS.website : `${LEGAL_URLS.website.replace(/\/$/, '')}/${resolvedLanguage}/`)}>
+            <Text style={[styles.infoLabel, { color: colors.text }]}>{t('settingsWebsite')}</Text>
+            <Text style={[styles.infoValue, { color: colors.textFaint }]}>gzaap.whekin.dev ↗</Text>
           </Pressable>
         </View>
 

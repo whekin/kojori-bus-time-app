@@ -19,6 +19,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
   const updateChannel = process.env.EXPO_UPDATE_CHANNEL;
 
   const legalBaseUrl = 'https://github.com/whekin/kojori-bus-time-app/blob/main/release/google-play';
+  const websiteUrl = 'https://gzaap.whekin.dev';
 
   return {
     ...config,
@@ -44,6 +45,12 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       ...config.android,
       versionCode: v?.versionCode ?? config.android?.versionCode,
     },
+    // The web build serves the app under /app so the landing page can own /.
+    // Native builds keep an empty base URL.
+    experiments: {
+      ...config.experiments,
+      ...(process.env.GZAAP_WEB_BASE_URL ? { baseUrl: process.env.GZAAP_WEB_BASE_URL } : {}),
+    },
     plugins: [
       ...(config.plugins ?? []),
       'expo-localization',
@@ -59,17 +66,18 @@ export default ({ config }: ConfigContext): ExpoConfig => {
         appName: config.name,
         packageName: config.android?.package,
         storeListingUrl: 'https://github.com/whekin/kojori-bus-time-app/blob/main/release/google-play/store-listing.md',
-        privacyPolicyUrl: `${legalBaseUrl}/privacy-policy.md`,
-        termsOfServiceUrl: `${legalBaseUrl}/terms-of-service.md`,
+        privacyPolicyUrl: `${websiteUrl}/privacy`,
+        termsOfServiceUrl: `${websiteUrl}/terms`,
         dataSafetyUrl: 'https://github.com/whekin/kojori-bus-time-app/blob/main/release/google-play/data-safety.md',
         contentRatingUrl: 'https://github.com/whekin/kojori-bus-time-app/blob/main/release/google-play/content-rating.md',
         appAccessUrl: 'https://github.com/whekin/kojori-bus-time-app/blob/main/release/google-play/app-access.md',
         releaseChecklistUrl: 'https://github.com/whekin/kojori-bus-time-app/blob/main/release/google-play/release-checklist.md',
       },
       legal: {
-        privacyPolicyUrl: `${legalBaseUrl}/privacy-policy.md`,
+        privacyPolicyUrl: `${websiteUrl}/privacy`,
         supportUrl: 'https://github.com/whekin/kojori-bus-time-app/issues',
-        termsOfServiceUrl: `${legalBaseUrl}/terms-of-service.md`,
+        websiteUrl: `${websiteUrl}/`,
+        termsOfServiceUrl: `${websiteUrl}/terms`,
       },
     },
   };
